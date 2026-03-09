@@ -73,11 +73,13 @@ def composite_product_fullframe(img_path, placement, accent_color,
                                 badge_text=None, channel_name=None):
     """Fill entire 9:16 frame with Shopee listing image. NO background removal.
     
-    Simple approach that ALWAYS works:
-    1. Load raw Shopee image (with original background — white, colored, anything)
-    2. Scale to fill 100% of frame WIDTH (1080px)
-    3. If image doesn't fill full height → extend edge colors up/down
-    4. Result: ENTIRE frame covered. No dark gaps. No compositing.
+    COVER mode: scale to fill BOTH width AND height of 1080x1920.
+    Crop any excess. NO white/empty gaps ever.
+    
+    1. Load raw Shopee image
+    2. Scale to COVER entire frame (max of width_scale, height_scale)
+    3. Center-crop to exact 1080x1920
+    4. Result: ENTIRE frame filled, zero gaps
     """
     W, H = OUTPUT_SIZE
 
@@ -91,28 +93,25 @@ def composite_product_fullframe(img_path, placement, accent_color,
     if iw == 0 or ih == 0:
         return Image.new('RGB', (W, H), (40, 40, 60))
 
-    # === SCALE to fill full frame width ===
-    scale = W / iw
-    new_w = W
+    # === SCALE to COVER entire frame (fill both W and H) ===
+    scale_w = W / iw
+    scale_h = H / ih
+    scale = max(scale_w, scale_h)  # Use MAX so image covers everything
+    new_w = int(iw * scale)
     new_h = int(ih * scale)
     img_scaled = img.resize((new_w, new_h), Image.LANCZOS)
 
-    # === POSITION with subtle vertical shift ===
+    # === CENTER CROP to exact frame size with subtle vertical shift ===
     vy_shift = placement.get('vy', 0.0)
-    center_y = (H - new_h) // 2 + int(H * vy_shift)
-    paste_y = max(0 - new_h + int(new_h * 0.2), min(center_y, H - int(new_h * 0.2)))
-
-    # === CREATE FINAL CANVAS ===
-    if new_h >= H:
-        # Image is tall enough — just crop to frame
-        crop_y = -paste_y if paste_y < 0 else 0
-        paste_y_final = max(0, paste_y)
-        canvas = Image.new('RGB', (W, H), (0, 0, 0))
-        # Paste visible portion
-        canvas.paste(img_scaled, (0, paste_y))
-    else:
-        # Image is shorter than frame — extend edges to fill
-        canvas = _extend_to_fill(img_scaled, W, H, paste_y)
+    
+    # Horizontal center crop
+    crop_x = (new_w - W) // 2
+    # Vertical center crop with shift
+    crop_y = (new_h - H) // 2 - int(H * vy_shift)
+    crop_y = max(0, min(crop_y, new_h - H))
+    crop_x = max(0, min(crop_x, new_w - W))
+    
+    canvas = img_scaled.crop((crop_x, crop_y, crop_x + W, crop_y + H))
 
     # Add badge
     canvas_rgba = canvas.convert('RGBA')

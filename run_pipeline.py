@@ -98,8 +98,8 @@ def main():
         "python engine/modules/body_retention_evaluator.py",
         # Generate per-video music (unique track per video)
         "python engine/modules/generate_music.py",
-        # AI TTS: generate voiceover for all products (per platform)
-        "python engine/modules/tts_voiceover.py --queue engine/queue/storyboard_queue.jsonl --platform yt_short",
+        # AI TTS: generate voiceover for ALL platforms (yt_short, yt_long, tt, fb)
+        "python engine/modules/tts_voiceover.py --queue engine/queue/storyboard_queue.jsonl --platform all",
     ]
     
     if is_long_slot or force_render:

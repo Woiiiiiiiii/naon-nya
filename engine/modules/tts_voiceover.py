@@ -4,11 +4,11 @@ Generate natural Indonesian female voiceover using Edge TTS.
 
 Voice: id-ID-GadisNeural (Microsoft Neural TTS — natural, with intonation)
 Features:
-  - Natural female voice with proper Indonesian intonation
-  - Prosody control: rate, pitch for emphasis
-  - Smart pauses between sentences
-  - Per-scene voiceover scripts generated from product info
-  
+  - Natural female voice, relaxed speaking pace
+  - Price numbers converted to Indonesian words (31200 → "tiga puluh satu ribu dua ratus")
+  - Per-scene voiceover scripts that COMPLEMENT (not duplicate) on-screen text
+  - Multi-platform support: yt_short, yt_long, tt, fb
+
 Used by: all video generators (YT Short, YT Long, TT, FB)
 """
 
@@ -17,27 +17,109 @@ import sys
 import json
 import asyncio
 import random
+import re
 
 # ═══════════════════════════════════════════════════════════════════
 #  CONFIG
 # ═══════════════════════════════════════════════════════════════════
 VOICE_ID = "id-ID-GadisNeural"   # Indonesian female neural voice
-DEFAULT_RATE = "+5%"              # Slightly faster for engaging content
+DEFAULT_RATE = "-5%"              # Slightly SLOWER for natural, relaxed feel
 DEFAULT_PITCH = "+0Hz"            # Natural pitch
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers')
 
-# Scene-specific speaking styles
+# Scene-specific speaking styles (relaxed, natural pace)
 SCENE_STYLES = {
-    'hook': {'rate': '+10%', 'pitch': '+2Hz'},    # Energetic, attention-grabbing
-    'hero': {'rate': '+0%', 'pitch': '+0Hz'},     # Clear, informative
-    'feature': {'rate': '+0%', 'pitch': '+0Hz'},  # Steady, detailed
-    'product': {'rate': '+0%', 'pitch': '+0Hz'},  # Descriptive
-    'proof': {'rate': '-5%', 'pitch': '-1Hz'},    # Calm, trustworthy
-    'cta': {'rate': '+8%', 'pitch': '+2Hz'},      # Urgent, exciting
-    'detail1': {'rate': '+0%', 'pitch': '+0Hz'},
-    'detail2': {'rate': '+0%', 'pitch': '+0Hz'},
-    'detail3': {'rate': '+0%', 'pitch': '+0Hz'},
+    'hook': {'rate': '+0%', 'pitch': '+1Hz'},     # Normal speed, slight excitement
+    'hero': {'rate': '-5%', 'pitch': '+0Hz'},     # Calm, informative
+    'feature': {'rate': '-3%', 'pitch': '+0Hz'},  # Steady, detailed
+    'product': {'rate': '-3%', 'pitch': '+0Hz'},  # Descriptive
+    'proof': {'rate': '-8%', 'pitch': '-1Hz'},    # Slower, trustworthy
+    'cta': {'rate': '+0%', 'pitch': '+1Hz'},      # Normal, inviting (not pushy)
+    'detail1': {'rate': '-5%', 'pitch': '+0Hz'},
+    'detail2': {'rate': '-5%', 'pitch': '+0Hz'},
+    'detail3': {'rate': '-5%', 'pitch': '+0Hz'},
 }
+
+# ═══════════════════════════════════════════════════════════════════
+#  PRICE → INDONESIAN WORDS
+# ═══════════════════════════════════════════════════════════════════
+
+SATUAN = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan']
+BELASAN = ['sepuluh', 'sebelas', 'dua belas', 'tiga belas', 'empat belas', 'lima belas',
+           'enam belas', 'tujuh belas', 'delapan belas', 'sembilan belas']
+
+def _angka_ke_kata(n):
+    """Convert integer to Indonesian words. E.g. 31200 → 'tiga puluh satu ribu dua ratus'"""
+    if n == 0:
+        return 'nol'
+    if n < 0:
+        return 'minus ' + _angka_ke_kata(-n)
+    
+    parts = []
+    
+    if n >= 1000000:
+        juta = n // 1000000
+        if juta == 1:
+            parts.append('satu juta')
+        else:
+            parts.append(_angka_ke_kata(juta) + ' juta')
+        n %= 1000000
+    
+    if n >= 1000:
+        ribu = n // 1000
+        if ribu == 1:
+            parts.append('seribu')
+        else:
+            parts.append(_angka_ke_kata(ribu) + ' ribu')
+        n %= 1000
+    
+    if n >= 100:
+        ratus = n // 100
+        if ratus == 1:
+            parts.append('seratus')
+        else:
+            parts.append(SATUAN[ratus] + ' ratus')
+        n %= 100
+    
+    if n >= 20:
+        puluh = n // 10
+        parts.append(SATUAN[puluh] + ' puluh')
+        n %= 10
+    
+    if 10 <= n <= 19:
+        parts.append(BELASAN[n - 10])
+        n = 0
+    
+    if n >= 1:
+        parts.append(SATUAN[n])
+    
+    return ' '.join(parts)
+
+
+def harga_ke_ucapan(harga_str):
+    """Convert price string to natural Indonesian speech.
+    
+    Examples:
+        'Rp31.200'  → 'tiga puluh satu ribu dua ratus rupiah'
+        'Rp1.500.000' → 'satu juta lima ratus ribu rupiah'
+        '65000' → 'enam puluh lima ribu rupiah'
+    """
+    if not harga_str:
+        return ''
+    
+    # Remove Rp, Rp., dots, commas, spaces
+    clean = re.sub(r'[Rr][Pp]\.?\s*', '', str(harga_str))
+    clean = clean.replace('.', '').replace(',', '').replace(' ', '').strip()
+    
+    try:
+        angka = int(clean)
+        if angka <= 0:
+            return ''
+        kata = _angka_ke_kata(angka)
+        return kata + ' rupiah'
+    except ValueError:
+        return ''
+
 
 # ═══════════════════════════════════════════════════════════════════
 #  VOICEOVER SCRIPT GENERATION
@@ -45,6 +127,10 @@ SCENE_STYLES = {
 
 def generate_voiceover_script(product_info, platform='yt_short'):
     """Generate voiceover script for each scene based on product info.
+    
+    Scripts COMPLEMENT on-screen text — they DON'T repeat the product name
+    or hook text that's already visible. Instead they add context, emotion,
+    and persuasion that text alone can't convey.
     
     Args:
         product_info: dict with nama, harga, deskripsi_singkat, hook, cta, category
@@ -61,69 +147,84 @@ def generate_voiceover_script(product_info, platform='yt_short'):
     rating = product_info.get('rating', 4.8)
     terjual = product_info.get('terjual', 1000)
     
-    # Clean up text for natural speech
-    nama_short = nama[:50].rstrip('.!?') if len(nama) > 50 else nama
+    # Clean up
+    nama_short = nama[:40].rstrip('.!?') if len(nama) > 40 else nama
     
-    # Price formatting for speech
-    harga_speak = harga.replace('Rp', 'Rupiah ').replace('.', ' ') if harga else ''
+    # Convert price to SPOKEN Indonesian
+    harga_spoken = harga_ke_ucapan(harga)
     
-    # Randomize phrasing for variety
-    hook_intros = [
-        f"Hei, {hook}",
-        f"Kamu harus tau ini. {hook}",
-        f"Stop dulu! {hook}",
-        f"Wajib simak sampai habis. {hook}",
+    # Convert terjual to words
+    terjual_spoken = _angka_ke_kata(int(terjual)) if terjual else 'banyak'
+    
+    # ── HOOK: attention grab (DON'T repeat hook text shown on screen) ──
+    hook_scripts = [
+        "Kamu wajib tau soal ini.",
+        "Simak sampai habis ya, penting banget.",
+        "Ini lagi banyak dicari orang.",
+        "Jangan di-skip dulu, ini menarik banget.",
     ]
     
-    feature_phrases = [
-        f"Ini dia {nama_short}. {desc[:80] if desc else 'Produk kualitas terbaik di kelasnya.'}",
-        f"{nama_short} ini punya banyak keunggulan. {desc[:80] if desc else 'Kualitas premium dengan harga terjangkau.'}",
-        f"Kenapa harus pilih {nama_short}? {desc[:80] if desc else 'Karena kualitasnya sudah terbukti.'}",
+    # ── FEATURE: describe benefit (DON'T repeat product name shown on screen) ──
+    if desc:
+        feature_scripts = [
+            f"Kualitasnya memang beda. {desc[:60]}",
+            f"Yang bikin spesial, {desc[:60]}",
+            f"Banyak yang suka karena {desc[:60]}",
+        ]
+    else:
+        feature_scripts = [
+            "Kualitasnya sudah terbukti. Banyak yang repeat order.",
+            "Material premium dengan harga yang sangat terjangkau.",
+            "Cocok banget buat kamu yang cari produk berkualitas.",
+        ]
+    
+    # ── PROOF: social proof ──
+    proof_scripts = [
+        f"Rating {rating} bintang, sudah terjual {terjual_spoken} lebih.",
+        f"Sudah dipercaya {terjual_spoken} lebih pembeli.",
+        f"Bukan asal bilang bagus ya, buktinya sudah terjual {terjual_spoken} lebih.",
     ]
     
-    proof_phrases = [
-        f"Rating {rating} bintang, dan sudah terjual lebih dari {terjual} buah.",
-        f"Sudah dipercaya {terjual} lebih pembeli, dengan rating {rating} bintang.",
-        f"Bukan cuma kualitas, buktinya {terjual} lebih orang sudah beli. Rating {rating} bintang.",
+    # ── CTA: call to action (DON'T repeat CTA text shown on screen) ──
+    cta_scripts = [
+        "Tertarik? Langsung aja cek ya, stok terbatas.",
+        "Buruan sebelum kehabisan. Link ada di bawah.",
+        "Jangan sampai menyesal, langsung cek aja.",
     ]
     
-    cta_phrases = [
-        f"Gimana, tertarik? {cta} Jangan sampai kehabisan ya!",
-        f"Buruan, stok terbatas! {cta}",
-        f"{cta} Harga segini gak akan lama!",
-    ]
+    # ── PRICE: spoken price ──
+    if harga_spoken:
+        price_phrase = f"Harganya cuma {harga_spoken}."
+    else:
+        price_phrase = "Harganya sangat terjangkau."
     
     if platform == 'yt_short':
         return {
-            'hook': random.choice(hook_intros),
-            'hero': f"{nama_short}. {'Harganya cuma ' + harga_speak + '.' if harga_speak else 'Harga sangat terjangkau.'}",
-            'feature': random.choice(feature_phrases),
-            'proof': random.choice(proof_phrases),
-            'cta': random.choice(cta_phrases),
+            'hook': random.choice(hook_scripts),
+            'feature': random.choice(feature_scripts),
+            'proof': f"{price_phrase} {random.choice(proof_scripts)}",
+            'cta': random.choice(cta_scripts),
         }
     elif platform == 'yt_long':
         return {
-            'hook': random.choice(hook_intros),
-            'hero': f"Hari ini kita bahas {nama_short}. {'Dengan harga ' + harga_speak + ', ' if harga_speak else ''}produk ini lagi banyak dicari.",
-            'detail1': random.choice(feature_phrases),
-            'detail2': f"Yang bikin spesial, kualitasnya memang beda dari yang lain. Cocok banget buat kamu yang cari produk berkualitas.",
-            'detail3': random.choice(proof_phrases),
-            'cta': random.choice(cta_phrases),
+            'hook': random.choice(hook_scripts),
+            'detail1': random.choice(feature_scripts),
+            'detail2': f"{price_phrase} Dengan harga segini, kualitasnya luar biasa.",
+            'detail3': random.choice(proof_scripts),
+            'cta': random.choice(cta_scripts),
         }
     elif platform == 'tt':
         return {
-            'hook': random.choice(hook_intros),
-            'product': f"{nama_short}. {'Cuma ' + harga_speak + '!' if harga_speak else 'Harga super terjangkau!'}",
-            'feature': random.choice(feature_phrases)[:100],
-            'cta': random.choice(cta_phrases),
+            'hook': random.choice(hook_scripts),
+            'feature': random.choice(feature_scripts)[:80],
+            'cta': f"{price_phrase} {random.choice(cta_scripts)}",
         }
     else:  # fb
         return {
-            'hook': random.choice(hook_intros),
-            'product': f"Ini dia, {nama_short}. {'Harga ' + harga_speak + '.' if harga_speak else ''}",
-            'feature': random.choice(feature_phrases),
-            'proof': random.choice(proof_phrases),
-            'cta': random.choice(cta_phrases),
+            'hook': random.choice(hook_scripts),
+            'feature': random.choice(feature_scripts),
+            'proof': f"{price_phrase} {random.choice(proof_scripts)}",
+            'cta': random.choice(cta_scripts),
         }
 
 
@@ -137,12 +238,6 @@ async def _generate_tts_async(text, output_path, rate=None, pitch=None):
     
     rate = rate or DEFAULT_RATE
     pitch = pitch or DEFAULT_PITCH
-    
-    # Add natural pauses at punctuation
-    text = text.replace('. ', '... ')  # Longer pause at periods
-    text = text.replace('! ', '!.. ')  # Pause after exclamation
-    text = text.replace('? ', '?.. ')  # Pause after question
-    text = text.replace(', ', ',. ')   # Short pause at commas
     
     communicate = edge_tts.Communicate(text, VOICE_ID, rate=rate, pitch=pitch)
     await communicate.save(output_path)
@@ -197,6 +292,12 @@ def generate_voiceover_for_product(product_info, produk_id, platform='yt_short',
     vo_dir = os.path.join(output_dir, produk_id, platform)
     os.makedirs(vo_dir, exist_ok=True)
     
+    # ALWAYS regenerate (don't cache — scripts have random variety)
+    # Clean old files
+    for f in os.listdir(vo_dir):
+        if f.startswith('vo_') and f.endswith('.mp3'):
+            os.remove(os.path.join(vo_dir, f))
+    
     # Generate scripts
     scripts = generate_voiceover_script(product_info, platform)
     
@@ -209,11 +310,6 @@ def generate_voiceover_for_product(product_info, produk_id, platform='yt_short',
         
         mp3_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
         
-        # Skip if already generated (cache)
-        if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 1000:
-            result[scene_id] = mp3_path
-            continue
-        
         if generate_tts(text, mp3_path, scene_id):
             result[scene_id] = mp3_path
     
@@ -221,16 +317,19 @@ def generate_voiceover_for_product(product_info, produk_id, platform='yt_short',
     return result
 
 
-def generate_all_voiceovers(queue_file, platform='yt_short'):
+def generate_all_voiceovers(queue_file, platforms=None):
     """Generate voiceovers for all products in a queue file.
     
     Args:
         queue_file: path to JSONL queue file
-        platform: yt_short, yt_long, tt, fb
+        platforms: list of platforms, default ALL ['yt_short', 'yt_long', 'tt', 'fb']
     """
     if not os.path.exists(queue_file):
         print(f"  [TTS] Queue not found: {queue_file}")
         return
+    
+    if platforms is None:
+        platforms = ['yt_short', 'yt_long', 'tt', 'fb']
     
     jobs = []
     with open(queue_file, 'r', encoding='utf-8') as f:
@@ -238,21 +337,25 @@ def generate_all_voiceovers(queue_file, platform='yt_short'):
             if line.strip():
                 jobs.append(json.loads(line.strip()))
     
-    print(f"[TTS] Generating voiceovers for {len(jobs)} products ({platform})...")
+    print(f"[TTS] Generating voiceovers for {len(jobs)} products × {len(platforms)} platforms...")
     
     for job in jobs:
         produk_id = job.get('produk_id', '')
-        generate_voiceover_for_product(job, produk_id, platform)
+        for platform in platforms:
+            generate_voiceover_for_product(job, produk_id, platform)
     
-    print(f"[TTS] All done — {len(jobs)} products")
+    print(f"[TTS] All done — {len(jobs)} products × {len(platforms)} platforms")
 
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--queue', default='engine/queue/storyboard_queue.jsonl')
-    parser.add_argument('--platform', default='yt_short', 
-                       choices=['yt_short', 'yt_long', 'tt', 'fb'])
+    parser.add_argument('--platform', default='all',
+                       choices=['all', 'yt_short', 'yt_long', 'tt', 'fb'])
     args = parser.parse_args()
     
-    generate_all_voiceovers(args.queue, args.platform)
+    if args.platform == 'all':
+        generate_all_voiceovers(args.queue)
+    else:
+        generate_all_voiceovers(args.queue, [args.platform])

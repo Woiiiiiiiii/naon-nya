@@ -386,9 +386,9 @@ def generate_video_tt(queue_file, output_dir):
                     except Exception:
                         pass
 
-            # === VOICEOVER: per-scene TTS ===
+            # === VOICEOVER: per-scene TTS (complement text, not duplicate) ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'tt')
-            scene_starts = {'hook': 0.3, 'product': 2.5, 'feature': 10.5, 'cta': 21.0}
+            scene_starts = {'hook': 0.3, 'feature': 10.5, 'cta': 21.0}
             for scene_id, start_time in scene_starts.items():
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:
