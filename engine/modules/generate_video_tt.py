@@ -106,19 +106,33 @@ def _generate_fallback(produk_id, category, count=4):
         return composites
 
     pw, ph = product_img.size
-    cover_scale = max(W / pw, H / ph) * 1.15
-    new_w = int(pw * cover_scale)
-    new_h = int(ph * cover_scale)
-    product_big = product_img.resize((new_w, new_h), Image.LANCZOS)
 
-    positions = [(0.50, 0.50), (0.40, 0.45), (0.60, 0.45), (0.50, 0.55)]
+    # === BLURRED BACKGROUND ===
+    bg_scale = max(W / pw, H / ph) * 1.3
+    bg_w, bg_h = int(pw * bg_scale), int(ph * bg_scale)
+    bg_img = product_img.resize((bg_w, bg_h), Image.LANCZOS)
+    bg_cx, bg_cy = (bg_w - W) // 2, (bg_h - H) // 2
+    bg_cropped = bg_img.crop((bg_cx, bg_cy, bg_cx + W, bg_cy + H))
+    from PIL import ImageFilter
+    bg_blurred = bg_cropped.filter(ImageFilter.GaussianBlur(radius=35))
+    bg_dark = Image.eval(bg_blurred, lambda x: int(x * 0.45))
+
+    # === FIT product (no cropping) ===
+    fit_w, fit_h = int(W * 0.92), int(H * 0.88)
+    fit_scale = min(fit_w / pw, fit_h / ph)
+    new_w, new_h = int(pw * fit_scale), int(ph * fit_scale)
+    img_fitted = product_img.resize((new_w, new_h), Image.LANCZOS)
+
+    vy_shifts = [0.0, -0.02, 0.02, -0.03]
 
     for i in range(count):
-        px, py = positions[i % len(positions)]
-        crop_x = max(0, min(int((new_w - W) * px), new_w - W))
-        crop_y = max(0, min(int((new_h - H) * py), new_h - H))
-        canvas = product_big.crop((crop_x, crop_y, crop_x + W, crop_y + H))
-        composites.append(np.array(canvas.convert('RGB')))
+        canvas = bg_dark.copy()
+        paste_x = (W - new_w) // 2
+        vy = vy_shifts[i % len(vy_shifts)]
+        paste_y = (H - new_h) // 2 + int(H * vy)
+        paste_y = max(0, min(paste_y, H - new_h))
+        canvas.paste(img_fitted, (paste_x, paste_y))
+        composites.append(np.array(canvas))
 
     return composites
 

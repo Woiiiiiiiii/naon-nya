@@ -83,9 +83,8 @@ def _load_composites(produk_id, category='home', count=5):
 
 
 def _generate_fallback_composites(produk_id, category, count=5):
-    """Generate composites from raw product image (no background removal).
-    Uses COVER mode: scale to fill entire 1080x1920 frame, crop excess.
-    Same approach as image_compositor.composite_product_fullframe."""
+    """Generate composites using FIT + Blurred Background technique.
+    Product image shown in FULL (no cropping), blurred bg fills the frame."""
     from engine.modules.category_router import get_accent_color
 
     accent = get_accent_color(category)
@@ -99,7 +98,7 @@ def _generate_fallback_composites(produk_id, category, count=5):
             img_path = p
             break
 
-    # Load raw product image — NO background removal
+    # Load raw product image
     product_img = None
     if img_path:
         try:
@@ -111,40 +110,41 @@ def _generate_fallback_composites(produk_id, category, count=5):
             product_img = None
 
     if product_img is None:
-        # Last resort: gradient with text hint
         print(f"    [WARN] No valid image for {produk_id}, using gradient fallback")
         for i in range(count):
             canvas = _make_gradient_short(accent, i)
             composites.append(np.array(canvas.convert('RGB')))
         return composites
 
-    # COVER mode: scale to fill BOTH width AND height, crop excess
     pw, ph = product_img.size
-    scale_w = W / pw
-    scale_h = H / ph
-    base_scale = max(scale_w, scale_h)
 
-    # Ken Burns needs extra pixels for zoom/pan, scale 15% larger
-    cover_scale = base_scale * 1.15
-    new_w = int(pw * cover_scale)
-    new_h = int(ph * cover_scale)
-    product_big = product_img.resize((new_w, new_h), Image.LANCZOS)
+    # === BLURRED BACKGROUND (fills entire frame) ===
+    bg_scale = max(W / pw, H / ph) * 1.3
+    bg_w, bg_h = int(pw * bg_scale), int(ph * bg_scale)
+    bg_img = product_img.resize((bg_w, bg_h), Image.LANCZOS)
+    bg_cx, bg_cy = (bg_w - W) // 2, (bg_h - H) // 2
+    bg_cropped = bg_img.crop((bg_cx, bg_cy, bg_cx + W, bg_cy + H))
+    from PIL import ImageFilter
+    bg_blurred = bg_cropped.filter(ImageFilter.GaussianBlur(radius=35))
+    bg_dark = Image.eval(bg_blurred, lambda x: int(x * 0.45))
 
-    # Different crop positions per variation
-    positions = [
-        (0.50, 0.50), (0.40, 0.45), (0.60, 0.45),
-        (0.50, 0.55), (0.45, 0.40),
-    ]
+    # === FIT product (preserve aspect ratio, no cropping) ===
+    fit_w, fit_h = int(W * 0.92), int(H * 0.88)
+    fit_scale = min(fit_w / pw, fit_h / ph)
+    new_w, new_h = int(pw * fit_scale), int(ph * fit_scale)
+    img_fitted = product_img.resize((new_w, new_h), Image.LANCZOS)
+
+    # Different vertical positions per variation
+    vy_shifts = [0.0, -0.02, 0.02, -0.03, 0.03]
 
     for i in range(count):
-        px, py = positions[i % len(positions)]
-        crop_x = int((new_w - W) * px)
-        crop_y = int((new_h - H) * py)
-        crop_x = max(0, min(crop_x, new_w - W))
-        crop_y = max(0, min(crop_y, new_h - H))
-
-        canvas = product_big.crop((crop_x, crop_y, crop_x + W, crop_y + H))
-        composites.append(np.array(canvas.convert('RGB')))
+        canvas = bg_dark.copy()
+        paste_x = (W - new_w) // 2
+        vy = vy_shifts[i % len(vy_shifts)]
+        paste_y = (H - new_h) // 2 + int(H * vy)
+        paste_y = max(0, min(paste_y, H - new_h))
+        canvas.paste(img_fitted, (paste_x, paste_y))
+        composites.append(np.array(canvas))
 
     return composites
 

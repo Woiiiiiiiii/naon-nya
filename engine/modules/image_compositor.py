@@ -71,47 +71,56 @@ BADGE_TEXTS = [
 
 def composite_product_fullframe(img_path, placement, accent_color,
                                 badge_text=None, channel_name=None):
-    """Fill entire 9:16 frame with Shopee listing image. NO background removal.
+    """Fill entire 9:16 frame using FIT + Blurred Background technique.
     
-    COVER mode: scale to fill BOTH width AND height of 1080x1920.
-    Crop any excess. NO white/empty gaps ever.
-    
-    1. Load raw Shopee image
-    2. Scale to COVER entire frame (max of width_scale, height_scale)
-    3. Center-crop to exact 1080x1920
-    4. Result: ENTIRE frame filled, zero gaps
+    Professional approach (same as TikTok/Instagram Reels):
+    1. Create BLURRED, enlarged version of image as background (fills entire frame)
+    2. Scale original image to FIT inside frame (preserving aspect ratio)
+    3. Overlay fitted image centered on blurred bg
+    4. Result: ALL content visible, zero cropping, zero empty space
     """
     W, H = OUTPUT_SIZE
 
-    # Load raw image — NO background removal
+    # Load raw image
     try:
         img = Image.open(img_path).convert('RGB')
     except Exception:
-        img = Image.new('RGB', (W, W), (40, 40, 60))  # fallback
+        img = Image.new('RGB', (W, W), (40, 40, 60))
 
     iw, ih = img.size
     if iw == 0 or ih == 0:
         return Image.new('RGB', (W, H), (40, 40, 60))
 
-    # === SCALE to COVER entire frame (fill both W and H) ===
-    scale_w = W / iw
-    scale_h = H / ih
-    scale = max(scale_w, scale_h)  # Use MAX so image covers everything
-    new_w = int(iw * scale)
-    new_h = int(ih * scale)
-    img_scaled = img.resize((new_w, new_h), Image.LANCZOS)
+    # === STEP 1: Blurred background (fills entire frame) ===
+    bg_scale = max(W / iw, H / ih) * 1.3  # 30% larger to avoid blur edges
+    bg_w = int(iw * bg_scale)
+    bg_h = int(ih * bg_scale)
+    bg_img = img.resize((bg_w, bg_h), Image.LANCZOS)
+    # Center crop the background to exact frame size
+    bg_cx = (bg_w - W) // 2
+    bg_cy = (bg_h - H) // 2
+    bg_cropped = bg_img.crop((bg_cx, bg_cy, bg_cx + W, bg_cy + H))
+    # Heavy blur + darken for background effect
+    bg_blurred = bg_cropped.filter(ImageFilter.GaussianBlur(radius=35))
+    # Darken background so product stands out
+    bg_dark = Image.eval(bg_blurred, lambda x: int(x * 0.45))
 
-    # === CENTER CROP to exact frame size with subtle vertical shift ===
+    # === STEP 2: FIT product image inside frame (preserve aspect ratio) ===
     vy_shift = placement.get('vy', 0.0)
-    
-    # Horizontal center crop
-    crop_x = (new_w - W) // 2
-    # Vertical center crop with shift
-    crop_y = (new_h - H) // 2 - int(H * vy_shift)
-    crop_y = max(0, min(crop_y, new_h - H))
-    crop_x = max(0, min(crop_x, new_w - W))
-    
-    canvas = img_scaled.crop((crop_x, crop_y, crop_x + W, crop_y + H))
+    # Use 90% of frame to leave small margin
+    fit_w = int(W * 0.92)
+    fit_h = int(H * 0.88)
+    fit_scale = min(fit_w / iw, fit_h / ih)
+    new_w = int(iw * fit_scale)
+    new_h = int(ih * fit_scale)
+    img_fitted = img.resize((new_w, new_h), Image.LANCZOS)
+
+    # === STEP 3: Center product on blurred background ===
+    canvas = bg_dark.copy()
+    paste_x = (W - new_w) // 2
+    paste_y = (H - new_h) // 2 + int(H * vy_shift)
+    paste_y = max(0, min(paste_y, H - new_h))
+    canvas.paste(img_fitted, (paste_x, paste_y))
 
     # Add badge
     canvas_rgba = canvas.convert('RGBA')
