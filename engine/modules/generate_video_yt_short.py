@@ -36,6 +36,7 @@ from engine.modules.video_effects import (
     create_count_up_text, ease_out_cubic, ease_out_back
 )
 from engine.modules.sound_manager import get_sfx_path, init_sounds
+from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params
 
 W, H = 1080, 1920
 COMPOSITES_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'composites')
@@ -496,18 +497,13 @@ def generate_shorts(queue_file, output_dir):
             # === ASSEMBLE VIDEO ===
             video = VideoClip(make_frame, duration=total_dur).with_fps(24)
 
-            # === AUDIO: Music + SFX ===
+            # === AUDIO: Music + SFX (normalized) ===
             audio_clips = []
 
             music_dir = os.path.join(output_dir, "yt")
             music_file = os.path.join(music_dir, f"MUSIC_{produk_id}_{acct_id}.mp3")
             if os.path.exists(music_file):
-                music = AudioFileClip(music_file)
-                if music.duration < total_dur:
-                    reps = int(total_dur / music.duration) + 1
-                    music = concatenate_audioclips([music] * reps)
-                music = music.subclipped(0, total_dur)
-                music = music.with_effects([afx.MultiplyVolume(0.65)])
+                music = prepare_music(AudioFileClip(music_file), total_dur)
                 audio_clips.append(music)
 
             sfx_entries = [
@@ -522,9 +518,7 @@ def generate_shorts(queue_file, output_dir):
                 sfx_path = get_sfx_path(sfx_name)
                 if sfx_path and os.path.exists(sfx_path) and sfx_time < total_dur:
                     try:
-                        sfx = AudioFileClip(sfx_path)
-                        sfx = sfx.with_effects([afx.MultiplyVolume(0.5)])
-                        sfx = sfx.with_start(sfx_time)
+                        sfx = prepare_sfx(AudioFileClip(sfx_path), sfx_time)
                         audio_clips.append(sfx)
                     except Exception:
                         pass
@@ -539,9 +533,10 @@ def generate_shorts(queue_file, output_dir):
             # === EXPORT ===
             out_file = f"{today}_{produk_id}_v{acct_num}_yt.mp4"
             out_path = os.path.join(output_dir, "yt", out_file)
+            audio_params = get_ffmpeg_audio_params()
             video.write_videofile(out_path, fps=24, codec='libx264',
-                                audio_codec='aac', preset='ultrafast',
-                                logger=None)
+                                preset='ultrafast', logger=None,
+                                **audio_params)
 
             print(f"  [OK] Short: {out_file} ({total_dur}s)")
             video.close()

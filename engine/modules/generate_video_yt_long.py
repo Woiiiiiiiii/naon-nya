@@ -36,6 +36,7 @@ from engine.modules.video_effects import (
     create_count_up_text, create_blinking_label
 )
 from engine.modules.sound_manager import get_sfx_path, init_sounds
+from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params
 
 W, H = 1080, 1920
 COMPOSITES_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'composites')
@@ -476,16 +477,11 @@ def generate_long(queue_file, output_dir):
             # === ASSEMBLE VIDEO ===
             video = VideoClip(make_frame, duration=total_dur).with_fps(24)
 
-            # === AUDIO ===
+            # === AUDIO (normalized) ===
             audio_clips = []
             music_file = os.path.join(output_dir, "yt", f"MUSIC_{produk_id}_{acct_id}.mp3")
             if os.path.exists(music_file):
-                music = AudioFileClip(music_file)
-                if music.duration < total_dur:
-                    reps = int(total_dur / music.duration) + 1
-                    music = concatenate_audioclips([music] * reps)
-                music = music.subclipped(0, total_dur)
-                music = music.with_effects([afx.MultiplyVolume(0.65)])
+                music = prepare_music(AudioFileClip(music_file), total_dur)
                 audio_clips.append(music)
 
             # SFX at scene transitions
@@ -494,21 +490,17 @@ def generate_long(queue_file, output_dir):
                     sfx_path = get_sfx_path('swoosh')
                     if sfx_path and os.path.exists(sfx_path) and sc['s'] < total_dur:
                         try:
-                            sfx = AudioFileClip(sfx_path)
-                            sfx = sfx.with_effects([afx.MultiplyVolume(0.4)])
-                            sfx = sfx.with_start(sc['s'])
+                            sfx = prepare_sfx(AudioFileClip(sfx_path), sc['s'])
                             audio_clips.append(sfx)
                         except Exception:
                             pass
 
             # Ding at rating stars
-            ding_time = scenes[2]['s'] + 5.0  # detail1 + 5s
+            ding_time = scenes[2]['s'] + 5.0
             sfx_path = get_sfx_path('ding')
             if sfx_path and os.path.exists(sfx_path) and ding_time < total_dur:
                 try:
-                    sfx = AudioFileClip(sfx_path)
-                    sfx = sfx.with_effects([afx.MultiplyVolume(0.5)])
-                    sfx = sfx.with_start(ding_time)
+                    sfx = prepare_sfx(AudioFileClip(sfx_path), ding_time)
                     audio_clips.append(sfx)
                 except Exception:
                     pass
@@ -518,9 +510,7 @@ def generate_long(queue_file, output_dir):
             sfx_path = get_sfx_path('bass_drop')
             if sfx_path and os.path.exists(sfx_path) and cta_start < total_dur:
                 try:
-                    sfx = AudioFileClip(sfx_path)
-                    sfx = sfx.with_effects([afx.MultiplyVolume(0.5)])
-                    sfx = sfx.with_start(cta_start)
+                    sfx = prepare_sfx(AudioFileClip(sfx_path), cta_start)
                     audio_clips.append(sfx)
                 except Exception:
                     pass
@@ -534,8 +524,10 @@ def generate_long(queue_file, output_dir):
             # === EXPORT LONG ===
             out_file = f"{today}_{produk_id}_v{acct_num}_yt_long.mp4"
             out_path = os.path.join(output_dir, "yt", out_file)
+            audio_params = get_ffmpeg_audio_params()
             video.write_videofile(out_path, fps=15, codec='libx264',
-                                audio_codec='aac', preset='ultrafast', logger=None)
+                                preset='ultrafast', logger=None,
+                                **audio_params)
             print(f"  [OK] Long: {out_file} ({total_dur}s)")
 
             # === AUTO-EXTRACT SHORTS ===

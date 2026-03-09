@@ -91,8 +91,95 @@ def _save_image(img, img_path, min_target=1620):
     img.save(img_path, 'JPEG', quality=95)
     return True
 
+def _score_image_simplicity(img):
+    """Score how 'simple/clean' an image is. Higher = simpler = better for video.
+    
+    Scoring logic:
+    - Edge uniformity: uniform edges = product on plain background (good)
+    - Color variety: fewer distinct colors = simpler (good)
+    - Whiteness: more white/light area = cleaner product photo (good)
+    - Text detection: high contrast edges = likely has text overlay (bad)
+    """
+    import numpy as np
+    data = np.array(img)
+    h, w = data.shape[:2]
+    score = 0.0
+    
+    # 1. Edge uniformity — sample 10px border on all sides
+    border = 10
+    top_strip = data[:border, :, :]
+    bot_strip = data[-border:, :, :]
+    left_strip = data[:, :border, :]
+    right_strip = data[:, -border:, :]
+    
+    # Low std in borders = uniform background = GOOD
+    for strip in [top_strip, bot_strip, left_strip, right_strip]:
+        std = strip.std()
+        if std < 15:       # Very uniform (white/solid bg)
+            score += 15
+        elif std < 30:     # Fairly uniform
+            score += 8
+        elif std < 50:     # Some variation
+            score += 3
+    
+    # 2. White/light percentage — more white = cleaner product photo
+    brightness = data.mean(axis=2)
+    white_pct = (brightness > 230).sum() / (h * w)
+    light_pct = (brightness > 200).sum() / (h * w)
+    score += white_pct * 30   # Up to 30 points for all-white bg
+    score += light_pct * 10   # Bonus for light areas
+    
+    # 3. Color simplicity — fewer unique colors = simpler
+    # Quantize to reduce noise (divide by 32 → 8 levels per channel)
+    quantized = (data // 32).reshape(-1, 3)
+    unique_colors = len(set(map(tuple, quantized)))
+    if unique_colors < 100:
+        score += 15  # Very simple
+    elif unique_colors < 300:
+        score += 8
+    elif unique_colors > 800:
+        score -= 10  # Too complex/busy
+    
+    # 4. Penalty for text-heavy images — detect high-frequency edges
+    gray = brightness.astype(np.uint8)
+    # Simple edge detection: absolute difference with shifted version
+    edge_h = np.abs(gray[1:, :].astype(int) - gray[:-1, :].astype(int))
+    edge_v = np.abs(gray[:, 1:].astype(int) - gray[:, :-1].astype(int))
+    edge_density = (edge_h > 50).sum() + (edge_v > 50).sum()
+    edge_ratio = edge_density / (h * w)
+    if edge_ratio > 0.15:
+        score -= 15  # High edge density = lots of text/graphics
+    elif edge_ratio > 0.08:
+        score -= 5
+    
+    return round(score, 1)
+
+
+def _download_single_image(cdn_url):
+    """Download a single image from Shopee CDN. Returns PIL Image or None."""
+    try:
+        headers = {
+            'User-Agent': random.choice(_USER_AGENTS),
+            'Referer': 'https://shopee.co.id/',
+        }
+        if _HAS_PROXY and is_proxy_available():
+            resp = proxy_get(cdn_url, headers=headers)
+        else:
+            resp = requests.get(cdn_url, timeout=10, headers=headers)
+        if resp.status_code == 200 and len(resp.content) > 5000:
+            return Image.open(BytesIO(resp.content)).convert('RGB')
+    except Exception:
+        pass
+    return None
+
+
 def _try_shopee_cookies(product_name, img_path):
-    """Tier 1: Search Shopee with authenticated cookies via CF proxy."""
+    """Tier 1: Search Shopee with cookies — download ALL images, pick SIMPLEST.
+    
+    Shopee products have 5-9 images. Image #1 is usually the marketing image
+    (full of text, logos, decorations). Later images are cleaner product shots.
+    We download all, score each for simplicity, and pick the best one.
+    """
     session = _build_shopee_session()
     if not session:
         return False
@@ -136,30 +223,49 @@ def _try_shopee_cookies(product_name, img_path):
         if not items:
             return False
 
-        for item in items[:3]:
-            info = item.get('item_basic', {})
-            image_hash = info.get('image', '')
-            if not image_hash:
-                continue
-            cdn_url = f"https://down-id.img.susercontent.com/file/{image_hash}"
+        # Collect ALL image candidates from ALL search results
+        best_img = None
+        best_score = -999
+        best_label = ""
 
-            # Download image via proxy
-            if _HAS_PROXY and is_proxy_available():
-                img_resp = proxy_get(cdn_url, headers={'Referer': 'https://shopee.co.id/'})
-            else:
-                img_resp = requests.get(cdn_url, timeout=10, headers={
-                    'User-Agent': random.choice(_USER_AGENTS),
-                    'Referer': 'https://shopee.co.id/',
-                })
-            if img_resp.status_code == 200 and len(img_resp.content) > 5000:
-                img = Image.open(BytesIO(img_resp.content)).convert('RGB')
-                if _save_image(img, img_path):
-                    tag = 'Cookies+Proxy' if (_HAS_PROXY and is_proxy_available()) else 'Cookies'
-                    print(f"    [OK] Shopee {tag}")
-                    return True
+        for item_idx, item in enumerate(items[:3]):
+            info = item.get('item_basic', {})
+            
+            # Get ALL image hashes (not just the first one!)
+            image_hashes = info.get('images', [])
+            if not image_hashes:
+                # Fallback: single image hash
+                single = info.get('image', '')
+                if single:
+                    image_hashes = [single]
+            
+            for img_idx, img_hash in enumerate(image_hashes):
+                if not img_hash:
+                    continue
+                cdn_url = f"https://down-id.img.susercontent.com/file/{img_hash}"
+                img = _download_single_image(cdn_url)
+                if img is None:
+                    continue
+                
+                # Score this image for simplicity
+                score = _score_image_simplicity(img)
+                label = f"item{item_idx+1}/img{img_idx+1}"
+                
+                if score > best_score:
+                    best_score = score
+                    best_img = img
+                    best_label = label
+
+        # Save the best (simplest) image
+        if best_img is not None:
+            if _save_image(best_img, img_path):
+                tag = 'Cookies+Proxy' if (_HAS_PROXY and is_proxy_available()) else 'Cookies'
+                print(f"    [OK] Shopee {tag} — picked {best_label} (score={best_score})")
+                return True
         return False
     except Exception:
         return False
+
 
 
 def _try_shopee_cdn(image_url, img_path):

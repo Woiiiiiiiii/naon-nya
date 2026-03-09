@@ -80,11 +80,12 @@ def main():
         # Pre-production: Fonts + SFX cache + backgrounds (photos + videos) + music library
         "python engine/modules/font_helper.py",
         "python engine/modules/sound_manager.py",
-        "python engine/modules/cf_background_generator.py --all",
         "python engine/modules/music_downloader.py",
-        # Visual pipeline: enhance → isolate → composite onto category backgrounds
+        # Visual pipeline: composite product images → enhance/beautify
         "python engine/modules/image_enhancer.py",
         "python engine/modules/image_compositor.py",
+        # Beautify all composites (local PIL + CF SD img2img)
+        "python engine/modules/cf_image_enhancer.py --input engine/data/composites --category home",
         # Deduplication + planning
         "python engine/modules/dedup_tracker.py",
         "python engine/modules/micro_cut_planner.py",
