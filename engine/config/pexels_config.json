@@ -1,0 +1,11 @@
+{
+    "api_key": "PEXELS_API_KEY",
+    "base_url": "https://api.pexels.com/v1",
+    "video_url": "https://api.pexels.com/videos",
+    "photo_per_page": 10,
+    "video_per_page": 5,
+    "min_photo_stock": 20,
+    "min_video_stock": 10,
+    "cache_dir_photo": "engine/assets/backgrounds/photo",
+    "cache_dir_video": "engine/assets/backgrounds/video"
+}

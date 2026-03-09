@@ -1,0 +1,167 @@
+{
+    "youtube_akun_1": {
+        "kategori": "Fashion",
+        "keyword_produk": [
+            "baju wanita",
+            "dress",
+            "outfit",
+            "fashion muslim"
+        ],
+        "keyword_foto_bg": [
+            "clothing store interior",
+            "fashion boutique",
+            "wardrobe aesthetic",
+            "clothing rack"
+        ],
+        "keyword_video_bg": [
+            "fashion lifestyle",
+            "clothing store walkthrough",
+            "outfit aesthetic"
+        ],
+        "mood_musik": "upbeat_trendy",
+        "color_grading": "warm_vibrant",
+        "style_copy": "trendy_casual"
+    },
+    "youtube_akun_2": {
+        "kategori": "Elektronik",
+        "keyword_produk": [
+            "smartphone",
+            "laptop",
+            "earphone",
+            "gadget"
+        ],
+        "keyword_foto_bg": [
+            "tech workspace",
+            "desk setup cinematic",
+            "gadget flatlay",
+            "modern office"
+        ],
+        "keyword_video_bg": [
+            "desk setup tour",
+            "tech review aesthetic",
+            "workspace cinematic"
+        ],
+        "mood_musik": "modern_techy",
+        "color_grading": "cool_dark_premium",
+        "style_copy": "informatif_technical"
+    },
+    "youtube_akun_3": {
+        "kategori": "Kosmetik",
+        "keyword_produk": [
+            "skincare",
+            "makeup",
+            "lipstik",
+            "serum wajah"
+        ],
+        "keyword_foto_bg": [
+            "vanity table aesthetic",
+            "beauty setup",
+            "makeup flatlay",
+            "skincare routine"
+        ],
+        "keyword_video_bg": [
+            "beauty routine aesthetic",
+            "makeup application slow motion",
+            "skincare flatlay"
+        ],
+        "mood_musik": "soft_elegant",
+        "color_grading": "soft_pastel",
+        "style_copy": "beauty_lifestyle"
+    },
+    "youtube_akun_4": {
+        "kategori": "Alat Rumah Tangga",
+        "keyword_produk": [
+            "peralatan dapur",
+            "alat masak",
+            "perlengkapan rumah",
+            "home appliance"
+        ],
+        "keyword_foto_bg": [
+            "kitchen counter aesthetic",
+            "modern kitchen",
+            "cooking setup",
+            "home interior"
+        ],
+        "keyword_video_bg": [
+            "kitchen cooking aesthetic",
+            "modern home interior",
+            "cooking preparation"
+        ],
+        "mood_musik": "ceria_practical",
+        "color_grading": "clean_bright",
+        "style_copy": "practical_problem_solution"
+    },
+    "youtube_akun_5": {
+        "kategori": "Kesehatan dan Olahraga",
+        "keyword_produk": [
+            "alat olahraga",
+            "suplemen",
+            "peralatan gym",
+            "kesehatan"
+        ],
+        "keyword_foto_bg": [
+            "gym setup",
+            "workout space",
+            "fitness aesthetic",
+            "sport equipment"
+        ],
+        "keyword_video_bg": [
+            "gym workout aesthetic",
+            "fitness motivation",
+            "sport lifestyle"
+        ],
+        "mood_musik": "energetic_motivational",
+        "color_grading": "energetic_vivid",
+        "style_copy": "motivational_health"
+    },
+    "tiktok": {
+        "kategori_alternasi": [
+            "Fashion",
+            "Kosmetik"
+        ],
+        "keyword_produk": [
+            "outfit viral",
+            "skincare viral",
+            "makeup tiktok",
+            "fashion kekinian"
+        ],
+        "keyword_foto_bg": [
+            "fashion aesthetic tiktok",
+            "beauty setup minimal",
+            "outfit flatlay"
+        ],
+        "keyword_video_bg": [
+            "fashion transition tiktok",
+            "beauty routine fast",
+            "outfit reveal"
+        ],
+        "mood_musik": "viral_upbeat",
+        "color_grading": "vibrant_punchy",
+        "style_copy": "viral_hook_tiktok"
+    },
+    "facebook": {
+        "kategori_alternasi": [
+            "Alat Rumah Tangga",
+            "Elektronik"
+        ],
+        "keyword_produk": [
+            "peralatan rumah",
+            "gadget rumahan",
+            "elektronik murah",
+            "home appliance"
+        ],
+        "keyword_foto_bg": [
+            "home lifestyle",
+            "kitchen modern",
+            "tech home setup"
+        ],
+        "keyword_video_bg": [
+            "home living aesthetic",
+            "modern household",
+            "tech home tour"
+        ],
+        "mood_musik": "friendly_informative",
+        "color_grading": "warm_natural",
+        "style_copy": "problem_solution_facebook"
+    }
+}

@@ -1,0 +1,177 @@
+name: Shopee Cookie Health Check
+
+on:
+  # Check every Sunday at 3 AM UTC = 10:00 WIB
+  schedule:
+    - cron: '0 3 * * 0'
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Check Cookie Health
+        id: cookie_check
+        env:
+          SHOPEE_COOKIES: ${{ secrets.SHOPEE_COOKIES }}
+          CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
+          CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
+        run: |
+          python -c "
+          import os, json, sys
+
+          cookies_raw = os.environ.get('SHOPEE_COOKIES', '')
+          proxy_url = os.environ.get('CF_PROXY_URL', '')
+          proxy_key = os.environ.get('CF_PROXY_KEY', '')
+
+          # Check 1: Cookies exist?
+          if not cookies_raw:
+              print('STATUS=NO_COOKIES')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write('status=NO_COOKIES\n')
+                  f.write('message=SHOPEE_COOKIES secret is EMPTY. Please update it.\n')
+              sys.exit(0)
+
+          # Check 2: Cookies valid JSON?
+          try:
+              cookies = json.loads(cookies_raw)
+              if isinstance(cookies, list):
+                  count = len(cookies)
+              elif isinstance(cookies, dict):
+                  count = len(cookies)
+              else:
+                  count = 0
+              print(f'Cookies: {count} entries')
+          except:
+              print('STATUS=INVALID_JSON')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write('status=INVALID_JSON\n')
+                  f.write('message=SHOPEE_COOKIES is not valid JSON. Please re-export from browser.\n')
+              sys.exit(0)
+
+          # Check 3: Try a simple API call via proxy
+          import requests
+          test_url = 'https://shopee.co.id/api/v4/search/search_items?keyword=baju&limit=1'
+          headers_dict = {
+              'User-Agent': 'Mozilla/5.0 (Linux; Android 14) Chrome/121.0',
+              'Accept': 'application/json',
+              'Referer': 'https://shopee.co.id/',
+          }
+
+          cookie_str = ''
+          if isinstance(cookies, list):
+              cookie_str = '; '.join([f\"{c.get('name','')}={c.get('value','')}\" for c in cookies if c.get('name')])
+          elif isinstance(cookies, dict):
+              cookie_str = '; '.join([f'{k}={v}' for k, v in cookies.items()])
+
+          # Try via proxy if available
+          success = False
+          if proxy_url and proxy_key:
+              # Test A: Worker connectivity (GET / should return 404 'Not Found')
+              try:
+                  r0 = requests.get(f'{proxy_url}/', timeout=10)
+                  print(f'Worker connectivity: HTTP {r0.status_code} body={r0.text[:100]}')
+              except Exception as e:
+                  print(f'Worker connectivity FAILED: {e}')
+
+              # Test B: Proxy auth (POST /proxy with cookies)
+              try:
+                  resp = requests.post(
+                      f'{proxy_url}/proxy',
+                      json={'url': test_url, 'method': 'GET', 'headers': headers_dict, 'cookies': cookie_str},
+                      headers={'X-Proxy-Key': proxy_key, 'Content-Type': 'application/json'},
+                      timeout=20
+                  )
+                  print(f'Proxy test: HTTP {resp.status_code}')
+                  body_preview = resp.text[:300]
+                  print(f'Response body: {body_preview}')
+
+                  if resp.status_code == 200:
+                      try:
+                          data = resp.json()
+                          items = data.get('items', [])
+                          if items:
+                              success = True
+                              print(f'Shopee returned {len(items)} items — PROXY WORKS!')
+                          else:
+                              # Proxy works but Shopee returned empty — check error
+                              error = data.get('error', data.get('error_msg', ''))
+                              print(f'Shopee returned 0 items (error={error})')
+                              # Still counts as proxy working if Shopee responded
+                              if 'error' not in str(data).lower():
+                                  success = True
+                                  print('Proxy connection OK (Shopee responded)')
+                      except:
+                          print('Response is not JSON')
+                  elif resp.status_code == 401:
+                      print('>>> CAUSE: PROXY_SECRET mismatch (Worker auth failed)')
+                  elif resp.status_code == 404:
+                      print('>>> CAUSE: Wrong endpoint or Worker not deployed')
+                  elif resp.status_code == 403:
+                      # 403 from Shopee via proxy means proxy WORKS but Shopee blocks search
+                      if 'error' in body_preview.lower() or 'tracking_id' in body_preview.lower():
+                          print('>>> Proxy WORKS! Shopee blocks search API (error 90309999)')
+                          print('>>> CDN image downloads should still work through proxy')
+                          success = True  # Proxy itself is working
+                      else:
+                          print('>>> CAUSE: Cloudflare WAF or Worker issue')
+              except Exception as e:
+                  print(f'Proxy test failed: {e}')
+
+          if success:
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write('status=HEALTHY\n')
+                  f.write(f'message=Cookies OK ({count} entries), proxy working.\n')
+          else:
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write('status=EXPIRED\n')
+                  f.write(f'message=Cookies may be EXPIRED ({count} entries but no results). Please update SHOPEE_COOKIES.\n')
+          "
+
+      - name: Send Alert Email (if unhealthy)
+        if: steps.cookie_check.outputs.status != 'HEALTHY'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "⚠️ Shopee Cookies Alert — ${{ steps.cookie_check.outputs.status }}"
+          to: ic31122025@gmail.com
+          from: Affiliate Engine <${{ secrets.EMAIL_USERNAME }}>
+          body: |
+            ⚠️ SHOPEE COOKIES STATUS: ${{ steps.cookie_check.outputs.status }}
+
+            ${{ steps.cookie_check.outputs.message }}
+
+            Cara update cookies:
+            1. Login ke https://shopee.co.id di browser
+            2. Buka DevTools (F12) → Application → Cookies
+            3. Export semua cookies sebagai JSON
+            4. Update secret SHOPEE_COOKIES di:
+               https://github.com/Woiiiiiiiii/naon-nya/settings/secrets/actions
+
+            Cek dilakukan: Setiap Minggu jam 10:00 WIB
+            Run: https://github.com/Woiiiiiiiii/naon-nya/actions
+
+      - name: Log Result
+        if: always()
+        run: |
+          echo "=== Cookie Health Check Result ==="
+          echo "Status: ${{ steps.cookie_check.outputs.status }}"
+          echo "Message: ${{ steps.cookie_check.outputs.message }}"

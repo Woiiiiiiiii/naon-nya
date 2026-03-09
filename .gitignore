@@ -1,0 +1,53 @@
+# Output files (generated videos, temp files)
+engine/output/yt/*.mp4
+engine/output/tt/*.mp4
+engine/output/fb/*.mp4
+engine/output/yt/_uploaded.json
+engine/output/fb/_uploaded.json
+
+# State files (runtime data, not config)
+engine/state/*.csv
+engine/state/*.json
+
+# Queue files (regenerated every run)
+engine/queue/*.jsonl
+
+# Temp/cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# MoviePy temp files
+*TEMP_MPY*
+
+# OS files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Env
+.env
+venv/
+env/
+
+# YouTube API credentials (client secrets are sensitive, tokens needed for auto-upload)
+engine/config/client_secret.json
+engine/config/yt_token.pickle
+engine/config/tokens/*_client_secret.json
+
+# Facebook API credentials
+engine/config/fb_config.json
+
+# Private docs
+Affiliate.txt
+
+# Logs
+*.log

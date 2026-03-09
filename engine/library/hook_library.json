@@ -1,0 +1,77 @@
+[
+  {
+    "id": "h001",
+    "template": "Sering lupa minum air putih?",
+    "ctr_score": 0.80
+  },
+  {
+    "id": "h002",
+    "template": "Masih ngepel pakai tenaga biasa?",
+    "ctr_score": 0.75
+  },
+  {
+    "id": "h003",
+    "template": "Rahasia hidup lebih sehat mulai dari sini!",
+    "ctr_score": 0.70
+  },
+  {
+    "id": "h004",
+    "template": "Produk ini bakal ngerubah hidupmu!",
+    "ctr_score": 0.85
+  },
+  {
+    "id": "h005",
+    "template": "Jangan beli ini sebelum nonton sampai habis!",
+    "ctr_score": 0.90
+  },
+  {
+    "id": "h006",
+    "template": "Kamu masih belum punya yang satu ini?",
+    "ctr_score": 0.78
+  },
+  {
+    "id": "h007",
+    "template": "Stop buang uang buat yang gak berguna!",
+    "ctr_score": 0.82
+  },
+  {
+    "id": "h008",
+    "template": "Ini yang lagi viral di TikTok!",
+    "ctr_score": 0.88
+  },
+  {
+    "id": "h009",
+    "template": "Hidup jadi lebih gampang pakai ini!",
+    "ctr_score": 0.76
+  },
+  {
+    "id": "h010",
+    "template": "Kenapa baru tau yang satu ini sekarang?!",
+    "ctr_score": 0.84
+  },
+  {
+    "id": "h011",
+    "template": "Benda kecil ini bisa hemat jutaan rupiah!",
+    "ctr_score": 0.79
+  },
+  {
+    "id": "h012",
+    "template": "1 menit aja, hidupmu bisa berubah!",
+    "ctr_score": 0.81
+  },
+  {
+    "id": "h013",
+    "template": "Temen-temen pada nanya ini beli dimana!",
+    "ctr_score": 0.86
+  },
+  {
+    "id": "h014",
+    "template": "Coba deh pakai ini, pasti ketagihan!",
+    "ctr_score": 0.73
+  },
+  {
+    "id": "h015",
+    "template": "Wajib punya! Ini alasannya kenapa!",
+    "ctr_score": 0.77
+  }
+]

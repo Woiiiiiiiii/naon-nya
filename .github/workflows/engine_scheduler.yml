@@ -1,0 +1,326 @@
+name: Affiliate Video Engine
+
+on:
+  schedule:
+    # Pagi: 06:30 WIB = 23:30 UTC (prev day)
+    - cron: '30 23 * * *'
+    # Siang: 11:30 WIB = 04:30 UTC
+    - cron: '30 4 * * *'
+    # Sore: 15:30 WIB = 08:30 UTC
+    - cron: '30 8 * * *'
+    # Malam: 19:30 WIB = 12:30 UTC
+    - cron: '30 12 * * *'
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'Slot to run (pagi/siang/sore/malam)'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - pagi
+          - siang
+          - sore
+          - malam
+
+env:
+  PYTHONIOENCODING: utf-8
+
+permissions:
+  contents: write
+
+concurrency:
+  group: affiliate-pipeline
+  cancel-in-progress: false
+
+jobs:
+  generate-videos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create directories
+        run: python setup_dirs.py
+
+      - name: Setup GCS credentials
+        if: env.GCS_SA_KEY != ''
+        env:
+          GCS_SA_KEY: ${{ secrets.GCS_SA_KEY }}
+        run: |
+          echo "$GCS_SA_KEY" > /tmp/gcs-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcs-key.json" >> $GITHUB_ENV
+
+      - name: Determine slot
+        id: slot
+        shell: python
+        run: |
+          import os, datetime
+          slot_input = "${{ github.event.inputs.slot }}"
+          if slot_input and slot_input != "auto" and slot_input != "":
+              slot = slot_input
+          else:
+              utc_now = datetime.datetime.utcnow()
+              wib_hour = (utc_now.hour + 7) % 24
+              if 5 <= wib_hour < 12:
+                  slot = "pagi"
+              elif 12 <= wib_hour < 15:
+                  slot = "siang"
+              elif 15 <= wib_hour < 18:
+                  slot = "sore"
+              else:
+                  slot = "malam"
+          print(f"Detected slot: {slot}")
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"slot={slot}\n")
+
+      # Cache musik agar tidak download ulang tiap run
+      - name: Restore music cache
+        uses: actions/cache@v4
+        with:
+          path: engine/assets/music
+          key: music-library-${{ hashFiles('engine/modules/music_downloader.py') }}
+          restore-keys: music-library-
+
+      # Cache CF SD generated backgrounds
+      - name: Restore backgrounds cache
+        uses: actions/cache@v4
+        with:
+          path: engine/assets/backgrounds/generated
+          key: cf-backgrounds-${{ hashFiles('engine/modules/cf_background_generator.py') }}
+          restore-keys: cf-backgrounds-
+
+      # Remove corrupt music files (images/HTML saved as .mp3/.ogg)
+      # AND remove old synth tracks to force API re-download
+      - name: Clean corrupt & synth music files
+        run: |
+          echo "=== Cleaning corrupt music files ==="
+          CORRUPT=0
+          for f in $(find engine/assets/music/ -name "*.mp3" -o -name "*.ogg" 2>/dev/null); do
+            HEADER=$(xxd -l 4 -p "$f" 2>/dev/null || echo "")
+            # Check for JPEG (ffd8ff), PNG (89504e47), GIF (47494638), HTML (3c21444f or 3c68746d)
+            if echo "$HEADER" | grep -qiE "^ffd8ff|^89504e47|^47494638|^3c21444f|^3c68746d"; then
+              echo "  [CORRUPT] $f (magic: $HEADER) → DELETED"
+              rm -f "$f"
+              CORRUPT=$((CORRUPT+1))
+            fi
+          done
+          echo "Deleted $CORRUPT corrupt files"
+          echo "Removing old procedural synth tracks..."
+          find engine/assets/music/ -name "*_synth_*" -delete 2>/dev/null || true
+          echo "Music cleanup done."
+
+      # Purge garbage bank data (Pexels/Pixabay images, Rp0 prices)
+      - name: Purge garbage bank data
+        run: |
+          echo "=== Purging garbage product bank entries ==="
+          PURGED=0
+          for pj in $(find engine/data/product_bank -name "product.json" 2>/dev/null); do
+            # Check if image_url contains Pexels/Pixabay/Unsplash
+            if grep -qiE "pexels\.com|pixabay\.com|unsplash\.com" "$pj" 2>/dev/null; then
+              DIR=$(dirname "$pj")
+              echo "  [PURGE] $DIR (non-Shopee image)"
+              rm -rf "$DIR"
+              PURGED=$((PURGED+1))
+            fi
+          done
+          echo "Purged $PURGED garbage entries"
+          # Show remaining bank stats
+          for cat in fashion gadget beauty home wellness; do
+            count=$(find "engine/data/product_bank/$cat" -name "image.jpg" 2>/dev/null | wc -l)
+            echo "  $cat: $count valid products"
+          done
+
+      - name: Run full pipeline
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_DB_YT_1: ${{ secrets.NOTION_DB_YT_1 }}
+          NOTION_DB_YT_2: ${{ secrets.NOTION_DB_YT_2 }}
+          NOTION_DB_YT_3: ${{ secrets.NOTION_DB_YT_3 }}
+          NOTION_DB_YT_4: ${{ secrets.NOTION_DB_YT_4 }}
+          NOTION_DB_YT_5: ${{ secrets.NOTION_DB_YT_5 }}
+          NOTION_DB_TT: ${{ secrets.NOTION_DB_TT }}
+          NOTION_DB_FB: ${{ secrets.NOTION_DB_FB }}
+          FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}  # For music only (not images)
+          # Gemini API keys (round-robin)
+          GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
+          GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
+          GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
+          GEMINI_API_KEY_4: ${{ secrets.GEMINI_API_KEY_4 }}
+          GEMINI_API_KEY_5: ${{ secrets.GEMINI_API_KEY_5 }}
+          # HuggingFace API keys (dedicated per account)
+          HF_API_KEY_1: ${{ secrets.HF_API_KEY_1 }}
+          HF_API_KEY_2: ${{ secrets.HF_API_KEY_2 }}
+          HF_API_KEY_3: ${{ secrets.HF_API_KEY_3 }}
+          HF_API_KEY_4: ${{ secrets.HF_API_KEY_4 }}
+          HF_API_KEY_5: ${{ secrets.HF_API_KEY_5 }}
+          HF_API_KEY_6: ${{ secrets.HF_API_KEY_6 }}
+          HF_API_KEY_7: ${{ secrets.HF_API_KEY_7 }}
+          # Shopee Cookies
+          SHOPEE_COOKIES: ${{ secrets.SHOPEE_COOKIES }}
+          # CF Workers Proxy (bypass Shopee IP block)
+          CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
+          CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
+          # Cloudflare Workers AI (Stable Diffusion backgrounds)
+          CF_ACCOUNT_ID_1: ${{ secrets.CF_ACCOUNT_ID_1 }}
+          CF_ACCOUNT_ID_2: ${{ secrets.CF_ACCOUNT_ID_2 }}
+          CF_ACCOUNT_ID_3: ${{ secrets.CF_ACCOUNT_ID_3 }}
+          CF_ACCOUNT_ID_4: ${{ secrets.CF_ACCOUNT_ID_4 }}
+          CF_ACCOUNT_ID_5: ${{ secrets.CF_ACCOUNT_ID_5 }}
+          CF_ACCOUNT_ID_6: ${{ secrets.CF_ACCOUNT_ID_6 }}
+          CF_ACCOUNT_ID_7: ${{ secrets.CF_ACCOUNT_ID_7 }}
+          CF_API_KEY_1: ${{ secrets.CF_API_KEY_1 }}
+          CF_API_KEY_2: ${{ secrets.CF_API_KEY_2 }}
+          CF_API_KEY_3: ${{ secrets.CF_API_KEY_3 }}
+          CF_API_KEY_4: ${{ secrets.CF_API_KEY_4 }}
+          CF_API_KEY_5: ${{ secrets.CF_API_KEY_5 }}
+          CF_API_KEY_6: ${{ secrets.CF_API_KEY_6 }}
+          CF_API_KEY_7: ${{ secrets.CF_API_KEY_7 }}
+          # Email (for Python report sender)
+          SMTP_USER: ${{ secrets.EMAIL_USERNAME }}
+          SMTP_PASS: ${{ secrets.EMAIL_PASSWORD }}
+          NOTIFY_EMAIL: ic31122025@gmail.com
+          # SEMENTARA: skip YT upload utk QC dulu
+          SKIP_YT_UPLOAD: 'true'
+        run: python run_pipeline.py full ${{ steps.slot.outputs.slot }}
+
+      # Diagnostic: list all generated output files
+      - name: List generated output files
+        if: always()
+        run: |
+          echo "=== DIAGNOSTIC: Output Files ==="
+          echo "--- engine/output/yt/ ---"
+          ls -la engine/output/yt/ 2>/dev/null || echo "(empty or not found)"
+          echo "--- engine/output/tt/ ---"
+          ls -la engine/output/tt/ 2>/dev/null || echo "(empty or not found)"
+          echo "--- engine/output/fb/ ---"
+          ls -la engine/output/fb/ 2>/dev/null || echo "(empty or not found)"
+          echo "--- engine/queue/ ---"
+          ls -la engine/queue/ 2>/dev/null || echo "(empty or not found)"
+          echo "--- Queue contents ---"
+          cat engine/queue/yt_queue.jsonl 2>/dev/null | head -5 || echo "(no yt_queue)"
+          cat engine/queue/tt_queue.jsonl 2>/dev/null | head -5 || echo "(no tt_queue)"
+          cat engine/queue/fb_queue.jsonl 2>/dev/null | head -5 || echo "(no fb_queue)"
+          echo "--- engine/data/composites/ ---"
+          ls engine/data/composites/ 2>/dev/null | head -10 || echo "(no composites)"
+          echo "--- engine/assets/music/ ---"
+          find engine/assets/music/ -type f 2>/dev/null | head -10 || echo "(no music files)"
+          echo "--- engine/assets/backgrounds/photo/ ---"
+          find engine/assets/backgrounds/photo/ -type f 2>/dev/null | head -10 || echo "(no bg photos)"
+          echo "--- engine/assets/backgrounds/generated/ (CF SD) ---"
+          find engine/assets/backgrounds/generated/ -type f 2>/dev/null | head -20 || echo "(no CF SD backgrounds)"
+          echo "=== END DIAGNOSTIC ==="
+
+      # Artifact uploads (fallback jika GCS belum disetup)
+      - name: Upload YouTube videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-videos-${{ steps.slot.outputs.slot }}-${{ github.run_number }}
+          path: engine/output/yt/*.mp4
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Upload TikTok videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tt-videos-${{ steps.slot.outputs.slot }}-${{ github.run_number }}
+          path: engine/output/tt/*.mp4
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Facebook videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fb-videos-${{ steps.slot.outputs.slot }}-${{ github.run_number }}
+          path: engine/output/fb/*.mp4
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload metadata & QC reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metadata-${{ steps.slot.outputs.slot }}-${{ github.run_number }}
+          path: |
+            engine/state/yt_metadata.json
+            engine/state/tt_metadata.json
+            engine/state/fb_metadata.json
+            engine/state/pipeline_report.html
+            engine/state/hook_metrics.csv
+            engine/state/cta_metrics.csv
+            engine/state/video_state.csv
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Send email report (metadata only, video di Artifacts)
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: '${{ job.status == ''success'' && ''✅'' || ''❌'' }} Pipeline ${{ steps.slot.outputs.slot }} — ${{ job.status }}'
+          to: ic31122025@gmail.com
+          from: Affiliate Engine <${{ secrets.EMAIL_USERNAME }}>
+          html_body: file://engine/state/pipeline_report.html
+          # HANYA metadata JSON. Video MP4 terlalu besar untuk Gmail (max 25MB)
+          # Video tersedia di GitHub Artifacts → Actions tab → Download
+          attachments: engine/state/tt_metadata.json,engine/state/fb_metadata.json
+          ignore_cert: true
+        continue-on-error: true
+
+      - name: Cleanup TT+FB after email
+        if: always()
+        run: |
+          echo "=== Cleaning TT+FB files after email ==="
+          rm -f engine/output/tt/*.mp4 engine/output/tt/MUSIC_*.mp3
+          rm -f engine/output/fb/*.mp4 engine/output/fb/MUSIC_*.mp3
+          rm -f engine/state/tt_metadata.json engine/state/fb_metadata.json
+          rm -f engine/state/pipeline_report.html
+          echo "All TT+FB files cleaned. GitHub stays clean."
+
+      - name: Save state to repo
+        if: success()
+        continue-on-error: true
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          # Add state files that exist (skip missing to avoid exit code 128)
+          for f in engine/state/video_state.csv engine/state/hook_metrics.csv engine/state/cta_metrics.csv engine/state/used_products.json; do
+            [ -f "$f" ] && git add -f "$f"
+          done
+          if git diff --staged --quiet; then
+            echo "No state changes to commit"
+          else
+            git commit -m "Update state after ${{ steps.slot.outputs.slot }} run [skip ci]"
+            # Retry up to 3 times to handle race conditions with overlapping runs
+            for i in 1 2 3; do
+              git fetch origin main
+              git rebase origin/main && git push && echo "Push OK on attempt $i" && break
+              echo "Push attempt $i failed, retrying..."
+              sleep 5
+            done
+          fi

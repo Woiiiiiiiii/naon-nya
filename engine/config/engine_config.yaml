@@ -1,0 +1,76 @@
+# engine_config.yaml
+pipeline:
+  version: "2.4.0"
+  log_level: "INFO"
+
+paths:
+  data_dir: "engine/data"
+  state_dir: "engine/state"
+  library_dir: "engine/library"
+  queue_dir: "engine/queue"
+  output_dir: "engine/output"
+  yt_output: "engine/output/yt"
+  tt_output: "engine/output/tt"
+  fb_output: "engine/output/fb"
+
+video:
+  aspect_ratio: "9:16"
+  fps: 24
+  resolution: [1080, 1920]
+  bitrate: "2000k"
+  duration: 15
+
+accounts:
+  youtube: 5       # 5 akun YT, masing-masing 1 video unik per produk
+  tiktok: 1        # 1 akun TT, 1 video per produk
+  facebook: 1      # 1 fanpage FB, 1 video Reels per produk
+
+products_per_day: 3  # 3 produk per hari, 1 per slot
+
+# Posting schedule - 4x per day
+# Long slots: render Long-form + auto-extract Shorts with scheduled upload
+# Short slots: only TT+FB (Shorts already scheduled by Long slot)
+schedule:
+  slots:
+    pagi:
+      range: ["06:00", "09:00"]
+      video_type: "long"
+      shorts_target: "siang"      # Extracted Shorts scheduled for siang
+    siang:
+      range: ["11:00", "14:00"]
+      video_type: "short"         # YT Shorts already uploaded by pagi slot
+      shorts_source: "pagi"       # Shorts came from pagi Long
+    sore:
+      range: ["14:00", "17:00"]
+      video_type: "long"
+      shorts_target: "malam"      # Extracted Shorts scheduled for malam
+    malam:
+      range: ["19:00", "22:00"]
+      video_type: "short"         # YT Shorts already uploaded by sore slot
+      shorts_source: "sore"       # Shorts came from sore Long
+
+upload:
+  youtube:
+    auto_upload: true    # Upload otomatis via API
+    auto_delete: true    # Hapus file setelah upload berhasil
+  tiktok:
+    manual_upload: true  # Posting manual oleh user
+    manual_delete: true  # User hapus sendiri setelah posting
+  facebook:
+    manual_upload: true  # Posting manual oleh user
+    manual_delete: true  # User hapus sendiri setelah posting
+
+# Shopee Affiliate
+shopee:
+  affiliate_id: "11344941723"
+
+# Scraping config
+scrape:
+  products_per_scrape: 15  # Target jumlah produk per scrape
+  min_sold: 10             # Minimum terjual untuk lolos filter
+
+# Google Cloud Storage (untuk simpan video TT + FB supaya bisa didownload)
+gcs:
+  bucket: ""             # Isi nama bucket GCS
+  upload_tt: true
+  upload_fb: true

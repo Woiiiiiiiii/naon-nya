@@ -1,0 +1,92 @@
+name: Cookie Reminder
+
+on:
+  # Every 2 weeks on Monday at 8 AM UTC = 3 PM WIB
+  schedule:
+    - cron: '0 8 1,15 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Send Cookie Reminder Email
+        env:
+          SMTP_USER: ${{ secrets.EMAIL_USERNAME }}
+          SMTP_PASS: ${{ secrets.EMAIL_PASSWORD }}
+          NOTIFY_EMAIL: ic31122025@gmail.com
+        run: |
+          python -c "
+          import smtplib, os
+          from email.mime.text import MIMEText
+          from email.mime.multipart import MIMEMultipart
+
+          smtp_user = os.environ.get('SMTP_USER', '')
+          smtp_pass = os.environ.get('SMTP_PASS', '')
+          notify_email = os.environ.get('NOTIFY_EMAIL', '')
+
+          if not all([smtp_user, smtp_pass, notify_email]):
+              print('Missing email credentials, skipping reminder')
+              exit(0)
+
+          msg = MIMEMultipart('alternative')
+          msg['Subject'] = '🍪 Reminder: Update Shopee Cookies (2 Minggu Sekali)'
+          msg['From'] = smtp_user
+          msg['To'] = notify_email
+
+          html = '''
+          <html>
+          <body style=\"font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;\">
+          <div style=\"max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);\">
+            <h2 style=\"color: #ee4d2d;\">🍪 Waktunya Update Shopee Cookies!</h2>
+            <p>Halo Bro! Ini reminder otomatis dari Affiliate Engine.</p>
+            <p>Shopee cookies biasanya expire dalam <strong>2-4 minggu</strong>. Untuk memastikan Product Collector tetap bisa scrape produk dari Shopee, silakan update cookies:</p>
+
+            <div style=\"background: #fff3e0; border-left: 4px solid #ff9800; padding: 15px; margin: 20px 0; border-radius: 4px;\">
+              <h3 style=\"margin-top: 0;\">📋 Cara Update (2 menit):</h3>
+              <ol>
+                <li>Buka Chrome → login <a href=\"https://shopee.co.id\">shopee.co.id</a></li>
+                <li>Klik extension Cookie-Editor → Export All</li>
+                <li>Buka <a href=\"https://github.com/Woiiiiiiiii/naon-nya/settings/secrets/actions\">GitHub Secrets</a></li>
+                <li>Update secret <code>SHOPEE_COOKIES</code> dengan cookies baru</li>
+                <li>Selesai! ✅</li>
+              </ol>
+            </div>
+
+            <p style=\"color: #666; font-size: 12px;\">
+              ⚠️ Kalau lupa update, Product Collector akan fallback ke Layer 2 (Shopee Public) dan Layer 3 (Pexels).
+              Video tetap dibuat, tapi kualitas gambar mungkin tidak optimal.
+            </p>
+
+            <hr style=\"border: none; border-top: 1px solid #eee; margin: 20px 0;\">
+            <p style=\"color: #999; font-size: 11px;\">Affiliate Engine — Auto Reminder setiap 2 minggu</p>
+          </div>
+          </body>
+          </html>
+          '''
+
+          msg.attach(MIMEText(html, 'html'))
+
+          try:
+              server = smtplib.SMTP('smtp.gmail.com', 587)
+              server.starttls()
+              server.login(smtp_user, smtp_pass)
+              server.sendmail(smtp_user, notify_email, msg.as_string())
+              server.quit()
+              print(f'Cookie reminder sent to {notify_email}')
+          except Exception as e:
+              print(f'Failed to send reminder: {e}')
+          "

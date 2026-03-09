@@ -1,0 +1,92 @@
+[
+  {
+    "id": "c001",
+    "template": "Klik link di bio sekarang!",
+    "platform": "tiktok",
+    "click_score": 0.50
+  },
+  {
+    "id": "c002",
+    "template": "Dapatkan diskon, cek link di bawah!",
+    "platform": "tiktok",
+    "click_score": 0.60
+  },
+  {
+    "id": "c003",
+    "template": "Klik link di deskripsi!",
+    "platform": "youtube",
+    "click_score": 0.70
+  },
+  {
+    "id": "c004",
+    "template": "Cek harga promo di deskripsi!",
+    "platform": "youtube",
+    "click_score": 0.55
+  },
+  {
+    "id": "c005",
+    "template": "Stok terbatas, cek link di bio!",
+    "platform": "tiktok",
+    "click_score": 0.65
+  },
+  {
+    "id": "c006",
+    "template": "Info lengkap klik link di deskripsi!",
+    "platform": "youtube",
+    "click_score": 0.80
+  },
+  {
+    "id": "c007",
+    "template": "Langsung cek link di bio, jangan sampai kehabisan!",
+    "platform": "tiktok",
+    "click_score": 0.72
+  },
+  {
+    "id": "c008",
+    "template": "Harga spesial hari ini! Cek deskripsi!",
+    "platform": "youtube",
+    "click_score": 0.68
+  },
+  {
+    "id": "c009",
+    "template": "Mau? Klik link di bio aja!",
+    "platform": "tiktok",
+    "click_score": 0.58
+  },
+  {
+    "id": "c010",
+    "template": "Link pembelian ada di deskripsi ya!",
+    "platform": "youtube",
+    "click_score": 0.62
+  },
+  {
+    "id": "c011",
+    "template": "Buruan cek bio sebelum harga naik!",
+    "platform": "tiktok",
+    "click_score": 0.74
+  },
+  {
+    "id": "c012",
+    "template": "Penasaran? Semua info ada di deskripsi!",
+    "platform": "youtube",
+    "click_score": 0.66
+  },
+  {
+    "id": "c013",
+    "template": "Klik link di bio, gratis ongkir loh!",
+    "platform": "tiktok",
+    "click_score": 0.76
+  },
+  {
+    "id": "c014",
+    "template": "Subscribe & cek link di deskripsi!",
+    "platform": "youtube",
+    "click_score": 0.71
+  },
+  {
+    "id": "c015",
+    "template": "Jangan lupa follow & cek link di bio!",
+    "platform": "tiktok",
+    "click_score": 0.69
+  }
+]

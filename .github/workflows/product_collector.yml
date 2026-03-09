@@ -1,0 +1,78 @@
+name: Product Collector
+
+on:
+  # Run daily at 5 AM UTC = 12:00 WIB (before video pipeline at 1 PM WIB)
+  schedule:
+    - cron: '0 5 * * *'
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      category:
+        description: 'Category to collect (leave empty for all)'
+        required: false
+        default: ''
+      target:
+        description: 'Target products per category'
+        required: false
+        default: '20'
+
+# IMPORTANT: workflow-level permissions for git push
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install requests Pillow
+
+      - name: Collect Products
+        env:
+          SHOPEE_COOKIES: ${{ secrets.SHOPEE_COOKIES }}
+          CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
+          CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
+        run: |
+          cd engine/modules
+          if [ -n "${{ github.event.inputs.category }}" ]; then
+            python product_collector.py --category "${{ github.event.inputs.category }}" --target ${{ github.event.inputs.target || '20' }}
+          else
+            python product_collector.py --target ${{ github.event.inputs.target || '20' }}
+          fi
+
+      - name: Show Bank Status
+        if: always()
+        run: |
+          echo "=== Product Bank Status ==="
+          find engine/data/product_bank -name 'image.jpg' 2>/dev/null | wc -l
+          echo "products with images"
+          for cat in fashion gadget beauty home wellness; do
+            count=$(find "engine/data/product_bank/$cat" -name 'image.jpg' 2>/dev/null | wc -l)
+            echo "  $cat: $count products"
+          done
+
+      - name: Commit Product Bank
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add engine/data/product_bank/ engine/data/produk.csv engine/data/images/ 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "No new products collected"
+          else
+            git commit -m "🛍️ Product bank update: $(date +%Y-%m-%d)"
+            git push origin main
+            echo "Product bank updated and pushed!"
+          fi

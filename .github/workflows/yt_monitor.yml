@@ -1,0 +1,80 @@
+name: YT Performance Monitor
+
+on:
+  schedule:
+    # Bi-weekly Monday 06:00 WIB = 23:00 UTC (Sunday)
+    - cron: '0 23 * * 0'
+  workflow_dispatch:
+
+env:
+  PYTHONIOENCODING: utf-8
+
+permissions:
+  contents: write
+
+jobs:
+  monitor-optimize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create directories
+        run: python setup_dirs.py
+
+      - name: Check if monitoring week
+        id: check
+        shell: python
+        run: |
+          import os, datetime
+          week_num = datetime.datetime.now().isocalendar()[1]
+          is_monitor_week = (week_num % 2 == 0)
+          print(f"Week {week_num}: monitor={'yes' if is_monitor_week else 'skip'}")
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"run={'true' if is_monitor_week else 'false'}\n")
+
+      - name: Collect performance data
+        if: steps.check.outputs.run == 'true'
+        run: python engine/modules/yt_performance_monitor.py
+
+      - name: Analyze performance
+        if: steps.check.outputs.run == 'true'
+        run: python engine/modules/yt_performance_analyzer.py
+
+      - name: Execute optimizations
+        if: steps.check.outputs.run == 'true'
+        env:
+          GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
+          GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
+          GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
+          GEMINI_API_KEY_4: ${{ secrets.GEMINI_API_KEY_4 }}
+          GEMINI_API_KEY_5: ${{ secrets.GEMINI_API_KEY_5 }}
+        run: python engine/modules/yt_content_optimizer.py
+
+      - name: Send report
+        if: steps.check.outputs.run == 'true'
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        run: python engine/modules/yt_optimization_reporter.py
+
+      - name: Save state to repo
+        if: steps.check.outputs.run == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add engine/state/ -A
+          git diff --staged --quiet || git commit -m "Monitor: update performance data & optimization state"
+          git push || true
