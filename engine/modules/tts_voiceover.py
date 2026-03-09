@@ -1,15 +1,19 @@
 """
 tts_voiceover.py
-Generate natural Indonesian female voiceover using Edge TTS.
+Generate natural Indonesian female voiceover using Edge TTS + SSML.
 
-Voice: id-ID-GadisNeural (Microsoft Neural TTS)
-Design:
-  - Voiceover covers EVERY scene of the video (professional ads style)
-  - NEVER says product name or price (both already shown as text)
-  - Uses simple Indonesian that TTS pronounces clearly
-  - Rate -8% for relaxed, natural speaking pace
+Voice: id-ID-GadisNeural (Microsoft Neural TTS - Indonesian female)
 
-Used by: all video generators (YT Short, YT Long, TT, FB)
+SSML-powered natural speech:
+  - <break> tags for natural pauses between phrases
+  - <prosody> for varied pace (slower on key points, normal elsewhere)
+  - Conversational Indonesian with natural sentence flow
+  - Each scene gets voiceover for full coverage
+
+Audio pipeline:
+  TTS generates MP3 → video generator loads per scene →
+  audio_normalizer normalizes RMS → set VOICEOVER_VOLUME=1.0 →
+  CompositeAudioClip mixes with music (0.55) and SFX (0.45)
 """
 
 import os
@@ -22,77 +26,113 @@ import random
 #  CONFIG
 # ═══════════════════════════════════════════════════════════════════
 VOICE_ID = "id-ID-GadisNeural"
-DEFAULT_RATE = "-8%"
-DEFAULT_PITCH = "+0Hz"
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers')
 
-SCENE_STYLES = {
-    'hook':    {'rate': '-3%',  'pitch': '+0Hz'},
-    'hero':    {'rate': '-8%',  'pitch': '+0Hz'},
-    'feature': {'rate': '-8%',  'pitch': '+0Hz'},
-    'proof':   {'rate': '-10%', 'pitch': '+0Hz'},
-    'cta':     {'rate': '-5%',  'pitch': '+0Hz'},
-    'detail1': {'rate': '-8%',  'pitch': '+0Hz'},
-    'detail2': {'rate': '-8%',  'pitch': '+0Hz'},
-    'detail3': {'rate': '-8%',  'pitch': '+0Hz'},
-    'product': {'rate': '-8%',  'pitch': '+0Hz'},
+
+# ═══════════════════════════════════════════════════════════════════
+#  SSML BUILDER
+#  Wraps text in SSML tags for natural prosody and pauses
+# ═══════════════════════════════════════════════════════════════════
+
+def _build_ssml(text, rate="-10%", pitch="+0Hz"):
+    """Wrap text in SSML with prosody settings.
+    
+    Automatically adds <break> tags at commas and periods for
+    natural pauses. Wraps everything in <speak> and <voice>.
+    """
+    # Add natural pauses: replace punctuation with breaks
+    ssml_text = text
+    ssml_text = ssml_text.replace('. ', '. <break time="400ms"/> ')
+    ssml_text = ssml_text.replace(', ', ', <break time="200ms"/> ')
+    ssml_text = ssml_text.replace('! ', '! <break time="350ms"/> ')
+    ssml_text = ssml_text.replace('? ', '? <break time="350ms"/> ')
+    
+    ssml = (
+        f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
+        f'xml:lang="id-ID">'
+        f'<voice name="{VOICE_ID}">'
+        f'<prosody rate="{rate}" pitch="{pitch}">'
+        f'{ssml_text}'
+        f'</prosody>'
+        f'</voice>'
+        f'</speak>'
+    )
+    return ssml
+
+
+# Per-scene SSML settings (rate + pitch)
+SCENE_SSML = {
+    'hook':    {'rate': '-5%',  'pitch': '+2Hz'},    # Slightly upbeat, attention-grab
+    'hero':    {'rate': '-12%', 'pitch': '+0Hz'},    # Slow, warm, inviting
+    'feature': {'rate': '-10%', 'pitch': '+0Hz'},    # Steady, informative
+    'proof':   {'rate': '-15%', 'pitch': '-1Hz'},    # Slower, deeper = trustworthy
+    'cta':     {'rate': '-8%',  'pitch': '+1Hz'},    # Slightly upbeat, encouraging
+    'product': {'rate': '-12%', 'pitch': '+0Hz'},    # Warm
+    'detail1': {'rate': '-10%', 'pitch': '+0Hz'},
+    'detail2': {'rate': '-12%', 'pitch': '+0Hz'},
+    'detail3': {'rate': '-10%', 'pitch': '+0Hz'},
 }
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  SCRIPT POOLS (pre-written for clear TTS pronunciation)
-#  Rule: NEVER mention product name or price
+#  VOICEOVER SCRIPT POOLS
+#  Written for natural Indonesian spoken flow.
+#  Rules:
+#    - NEVER mention product name or price (shown on screen)
+#    - Use conversational, everyday Indonesian
+#    - Sentences end naturally (tidak dipotong)
+#    - Avoid foreign/English words TTS might mispronounce
+#    - Short phrases with natural pauses
 # ═══════════════════════════════════════════════════════════════════
 
 POOL_HOOK = [
-    "Kamu harus lihat ini.",
-    "Jangan lewatkan yang satu ini ya.",
-    "Ini lagi banyak dicari orang.",
-    "Simak sampai akhir ya.",
-    "Mau tau produk yang lagi viral?",
+    "Hai, kamu harus lihat yang satu ini.",
+    "Eh, jangan di lewatkan ya.",
+    "Ini dia, yang lagi banyak dicari orang.",
+    "Hai, simak sampai selesai ya.",
+    "Kamu pasti suka yang ini, coba deh lihat.",
 ]
 
 POOL_HERO = [
-    "Produk ini sudah banyak yang cari.",
-    "Kualitas terjamin dan harga masih terjangkau.",
-    "Liat sendiri ya betapa kerennya.",
-    "Yang satu ini memang layak untuk dimiliki.",
-    "Ini dia yang sedang jadi favorit banyak orang.",
+    "Produk yang satu ini, memang lagi jadi favorit banyak orang.",
+    "Yang lagi viral, dan memang bagus kualitasnya.",
+    "Ini yang banyak orang cari, dan ternyata memang oke.",
+    "Satu produk yang patut kamu pertimbangkan.",
+    "Kualitas dan harganya, pas di kantong.",
 ]
 
 POOL_FEATURE = [
-    "Kualitasnya memang oke. Banyak yang sudah buktikan sendiri.",
-    "Bahan premium dan tahan lama.",
-    "Cocok untuk pemakaian sehari hari.",
-    "Desainnya simpel tapi tetap terlihat berkelas.",
-    "Fiturnya lengkap dan mudah digunakan.",
+    "Kualitasnya sudah terjamin ya, banyak yang sudah membuktikan.",
+    "Bahannya premium, tapi harganya masih terjangkau.",
+    "Cocok untuk dipakai setiap hari, dan tahan lama juga.",
+    "Desainnya simpel, tapi tetap terlihat berkelas.",
+    "Fiturnya lengkap, dan mudah digunakan siapa saja.",
 ]
 
 POOL_PROOF = [
-    "Ratingnya tinggi dan sudah banyak yang beli.",
-    "Banyak pembeli yang kasih ulasan positif.",
-    "Sudah terbukti memuaskan.",
-    "Ulasan dari pembeli selalu bagus.",
-    "Banyak yang sudah order ulang.",
+    "Ratingnya tinggi, dan sudah banyak sekali yang membeli.",
+    "Banyak pembeli yang memberikan ulasan positif.",
+    "Sudah terbukti ya, bukan sekedar klaim saja.",
+    "Ulasan dari para pembeli, memang sangat memuaskan.",
+    "Banyak yang membeli lagi, karena memang puas.",
 ]
 
 POOL_CTA = [
-    "Tertarik? Cek linknya ya.",
-    "Langsung saja cek di link di bawah.",
-    "Sebelum kehabisan, cek dulu ya.",
-    "Link pembelian ada di deskripsi.",
-    "Jangan sampai menyesal, langsung cek.",
+    "Tertarik? langsung saja cek di link ya.",
+    "Ayo, langsung cek di link yang ada di bawah.",
+    "Sebelum kehabisan, langsung saja cek ya.",
+    "Link pembelian sudah tersedia di bawah.",
+    "Jangan sampai kelewatan, langsung cek sekarang.",
 ]
 
 
 def generate_voiceover_script(product_info, platform='yt_short'):
-    """Generate voiceover script for EVERY scene.
+    """Generate voiceover scripts for every scene of the video.
     
-    Each scene gets a voiceover line so the narration
-    covers the entire video duration (professional style).
+    Each script is a natural conversational sentence that
+    COMPLEMENTS on-screen text (never duplicates it).
     """
     if platform == 'yt_short':
-        # 5 scenes: hook(0-3), hero(3-12), feature(12-30), proof(30-40), cta(40-45)
         return {
             'hook': random.choice(POOL_HOOK),
             'hero': random.choice(POOL_HERO),
@@ -105,12 +145,11 @@ def generate_voiceover_script(product_info, platform='yt_short'):
             'hook': random.choice(POOL_HOOK),
             'hero': random.choice(POOL_HERO),
             'detail1': random.choice(POOL_FEATURE),
-            'detail2': "Yang bikin spesial, kualitasnya memang beda dari yang lain.",
+            'detail2': "Yang membuat produk ini spesial, adalah kualitasnya yang memang beda.",
             'detail3': random.choice(POOL_PROOF),
             'cta': random.choice(POOL_CTA),
         }
     elif platform == 'tt':
-        # TikTok shorter: 4 scenes
         return {
             'hook': random.choice(POOL_HOOK),
             'product': random.choice(POOL_HERO),
@@ -128,32 +167,52 @@ def generate_voiceover_script(product_info, platform='yt_short'):
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  TTS ENGINE
+#  TTS ENGINE (SSML-powered)
 # ═══════════════════════════════════════════════════════════════════
 
-async def _generate_tts_async(text, output_path, rate=None, pitch=None):
-    """Generate TTS audio file using edge-tts."""
+async def _generate_tts_async(ssml_text, output_path):
+    """Generate TTS audio from SSML string using edge-tts."""
     import edge_tts
-    rate = rate or DEFAULT_RATE
-    pitch = pitch or DEFAULT_PITCH
-    communicate = edge_tts.Communicate(text, VOICE_ID, rate=rate, pitch=pitch)
+    communicate = edge_tts.Communicate(ssml_text, VOICE_ID)
     await communicate.save(output_path)
 
 
 def generate_tts(text, output_path, scene_id='feature'):
-    """Generate TTS audio file (sync wrapper)."""
+    """Generate one TTS MP3 file with SSML prosody.
+    
+    Args:
+        text: plain text to speak
+        output_path: where to save MP3
+        scene_id: scene type for prosody settings
+    
+    Returns:
+        True if generated, False if failed
+    """
     try:
-        style = SCENE_STYLES.get(scene_id, {})
-        rate = style.get('rate', DEFAULT_RATE)
-        pitch = style.get('pitch', DEFAULT_PITCH)
+        style = SCENE_SSML.get(scene_id, {'rate': '-10%', 'pitch': '+0Hz'})
+        ssml = _build_ssml(text, rate=style['rate'], pitch=style['pitch'])
+        
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        asyncio.run(_generate_tts_async(text, output_path, rate, pitch))
+        asyncio.run(_generate_tts_async(ssml, output_path))
+        
         if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
             print(f"    [TTS] OK: {os.path.basename(output_path)} ({scene_id})")
             return True
         return False
     except Exception as e:
-        print(f"    [TTS] Failed: {e}")
+        print(f"    [TTS] SSML failed ({scene_id}): {e}")
+        # Fallback: try plain text without SSML
+        try:
+            import edge_tts
+            communicate = edge_tts.Communicate(text, VOICE_ID, 
+                                                rate=style['rate'], 
+                                                pitch=style['pitch'])
+            asyncio.run(communicate.save(output_path))
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+                print(f"    [TTS] OK (fallback): {os.path.basename(output_path)}")
+                return True
+        except Exception as e2:
+            print(f"    [TTS] Fallback also failed: {e2}")
         return False
 
 
@@ -201,12 +260,12 @@ def generate_all_voiceovers(queue_file, platforms=None):
             if line.strip():
                 jobs.append(json.loads(line.strip()))
 
-    print(f"[TTS] {len(jobs)} products x {len(platforms)} platforms...")
+    print(f"[TTS SSML] {len(jobs)} products x {len(platforms)} platforms...")
     for job in jobs:
         produk_id = job.get('produk_id', '')
         for platform in platforms:
             generate_voiceover_for_product(job, produk_id, platform)
-    print(f"[TTS] All done")
+    print(f"[TTS SSML] All done")
 
 
 if __name__ == "__main__":
