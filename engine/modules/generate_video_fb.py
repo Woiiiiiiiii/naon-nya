@@ -77,8 +77,8 @@ def _generate_fallback(produk_id, category, count=5):
     """Generate composites: full-frame transparent product over background photo."""
     accent = get_accent_color(category)
     composites = []
-
-    from engine.modules.image_compositor import get_random_background
+    from engine.modules.category_router import get_accent_color
+    accent = get_accent_color(category)
 
     img_path = None
     for ext in ['jpg', 'png', 'webp']:
@@ -87,64 +87,37 @@ def _generate_fallback(produk_id, category, count=5):
             img_path = p
             break
 
-    product_rgba = None
-    is_placeholder = False
+    # Load raw product image — NO background removal
+    product_img = None
     if img_path:
-        # Check if this is a placeholder image (skip rembg — it would make it transparent)
-        marker = img_path + '.placeholder'
-        import os as _os
-        is_placeholder = _os.path.exists(marker)
-        
-        if is_placeholder:
-            # Placeholder: use as-is, no background removal
-            try:
-                product_rgba = Image.open(img_path).convert('RGBA')
-            except Exception:
-                pass
-        else:
-            # Real product image: remove background
-            try:
-                from engine.modules.image_compositor import remove_background
-                product_rgba = remove_background(img_path)
-            except Exception:
-                try:
-                    product_rgba = Image.open(img_path).convert('RGBA')
-                except Exception:
-                    pass
-    if product_rgba is None:
-        product_rgba = Image.new('RGBA', (400, 400), (*accent, 255))
+        try:
+            product_img = Image.open(img_path).convert('RGB')
+            pw, ph = product_img.size
+            if pw < 50 or ph < 50:
+                product_img = None
+        except Exception:
+            product_img = None
 
-    # Different positions per variation so product MOVES
-    positions = [(0.50, 0.50), (0.42, 0.45), (0.58, 0.45), (0.50, 0.55), (0.46, 0.48)]
+    if product_img is None:
+        print(f"    [WARN] No valid image for {produk_id}")
+        for i in range(count):
+            composites.append(np.array(_make_gradient_fb(accent, i).convert('RGB')))
+        return composites
 
-    pw, ph = product_rgba.size
-    # Scale product to fill entire frame
-    scale = max(W / pw, H / ph)
-    new_w = int(pw * scale)
-    new_h = int(ph * scale)
-    product_big = product_rgba.resize((new_w, new_h), Image.LANCZOS)
+    # COVER mode: scale to fill BOTH width AND height
+    pw, ph = product_img.size
+    cover_scale = max(W / pw, H / ph) * 1.15
+    new_w = int(pw * cover_scale)
+    new_h = int(ph * cover_scale)
+    product_big = product_img.resize((new_w, new_h), Image.LANCZOS)
+
+    positions = [(0.50, 0.50), (0.40, 0.45), (0.60, 0.45), (0.50, 0.55), (0.45, 0.40)]
 
     for i in range(count):
-        bg_path = get_random_background(category)
-        if bg_path and os.path.exists(bg_path):
-            try:
-                canvas = Image.open(bg_path).convert('RGBA').resize((W, H), Image.LANCZOS)
-            except Exception:
-                canvas = _make_gradient_fb(accent, i).convert('RGBA')
-        else:
-            canvas = _make_gradient_fb(accent, i).convert('RGBA')
-
-        # Shift product position per variation
         px, py = positions[i % len(positions)]
-        max_shift_x = max(0, new_w - W)
-        max_shift_y = max(0, new_h - H)
-        offset_x = int(max_shift_x * (1.0 - px))
-        offset_y = int(max_shift_y * (1.0 - py))
-        offset_x = max(0, min(offset_x, max_shift_x))
-        offset_y = max(0, min(offset_y, max_shift_y))
-
-        product_cropped = product_big.crop((offset_x, offset_y, offset_x + W, offset_y + H))
-        canvas.paste(product_cropped, (0, 0), product_cropped)
+        crop_x = max(0, min(int((new_w - W) * px), new_w - W))
+        crop_y = max(0, min(int((new_h - H) * py), new_h - H))
+        canvas = product_big.crop((crop_x, crop_y, crop_x + W, crop_y + H))
         composites.append(np.array(canvas.convert('RGB')))
 
     return composites
@@ -411,9 +384,9 @@ def generate_video_fb(queue_file, output_dir):
                     except Exception:
                         pass
 
-            # === VOICEOVER: complements text (never repeats product name or price) ===
+            # === VOICEOVER: covers every scene (professional narration) ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'fb')
-            scene_starts = {'hook': 1.5, 'feature': 16.0, 'cta': 46.0}
+            scene_starts = {'hook': 1.0, 'product': 6.0, 'feature': 16.0, 'proof': 31.0, 'cta': 46.0}
             for scene_id, start_time in scene_starts.items():
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:

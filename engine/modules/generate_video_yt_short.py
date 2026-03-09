@@ -83,9 +83,10 @@ def _load_composites(produk_id, category='home', count=5):
 
 
 def _generate_fallback_composites(produk_id, category, count=5):
-    """Generate composites: full-frame transparent product over background photo."""
+    """Generate composites from raw product image (no background removal).
+    Uses COVER mode: scale to fill entire 1080x1920 frame, crop excess.
+    Same approach as image_compositor.composite_product_fullframe."""
     from engine.modules.category_router import get_accent_color
-    from engine.modules.image_compositor import get_random_background
 
     accent = get_accent_color(category)
     composites = []
@@ -98,69 +99,51 @@ def _generate_fallback_composites(produk_id, category, count=5):
             img_path = p
             break
 
-    # Load and isolate product
-    product_rgba = None
-    is_placeholder = False
+    # Load raw product image — NO background removal
+    product_img = None
     if img_path:
-        # Check if this is a placeholder image (skip rembg — it would make it transparent)
-        marker = img_path + '.placeholder'
-        import os as _os
-        is_placeholder = _os.path.exists(marker)
-        
-        if is_placeholder:
-            # Placeholder: use as-is, no background removal
-            try:
-                product_rgba = Image.open(img_path).convert('RGBA')
-            except Exception:
-                pass
-        else:
-            # Real product image: remove background
-            try:
-                from engine.modules.image_compositor import remove_background
-                product_rgba = remove_background(img_path)
-            except Exception:
-                try:
-                    product_rgba = Image.open(img_path).convert('RGBA')
-                except Exception:
-                    pass
+        try:
+            product_img = Image.open(img_path).convert('RGB')
+            pw, ph = product_img.size
+            if pw < 50 or ph < 50:
+                product_img = None
+        except Exception:
+            product_img = None
 
-    if product_rgba is None:
-        product_rgba = Image.new('RGBA', (400, 400), (*accent, 255))
+    if product_img is None:
+        # Last resort: gradient with text hint
+        print(f"    [WARN] No valid image for {produk_id}, using gradient fallback")
+        for i in range(count):
+            canvas = _make_gradient_short(accent, i)
+            composites.append(np.array(canvas.convert('RGB')))
+        return composites
 
-    # Different positions per variation so product MOVES
+    # COVER mode: scale to fill BOTH width AND height, crop excess
+    pw, ph = product_img.size
+    scale_w = W / pw
+    scale_h = H / ph
+    base_scale = max(scale_w, scale_h)
+
+    # Ken Burns needs extra pixels for zoom/pan, scale 15% larger
+    cover_scale = base_scale * 1.15
+    new_w = int(pw * cover_scale)
+    new_h = int(ph * cover_scale)
+    product_big = product_img.resize((new_w, new_h), Image.LANCZOS)
+
+    # Different crop positions per variation
     positions = [
-        (0.50, 0.50), (0.42, 0.45), (0.58, 0.45),
-        (0.50, 0.55), (0.46, 0.48),
+        (0.50, 0.50), (0.40, 0.45), (0.60, 0.45),
+        (0.50, 0.55), (0.45, 0.40),
     ]
 
-    pw, ph = product_rgba.size
-    # Scale product to fill entire frame
-    scale = max(W / pw, H / ph)
-    new_w = int(pw * scale)
-    new_h = int(ph * scale)
-    product_big = product_rgba.resize((new_w, new_h), Image.LANCZOS)
-
     for i in range(count):
-        bg_path = get_random_background(category)
-        if bg_path and os.path.exists(bg_path):
-            try:
-                canvas = Image.open(bg_path).convert('RGBA').resize((W, H), Image.LANCZOS)
-            except Exception:
-                canvas = _make_gradient_short(accent, i).convert('RGBA')
-        else:
-            canvas = _make_gradient_short(accent, i).convert('RGBA')
-
-        # Shift product position per variation
         px, py = positions[i % len(positions)]
-        max_shift_x = max(0, new_w - W)
-        max_shift_y = max(0, new_h - H)
-        offset_x = int(max_shift_x * (1.0 - px))
-        offset_y = int(max_shift_y * (1.0 - py))
-        offset_x = max(0, min(offset_x, max_shift_x))
-        offset_y = max(0, min(offset_y, max_shift_y))
+        crop_x = int((new_w - W) * px)
+        crop_y = int((new_h - H) * py)
+        crop_x = max(0, min(crop_x, new_w - W))
+        crop_y = max(0, min(crop_y, new_h - H))
 
-        product_cropped = product_big.crop((offset_x, offset_y, offset_x + W, offset_y + H))
-        canvas.paste(product_cropped, (0, 0), product_cropped)
+        canvas = product_big.crop((crop_x, crop_y, crop_x + W, crop_y + H))
         composites.append(np.array(canvas.convert('RGB')))
 
     return composites
@@ -523,9 +506,9 @@ def generate_shorts(queue_file, output_dir):
                     except Exception:
                         pass
 
-            # === VOICEOVER: complements text (never repeats product name or price) ===
+            # === VOICEOVER: covers every scene (professional narration) ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'yt_short')
-            scene_starts = {'hook': 1.0, 'feature': 14.0, 'cta': 41.0}
+            scene_starts = {'hook': 0.5, 'hero': 4.0, 'feature': 13.0, 'proof': 31.0, 'cta': 41.0}
             for scene_id, start_time in scene_starts.items():
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:
