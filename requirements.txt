@@ -13,3 +13,4 @@ rembg>=2.0.50
 onnxruntime>=1.16.0
 scipy>=1.10.0
 notion-client>=2.2.0
+edge-tts>=6.1.0

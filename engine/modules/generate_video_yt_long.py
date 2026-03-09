@@ -521,6 +521,30 @@ def generate_long(queue_file, output_dir):
                 except Exception as e:
                     print(f"  [WARN] Audio failed: {e}")
 
+            # === VOICEOVER: per-scene TTS ===
+            # Re-build audio with voiceover if available
+            vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'yt_long')
+            vo_scenes = {s['id']: s['s'] + 0.5 for s in scenes}
+            vo_found = False
+            for scene_id, start_time in vo_scenes.items():
+                vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
+                if os.path.exists(vo_path) and start_time < total_dur:
+                    try:
+                        vo = AudioFileClip(vo_path)
+                        from engine.modules.audio_normalizer import normalize_audio_clip, VOICEOVER_VOLUME
+                        vo = normalize_audio_clip(vo)
+                        vo = vo.with_effects([afx.MultiplyVolume(VOICEOVER_VOLUME)])
+                        vo = vo.with_start(start_time)
+                        audio_clips.append(vo)
+                        vo_found = True
+                    except Exception:
+                        pass
+            if vo_found:
+                try:
+                    video = video.with_audio(CompositeAudioClip(audio_clips))
+                except Exception:
+                    pass
+
             # === EXPORT LONG ===
             out_file = f"{today}_{produk_id}_v{acct_num}_yt_long.mp4"
             out_path = os.path.join(output_dir, "yt", out_file)

@@ -42,6 +42,8 @@ def main():
         "python engine/modules/scrape_produk.py",                # Scrape to fill gaps
         "python engine/modules/product_validator.py",
         "python engine/modules/download_images.py",
+        # AI Vision: inspect + score downloaded images
+        "python engine/modules/cf_vision_inspector.py --image engine/data/images --category home",
         "python engine/modules/extract_masalah.py",
         "python engine/modules/generate_storyboard.py"
     ]
@@ -65,7 +67,9 @@ def main():
     # V4: CTA Selection & Variation (per YT and TT queue)
     v4_steps = [
         "python engine/modules/cta_selector.py",
-        "python engine/modules/cta_variant_generator.py"
+        "python engine/modules/cta_variant_generator.py",
+        # AI Copywriter: generate unique hooks, CTAs, descriptions
+        "python engine/modules/cf_copywriter.py --queue engine/queue/storyboard_queue.jsonl",
     ]
     
     # V5: Video Production Pipeline
@@ -94,6 +98,8 @@ def main():
         "python engine/modules/body_retention_evaluator.py",
         # Generate per-video music (unique track per video)
         "python engine/modules/generate_music.py",
+        # AI TTS: generate voiceover for all products (per platform)
+        "python engine/modules/tts_voiceover.py --queue engine/queue/storyboard_queue.jsonl --platform yt_short",
     ]
     
     if is_long_slot or force_render:

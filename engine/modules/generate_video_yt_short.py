@@ -497,7 +497,7 @@ def generate_shorts(queue_file, output_dir):
             # === ASSEMBLE VIDEO ===
             video = VideoClip(make_frame, duration=total_dur).with_fps(24)
 
-            # === AUDIO: Music + SFX (normalized) ===
+            # === AUDIO: Music + SFX + Voiceover (normalized) ===
             audio_clips = []
 
             music_dir = os.path.join(output_dir, "yt")
@@ -520,6 +520,23 @@ def generate_shorts(queue_file, output_dir):
                     try:
                         sfx = prepare_sfx(AudioFileClip(sfx_path), sfx_time)
                         audio_clips.append(sfx)
+                    except Exception:
+                        pass
+
+            # === VOICEOVER: per-scene TTS ===
+            vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'yt_short')
+            scene_starts = {'hook': 0.5, 'hero': 3.5, 'feature': 13.0, 'proof': 31.0, 'cta': 41.0}
+            for scene_id, start_time in scene_starts.items():
+                vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
+                if os.path.exists(vo_path) and start_time < total_dur:
+                    try:
+                        vo = AudioFileClip(vo_path)
+                        # Voiceover is loudest (1.0 volume via normalizer)
+                        from engine.modules.audio_normalizer import normalize_audio_clip, VOICEOVER_VOLUME
+                        vo = normalize_audio_clip(vo)
+                        vo = vo.with_effects([afx.MultiplyVolume(VOICEOVER_VOLUME)])
+                        vo = vo.with_start(start_time)
+                        audio_clips.append(vo)
                     except Exception:
                         pass
 

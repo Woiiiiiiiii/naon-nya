@@ -411,6 +411,22 @@ def generate_video_fb(queue_file, output_dir):
                     except Exception:
                         pass
 
+            # === VOICEOVER: per-scene TTS ===
+            vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'fb')
+            scene_starts = {'hook': 0.8, 'product': 5.8, 'feature': 16.0, 'proof': 31.0, 'cta': 46.0}
+            for scene_id, start_time in scene_starts.items():
+                vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
+                if os.path.exists(vo_path) and start_time < total_dur:
+                    try:
+                        vo = AudioFileClip(vo_path)
+                        from engine.modules.audio_normalizer import normalize_audio_clip, VOICEOVER_VOLUME
+                        vo = normalize_audio_clip(vo)
+                        vo = vo.with_effects([afx.MultiplyVolume(VOICEOVER_VOLUME)])
+                        vo = vo.with_start(start_time)
+                        audio_clips.append(vo)
+                    except Exception:
+                        pass
+
             if audio_clips:
                 try:
                     video = video.with_audio(CompositeAudioClip(audio_clips))
