@@ -246,9 +246,27 @@ def inspect_and_select_best(image_paths, category='home'):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--image', required=True, help='Image to inspect')
+    parser.add_argument('--image', required=True, help='Image file or directory to inspect')
     parser.add_argument('--category', default='home')
     args = parser.parse_args()
     
-    result = inspect_image(args.image, args.category)
-    print(json.dumps(result, indent=2))
+    target = args.image
+    
+    if os.path.isdir(target):
+        # Inspect all images in directory
+        exts = ('.jpg', '.jpeg', '.png', '.webp')
+        files = [f for f in os.listdir(target) if f.lower().endswith(exts)]
+        if not files:
+            print(f"[VISION] No images found in {target}")
+        else:
+            print(f"[VISION] Inspecting {len(files)} images in {target}...")
+            for fname in files:
+                fpath = os.path.join(target, fname)
+                result = inspect_image(fpath, args.category)
+                print(f"  {fname}: score={result['score']}, rec={result['recommendation']}")
+    elif os.path.isfile(target):
+        result = inspect_image(target, args.category)
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"[VISION] Not found: {target}")
+

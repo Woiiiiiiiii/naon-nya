@@ -148,17 +148,14 @@ def prepare_sfx(audio_clip, start_time):
 def get_ffmpeg_audio_params():
     """Get FFmpeg output parameters for consistent audio across all videos.
     
-    Applies:
-    - Audio normalization filter (loudnorm)
-    - Consistent bitrate and sample rate
-    - Gentle high-pass to remove rumble (bass cleanup)
+    NOTE: Audio normalization is done in Python (normalize_audio_clip + MultiplyVolume).
+    We only set codec and bitrate here. FFmpeg filters like loudnorm
+    are NOT used because they conflict with moviepy's stream handling.
     
-    Returns: dict of ffmpeg_params for video.write_videofile()
+    Returns: dict of params for video.write_videofile()
     """
     return {
         'audio_codec': 'aac',
         'audio_bitrate': '192k',
-        'ffmpeg_params': [
-            '-af', 'highpass=f=60,loudnorm=I=-16:TP=-1.5:LRA=11'
-        ]
     }
+
