@@ -411,9 +411,9 @@ def generate_video_fb(queue_file, output_dir):
                     except Exception:
                         pass
 
-            # === VOICEOVER: per-scene TTS (complement text, not duplicate) ===
+            # === VOICEOVER: complements text (never repeats product name or price) ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'fb')
-            scene_starts = {'hook': 0.8, 'feature': 16.0, 'proof': 31.0, 'cta': 46.0}
+            scene_starts = {'hook': 1.5, 'feature': 16.0, 'cta': 46.0}
             for scene_id, start_time in scene_starts.items():
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:

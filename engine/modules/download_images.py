@@ -94,19 +94,18 @@ def _save_image(img, img_path, min_target=1620):
 def _score_image_simplicity(img):
     """Score how 'simple/clean' an image is. Higher = simpler = better for video.
     
-    Scoring logic:
-    - Edge uniformity: uniform edges = product on plain background (good)
-    - Color variety: fewer distinct colors = simpler (good)
-    - Whiteness: more white/light area = cleaner product photo (good)
-    - Text detection: high contrast edges = likely has text overlay (bad)
+    AGGRESSIVE text detection — heavily penalizes images with:
+    - Text overlays (seller promotions, watermarks)
+    - Multiple product variants in one image
+    - Busy decorated backgrounds
     """
     import numpy as np
     data = np.array(img)
     h, w = data.shape[:2]
-    score = 0.0
+    score = 50.0  # Start neutral
     
-    # 1. Edge uniformity — sample 10px border on all sides
-    border = 10
+    # 1. Edge uniformity — sample 15px border on all sides
+    border = 15
     top_strip = data[:border, :, :]
     bot_strip = data[-border:, :, :]
     left_strip = data[:, :border, :]
@@ -115,44 +114,50 @@ def _score_image_simplicity(img):
     # Low std in borders = uniform background = GOOD
     for strip in [top_strip, bot_strip, left_strip, right_strip]:
         std = strip.std()
-        if std < 15:       # Very uniform (white/solid bg)
+        if std < 12:       # Very uniform (white/solid bg)
             score += 15
-        elif std < 30:     # Fairly uniform
-            score += 8
-        elif std < 50:     # Some variation
-            score += 3
+        elif std < 25:     # Fairly uniform
+            score += 5
+        elif std > 50:     # Busy border = likely has text/graphics
+            score -= 10
     
     # 2. White/light percentage — more white = cleaner product photo
     brightness = data.mean(axis=2)
     white_pct = (brightness > 230).sum() / (h * w)
-    light_pct = (brightness > 200).sum() / (h * w)
-    score += white_pct * 30   # Up to 30 points for all-white bg
-    score += light_pct * 10   # Bonus for light areas
+    score += white_pct * 40   # Up to 40 points for all-white bg
     
-    # 3. Color simplicity — fewer unique colors = simpler
-    # Quantize to reduce noise (divide by 32 → 8 levels per channel)
-    quantized = (data // 32).reshape(-1, 3)
-    unique_colors = len(set(map(tuple, quantized)))
-    if unique_colors < 100:
-        score += 15  # Very simple
-    elif unique_colors < 300:
-        score += 8
-    elif unique_colors > 800:
-        score -= 10  # Too complex/busy
-    
-    # 4. Penalty for text-heavy images — detect high-frequency edges
+    # 3. TEXT DETECTION (AGGRESSIVE) — detect high-frequency edges
     gray = brightness.astype(np.uint8)
-    # Simple edge detection: absolute difference with shifted version
     edge_h = np.abs(gray[1:, :].astype(int) - gray[:-1, :].astype(int))
     edge_v = np.abs(gray[:, 1:].astype(int) - gray[:, :-1].astype(int))
-    edge_density = (edge_h > 50).sum() + (edge_v > 50).sum()
+    edge_density = (edge_h > 40).sum() + (edge_v > 40).sum()
     edge_ratio = edge_density / (h * w)
-    if edge_ratio > 0.15:
-        score -= 15  # High edge density = lots of text/graphics
-    elif edge_ratio > 0.08:
-        score -= 5
     
-    return round(score, 1)
+    if edge_ratio > 0.20:
+        score -= 50  # EXTREMELY busy (guaranteed text/graphics)
+    elif edge_ratio > 0.12:
+        score -= 35  # Very likely has text overlays
+    elif edge_ratio > 0.08:
+        score -= 15  # Some text
+    elif edge_ratio < 0.03:
+        score += 15  # Very clean
+    
+    # 4. Color variety in borders — colorful borders = promo text/graphics
+    for strip in [top_strip, bot_strip]:
+        color_std = strip.std(axis=(0, 1))  # std per channel
+        if color_std.mean() > 40:
+            score -= 15  # Colorful border = promo graphics
+    
+    # 5. Center region should be dominant (product in center)
+    center_h = h // 3
+    center_w = w // 3
+    center = data[center_h:2*center_h, center_w:2*center_w, :]
+    center_brightness = center.mean()
+    # Center should not be too dark or too bright
+    if 60 < center_brightness < 220:
+        score += 10  # Good center content
+    
+    return round(max(0, score), 1)
 
 
 def _download_single_image(cdn_url):
