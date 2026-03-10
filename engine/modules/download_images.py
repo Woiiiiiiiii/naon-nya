@@ -493,17 +493,17 @@ def _create_placeholder(img_path, pid, name):
     tw = bbox[2] - bbox[0]
     draw.text(((W - tw) // 2, 40), cat_label, font=font_cat, fill=(255, 255, 255, 180))
 
-    # Product emoji/icon in center (large)
+    # Product icon in center — PLAIN TEXT only (no emoji, fonts can't render them)
     icons = {
-        'fashion': '👜', 'gadget': '🎧', 'beauty': '✨',
-        'home': '🏠', 'wellness': '💪'
+        'fashion': 'FASHION', 'gadget': 'GADGET', 'beauty': 'BEAUTY',
+        'home': 'HOME', 'wellness': 'WELLNESS'
     }
-    icon = icons.get(category, '📦')
+    icon = icons.get(category, 'PRODUCT')
     try:
-        bbox = draw.textbbox((0, 0), icon, font=font_big)
+        bbox = draw.textbbox((0, 0), icon, font=font_name)
         tw = bbox[2] - bbox[0]
         th = bbox[3] - bbox[1]
-        draw.text(((W - tw) // 2, (H - th) // 2 - 30), icon, font=font_big)
+        draw.text(((W - tw) // 2, (H - th) // 2 - 30), icon, font=font_name, fill=(255, 255, 255, 120))
     except Exception:
         pass
 
@@ -554,14 +554,22 @@ def download_images(produk_file, output_dir):
         image_url = str(row.get('image_url', '')).strip()
         category = str(row.get('category', '')).strip()
         
-        # Skip if already downloaded with good quality
-        if os.path.exists(img_path):
+        # Skip if already downloaded with good quality AND not a placeholder
+        marker = img_path + '.placeholder'
+        if os.path.exists(img_path) and not os.path.exists(marker):
             try:
                 existing = Image.open(img_path)
                 w, h = existing.size
                 if w >= 400 and h >= 400:
                     stats['cached'] += 1
                     continue
+            except Exception:
+                pass
+        # Remove old placeholder so fresh download is attempted
+        if os.path.exists(marker):
+            try:
+                os.remove(marker)
+                os.remove(img_path)
             except Exception:
                 pass
         
