@@ -29,26 +29,27 @@ TARGET_RMS = 0.12
 def normalize_audio_clip(audio_clip, target_rms=TARGET_RMS):
     """Normalize an AudioFileClip to consistent perceived loudness.
     
-    Measures current RMS loudness and adjusts gain to match target.
-    This ensures quiet tracks get louder and loud tracks get quieter.
-    
-    Args:
-        audio_clip: moviepy AudioFileClip
-        target_rms: target RMS value (0.0 to 1.0), default ~-18 dBFS
-    
-    Returns:
-        audio_clip with adjusted volume (moviepy clip)
+    Handles short clips (<0.5s) gracefully — just returns with default gain.
     """
     try:
         from moviepy import afx
         
-        # Sample a chunk to measure loudness (first 10 seconds or full clip)
-        sample_dur = min(audio_clip.duration, 10.0)
-        fps = 44100
-        n_samples = int(sample_dur * fps)
+        # Short clips (SFX): skip sampling, just return as-is
+        if audio_clip.duration is None or audio_clip.duration < 0.5:
+            return audio_clip
         
-        # Get audio samples
-        samples = audio_clip.to_soundarray(fps=fps, nbytes=2)
+        fps = 44100
+        
+        # Get audio samples — wrap in try/except for duration edge cases
+        try:
+            samples = audio_clip.to_soundarray(fps=fps, nbytes=2)
+        except Exception:
+            # Fallback: try with lower fps for short clips
+            try:
+                samples = audio_clip.to_soundarray(fps=22050, nbytes=2)
+            except Exception:
+                return audio_clip
+        
         if len(samples) == 0:
             return audio_clip
         

@@ -1,19 +1,19 @@
 """
 tts_voiceover.py
-Generate natural Indonesian female voiceover using Edge TTS + SSML.
+Generate natural Indonesian female voiceover using Edge TTS.
 
 Voice: id-ID-GadisNeural (Microsoft Neural TTS - Indonesian female)
 
-SSML-powered natural speech:
-  - <break> tags for natural pauses between phrases
-  - <prosody> for varied pace (slower on key points, normal elsewhere)
-  - Conversational Indonesian with natural sentence flow
+Natural speech approach:
+  - edge-tts uses rate + pitch params (NOT SSML — SSML is blocked by Microsoft)
+  - Commas in text = natural pauses (TTS handles this automatically)
+  - Short sentences with conversational Indonesian
   - Each scene gets voiceover for full coverage
 
 Audio pipeline:
   TTS generates MP3 → video generator loads per scene →
-  audio_normalizer normalizes RMS → set VOICEOVER_VOLUME=1.0 →
-  CompositeAudioClip mixes with music (0.55) and SFX (0.45)
+  audio_normalizer normalizes RMS → set VOICEOVER_VOLUME=1.2 →
+  CompositeAudioClip mixes with music (0.40) and SFX (0.35)
 """
 
 import os
@@ -28,45 +28,14 @@ import random
 VOICE_ID = "id-ID-GadisNeural"
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers')
 
-
-# ═══════════════════════════════════════════════════════════════════
-#  SSML BUILDER
-#  Wraps text in SSML tags for natural prosody and pauses
-# ═══════════════════════════════════════════════════════════════════
-
-def _build_ssml(text, rate="-10%", pitch="+0Hz"):
-    """Wrap text in SSML with prosody settings.
-    
-    Automatically adds <break> tags at commas and periods for
-    natural pauses. Wraps everything in <speak> and <voice>.
-    """
-    # Add natural pauses: replace punctuation with breaks
-    ssml_text = text
-    ssml_text = ssml_text.replace('. ', '. <break time="400ms"/> ')
-    ssml_text = ssml_text.replace(', ', ', <break time="200ms"/> ')
-    ssml_text = ssml_text.replace('! ', '! <break time="350ms"/> ')
-    ssml_text = ssml_text.replace('? ', '? <break time="350ms"/> ')
-    
-    ssml = (
-        f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
-        f'xml:lang="id-ID">'
-        f'<voice name="{VOICE_ID}">'
-        f'<prosody rate="{rate}" pitch="{pitch}">'
-        f'{ssml_text}'
-        f'</prosody>'
-        f'</voice>'
-        f'</speak>'
-    )
-    return ssml
-
-
-# Per-scene SSML settings (rate + pitch)
-SCENE_SSML = {
-    'hook':    {'rate': '-5%',  'pitch': '+2Hz'},    # Slightly upbeat, attention-grab
-    'hero':    {'rate': '-12%', 'pitch': '+0Hz'},    # Slow, warm, inviting
-    'feature': {'rate': '-10%', 'pitch': '+0Hz'},    # Steady, informative
-    'proof':   {'rate': '-15%', 'pitch': '-1Hz'},    # Slower, deeper = trustworthy
-    'cta':     {'rate': '-8%',  'pitch': '+1Hz'},    # Slightly upbeat, encouraging
+# Per-scene speaking style (rate + pitch via edge-tts native params)
+# NOTE: edge-tts does NOT support SSML. Only rate/pitch/volume params work.
+SCENE_STYLES = {
+    'hook':    {'rate': '-5%',  'pitch': '+2Hz'},    # Slightly upbeat
+    'hero':    {'rate': '-12%', 'pitch': '+0Hz'},    # Slow, warm
+    'feature': {'rate': '-10%', 'pitch': '+0Hz'},    # Steady
+    'proof':   {'rate': '-15%', 'pitch': '-1Hz'},    # Slower = trust
+    'cta':     {'rate': '-8%',  'pitch': '+1Hz'},    # Upbeat
     'product': {'rate': '-12%', 'pitch': '+0Hz'},    # Warm
     'detail1': {'rate': '-10%', 'pitch': '+0Hz'},
     'detail2': {'rate': '-12%', 'pitch': '+0Hz'},
@@ -75,19 +44,18 @@ SCENE_SSML = {
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  VOICEOVER SCRIPT POOLS
-#  Written for natural Indonesian spoken flow.
+#  VOICEOVER SCRIPTS
+#  Written for natural spoken Indonesian.
 #  Rules:
-#    - NEVER mention product name or price (shown on screen)
-#    - Use conversational, everyday Indonesian
-#    - Sentences end naturally (tidak dipotong)
-#    - Avoid foreign/English words TTS might mispronounce
-#    - Short phrases with natural pauses
+#    - NEVER mention product name or price
+#    - Commas = TTS creates natural speech pauses
+#    - Short, conversational sentences
+#    - No foreign words TTS might mispronounce
 # ═══════════════════════════════════════════════════════════════════
 
 POOL_HOOK = [
     "Hai, kamu harus lihat yang satu ini.",
-    "Eh, jangan di lewatkan ya.",
+    "Eh, jangan dilewatkan ya.",
     "Ini dia, yang lagi banyak dicari orang.",
     "Hai, simak sampai selesai ya.",
     "Kamu pasti suka yang ini, coba deh lihat.",
@@ -118,7 +86,7 @@ POOL_PROOF = [
 ]
 
 POOL_CTA = [
-    "Tertarik? langsung saja cek di link ya.",
+    "Tertarik? Langsung saja cek di link ya.",
     "Ayo, langsung cek di link yang ada di bawah.",
     "Sebelum kehabisan, langsung saja cek ya.",
     "Link pembelian sudah tersedia di bawah.",
@@ -127,11 +95,7 @@ POOL_CTA = [
 
 
 def generate_voiceover_script(product_info, platform='yt_short'):
-    """Generate voiceover scripts for every scene of the video.
-    
-    Each script is a natural conversational sentence that
-    COMPLEMENTS on-screen text (never duplicates it).
-    """
+    """Generate voiceover scripts for every scene."""
     if platform == 'yt_short':
         return {
             'hook': random.choice(POOL_HOOK),
@@ -167,52 +131,41 @@ def generate_voiceover_script(product_info, platform='yt_short'):
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  TTS ENGINE (SSML-powered)
+#  TTS ENGINE (edge-tts native params, NO SSML)
 # ═══════════════════════════════════════════════════════════════════
 
-async def _generate_tts_async(ssml_text, output_path):
-    """Generate TTS audio from SSML string using edge-tts."""
+async def _generate_tts_async(text, output_path, rate='-10%', pitch='+0Hz'):
+    """Generate TTS audio using edge-tts native Communicate params.
+    
+    NOTE: edge-tts does NOT support custom SSML (blocked by Microsoft).
+    Natural pauses come from commas and periods in the text itself.
+    """
     import edge_tts
-    communicate = edge_tts.Communicate(ssml_text, VOICE_ID)
+    communicate = edge_tts.Communicate(text, VOICE_ID, rate=rate, pitch=pitch)
     await communicate.save(output_path)
 
 
 def generate_tts(text, output_path, scene_id='feature'):
-    """Generate one TTS MP3 file with SSML prosody.
+    """Generate one TTS MP3 file.
     
-    Args:
-        text: plain text to speak
-        output_path: where to save MP3
-        scene_id: scene type for prosody settings
-    
-    Returns:
-        True if generated, False if failed
+    Returns True if generated successfully, False if failed.
     """
     try:
-        style = SCENE_SSML.get(scene_id, {'rate': '-10%', 'pitch': '+0Hz'})
-        ssml = _build_ssml(text, rate=style['rate'], pitch=style['pitch'])
-        
+        style = SCENE_STYLES.get(scene_id, {'rate': '-10%', 'pitch': '+0Hz'})
+        rate = style['rate']
+        pitch = style['pitch']
+
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        asyncio.run(_generate_tts_async(ssml, output_path))
-        
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+        asyncio.run(_generate_tts_async(text, output_path, rate, pitch))
+
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
             print(f"    [TTS] OK: {os.path.basename(output_path)} ({scene_id})")
             return True
-        return False
+        else:
+            print(f"    [TTS] Empty/small file: {os.path.basename(output_path)}")
+            return False
     except Exception as e:
-        print(f"    [TTS] SSML failed ({scene_id}): {e}")
-        # Fallback: try plain text without SSML
-        try:
-            import edge_tts
-            communicate = edge_tts.Communicate(text, VOICE_ID, 
-                                                rate=style['rate'], 
-                                                pitch=style['pitch'])
-            asyncio.run(communicate.save(output_path))
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-                print(f"    [TTS] OK (fallback): {os.path.basename(output_path)}")
-                return True
-        except Exception as e2:
-            print(f"    [TTS] Fallback also failed: {e2}")
+        print(f"    [TTS] Failed ({scene_id}): {e}")
         return False
 
 
@@ -260,12 +213,12 @@ def generate_all_voiceovers(queue_file, platforms=None):
             if line.strip():
                 jobs.append(json.loads(line.strip()))
 
-    print(f"[TTS SSML] {len(jobs)} products x {len(platforms)} platforms...")
+    print(f"[TTS] {len(jobs)} products x {len(platforms)} platforms...")
     for job in jobs:
         produk_id = job.get('produk_id', '')
         for platform in platforms:
             generate_voiceover_for_product(job, produk_id, platform)
-    print(f"[TTS SSML] All done")
+    print(f"[TTS] All done")
 
 
 if __name__ == "__main__":
