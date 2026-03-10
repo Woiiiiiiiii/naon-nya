@@ -2,13 +2,14 @@
 hook_variant_generator.py
 Spec: Variasikan hook text per akun YT agar video unik (anti-copyright).
 Tidak generate teks baru — hanya modifikasi template yang sudah dipilih.
+
+NOTE: NO EMOJI — font on render server has no emoji glyphs (renders as X-in-box)
 """
 import json
 import os
 import sys
 import random
 
-EMOJI_POOL = ['🔥', '💡', '✨', '🎯', '⚡', '🚀', '💰', '🏆', '👀', '❗']
 
 def generate_hook_variants(yt_queue, tt_queue):
     """Vary hook text per YT account so each video is unique."""
@@ -27,10 +28,6 @@ def generate_hook_variants(yt_queue, tt_queue):
     # TT queue: keep original hook (only 1 account)
     if os.path.exists(tt_queue):
         jobs = _read_queue(tt_queue)
-        for job in jobs:
-            # Add leading emoji for TT style
-            if not any(e in job['hook'] for e in EMOJI_POOL):
-                job['hook'] = f"{random.choice(EMOJI_POOL)} {job['hook']}"
         _write_queue(tt_queue, jobs)
         print(f"  TT: {len(jobs)} hooks styled")
 
@@ -38,25 +35,20 @@ def generate_hook_variants(yt_queue, tt_queue):
 
 
 def _vary_hook(hook_text, account_num):
-    """Create a unique variant of the hook for each account."""
+    """Create a unique variant of the hook for each account. No emoji."""
     if account_num == 1:
-        # Account 1: original + emoji prefix
-        return f"🔥 {hook_text}"
+        return hook_text
     elif account_num == 2:
-        # Account 2: add "Wajib tau!" suffix
         return f"{hook_text} Wajib tau!"
     elif account_num == 3:
-        # Account 3: question format + emoji
         if not hook_text.endswith('?'):
-            return f"💡 Tau gak? {hook_text}"
-        return f"💡 {hook_text}"
+            return f"Tau gak? {hook_text}"
+        return hook_text
     elif account_num == 4:
-        # Account 4: exclamation emphasis
-        return f"⚡ {hook_text.rstrip('!?.')}!!"
+        return f"{hook_text.rstrip('!?.')}!!"
     else:
-        # Account 5+: shuffle words + emoji
-        emoji = random.choice(EMOJI_POOL)
-        return f"{emoji} {hook_text} 👀"
+        prefixes = ["Cek ini -", "Wajib lihat -", "Jangan lewatkan -"]
+        return f"{random.choice(prefixes)} {hook_text}"
 
 
 def _read_queue(path):

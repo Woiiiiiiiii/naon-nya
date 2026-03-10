@@ -1,6 +1,8 @@
 """
 cta_variant_generator.py
 Spec: Variasikan CTA per akun & platform. Dilarang hard selling.
+
+NOTE: NO EMOJI — font on render server has no emoji glyphs (renders as X-in-box)
 """
 import json
 import os
@@ -11,13 +13,6 @@ def generate_cta_variants(yt_queue, tt_queue):
     """Vary CTA text per account and ensure platform-appropriate language."""
     print("Generating CTA variants per account...")
 
-    YT_SUFFIXES = [
-        " 👇", " ⬇️", " 🔗", " 💥", " ✅"
-    ]
-    TT_SUFFIXES = [
-        " 🔗", " 👆", " ✨", " 💫", " 🛒"
-    ]
-
     # Process YT queue
     if os.path.exists(yt_queue):
         jobs = _read_queue(yt_queue)
@@ -26,9 +21,7 @@ def generate_cta_variants(yt_queue, tt_queue):
             cta = job.get('cta', 'Klik link di deskripsi!')
             # Ensure YT-specific language
             cta = cta.replace('link di bio', 'link di deskripsi')
-            # Add unique suffix per account
-            suffix = YT_SUFFIXES[(acct_num - 1) % len(YT_SUFFIXES)]
-            job['cta'] = f"{cta}{suffix}"
+            job['cta'] = cta
         _write_queue(yt_queue, jobs)
         print(f"  YT: {len(jobs)} CTAs varied")
 
@@ -39,8 +32,7 @@ def generate_cta_variants(yt_queue, tt_queue):
             cta = job.get('cta', 'Klik link di bio!')
             # Ensure TT-specific language
             cta = cta.replace('link di deskripsi', 'link di bio')
-            suffix = random.choice(TT_SUFFIXES)
-            job['cta'] = f"{cta}{suffix}"
+            job['cta'] = cta
         _write_queue(tt_queue, jobs)
         print(f"  TT: {len(jobs)} CTAs styled")
 

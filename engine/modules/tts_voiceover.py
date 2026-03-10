@@ -45,13 +45,83 @@ SCENE_STYLES = {
 
 
 # ═══════════════════════════════════════════════════════════════════
+#  PRICE → INDONESIAN WORDS
+# ═══════════════════════════════════════════════════════════════════
+
+_SATUAN = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan']
+_BELASAN = ['sepuluh', 'sebelas', 'dua belas', 'tiga belas', 'empat belas', 'lima belas',
+            'enam belas', 'tujuh belas', 'delapan belas', 'sembilan belas']
+
+def _angka_ke_kata(n):
+    """Convert integer 0-999999999 to Indonesian words."""
+    if n == 0:
+        return 'nol'
+    if n < 0:
+        return 'minus ' + _angka_ke_kata(-n)
+
+    parts = []
+    if n >= 1000000:
+        juta = n // 1000000
+        parts.append(_angka_ke_kata(juta) + ' juta')
+        n %= 1000000
+    if n >= 1000:
+        ribu = n // 1000
+        if ribu == 1:
+            parts.append('seribu')
+        else:
+            parts.append(_angka_ke_kata(ribu) + ' ribu')
+        n %= 1000
+    if n >= 100:
+        ratus = n // 100
+        if ratus == 1:
+            parts.append('seratus')
+        else:
+            parts.append(_satuan_kata(ratus) + ' ratus')
+        n %= 100
+    if n >= 20:
+        puluh = n // 10
+        parts.append(_satuan_kata(puluh) + ' puluh')
+        n %= 10
+    if n >= 10:
+        parts.append(_BELASAN[n - 10])
+        n = 0
+    if n > 0:
+        parts.append(_satuan_kata(n))
+
+    return ' '.join(parts)
+
+def _satuan_kata(n):
+    return _SATUAN[n] if 0 <= n <= 9 else str(n)
+
+def harga_ke_kata(harga_str):
+    """Convert price string like 'Rp31.200' to 'tiga puluh satu ribu dua ratus rupiah'.
+    
+    Handles: Rp31.200 / Rp 31.200 / 31200 / Rp1.500.000
+    """
+    import re
+    if not harga_str:
+        return ''
+    # Remove Rp prefix, spaces, dots (thousand separator), commas
+    clean = re.sub(r'[Rr][Pp]\.?\s*', '', str(harga_str))
+    clean = clean.replace('.', '').replace(',', '').strip()
+    try:
+        angka = int(clean)
+    except ValueError:
+        return ''
+    if angka <= 0:
+        return ''
+    return _angka_ke_kata(angka) + ' rupiah'
+
+
+# ═══════════════════════════════════════════════════════════════════
 #  VOICEOVER SCRIPTS
+#  Now includes product name, function, and price.
 #  Written for natural spoken Indonesian.
 #  Rules:
-#    - NEVER mention product name or price
 #    - Commas = TTS creates natural speech pauses
 #    - Short, conversational sentences
-#    - No foreign words TTS might mispronounce
+#    - No foreign words (simpel→sederhana, spesial→istimewa)
+#    - Price in full Indonesian words
 # ═══════════════════════════════════════════════════════════════════
 
 POOL_HOOK = [
@@ -62,19 +132,11 @@ POOL_HOOK = [
     "Kamu pasti suka yang ini, coba deh lihat.",
 ]
 
-POOL_HERO = [
-    "Produk yang satu ini, memang lagi jadi favorit banyak orang.",
-    "Yang lagi viral, dan memang bagus kualitasnya.",
-    "Ini yang banyak orang cari, dan ternyata memang oke.",
-    "Satu produk yang patut kamu pertimbangkan.",
-    "Kualitas dan harganya, pas di kantong.",
-]
-
-POOL_FEATURE = [
+POOL_FEATURE_TEMPLATE = [
     "Kualitasnya sudah terjamin ya, banyak yang sudah membuktikan.",
-    "Bahannya premium, tapi harganya masih terjangkau.",
+    "Bahannya bagus, tapi harganya masih terjangkau.",
     "Cocok untuk dipakai setiap hari, dan tahan lama juga.",
-    "Desainnya simpel, tapi tetap terlihat berkelas.",
+    "Desainnya sederhana, tapi tetap terlihat berkelas.",
     "Fiturnya lengkap, dan mudah digunakan siapa saja.",
 ]
 
@@ -96,37 +158,74 @@ POOL_CTA = [
 
 
 def generate_voiceover_script(product_info, platform='yt_short'):
-    """Generate voiceover scripts for every scene."""
+    """Generate voiceover scripts including product name, function, and price."""
+    nama = product_info.get('nama', '')
+    harga = product_info.get('harga', '')
+    desc = product_info.get('deskripsi_singkat', '')
+    
+    # Convert price to Indonesian words
+    harga_kata = harga_ke_kata(harga)
+    
+    # Hero text: mention product name
+    if nama:
+        hero_options = [
+            f"Ini dia {nama}, yang lagi jadi favorit banyak orang.",
+            f"{nama}, produk yang memang sudah terbukti bagus.",
+            f"Kenalkan, {nama}, cocok banget untuk kamu.",
+        ]
+        hero_text = random.choice(hero_options)
+    else:
+        hero_text = "Produk yang satu ini, memang lagi jadi favorit banyak orang."
+    
+    # Feature text: mention function/description
+    if desc:
+        # Use first 60 chars of description
+        short_desc = desc[:60].rstrip('.')
+        feat_text = f"{short_desc}, cocok banget untuk kebutuhan kamu."
+    else:
+        feat_text = random.choice(POOL_FEATURE_TEMPLATE)
+    
+    # Price mention in proof scene
+    if harga_kata:
+        price_options = [
+            f"Dengan harga hanya {harga_kata}, kualitasnya memang tidak mengecewakan.",
+            f"Harganya cuma {harga_kata}, dan sudah banyak yang puas.",
+            f"Cuma {harga_kata} saja, tapi kualitasnya luar biasa.",
+        ]
+        proof_text = random.choice(price_options)
+    else:
+        proof_text = random.choice(POOL_PROOF)
+
     if platform == 'yt_short':
         return {
             'hook': random.choice(POOL_HOOK),
-            'hero': random.choice(POOL_HERO),
-            'feature': random.choice(POOL_FEATURE),
-            'proof': random.choice(POOL_PROOF),
+            'hero': hero_text,
+            'feature': feat_text,
+            'proof': proof_text,
             'cta': random.choice(POOL_CTA),
         }
     elif platform == 'yt_long':
         return {
             'hook': random.choice(POOL_HOOK),
-            'hero': random.choice(POOL_HERO),
-            'detail1': random.choice(POOL_FEATURE),
-            'detail2': "Yang membuat produk ini spesial, adalah kualitasnya yang memang beda.",
+            'hero': hero_text,
+            'detail1': feat_text,
+            'detail2': proof_text,
             'detail3': random.choice(POOL_PROOF),
             'cta': random.choice(POOL_CTA),
         }
     elif platform == 'tt':
         return {
             'hook': random.choice(POOL_HOOK),
-            'product': random.choice(POOL_HERO),
-            'feature': random.choice(POOL_FEATURE),
+            'product': hero_text,
+            'feature': feat_text,
             'cta': random.choice(POOL_CTA),
         }
     else:  # fb
         return {
             'hook': random.choice(POOL_HOOK),
-            'product': random.choice(POOL_HERO),
-            'feature': random.choice(POOL_FEATURE),
-            'proof': random.choice(POOL_PROOF),
+            'product': hero_text,
+            'feature': feat_text,
+            'proof': proof_text,
             'cta': random.choice(POOL_CTA),
         }
 
