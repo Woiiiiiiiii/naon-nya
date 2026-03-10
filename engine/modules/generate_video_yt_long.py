@@ -497,7 +497,7 @@ def generate_long(queue_file, output_dir):
                         vo = AudioFileClip(vo_path)
                         # Clip VO so it doesn't overlap with next scene
                         if idx + 1 < len(vo_scenes_list):
-                            max_dur = vo_scenes_list[idx + 1][1] - start_time - 0.3
+                            max_dur = vo_scenes_list[idx + 1][1] - start_time - 0.5
                         else:
                             max_dur = total_dur - start_time - 0.2
                         if max_dur > 0.5 and vo.duration > max_dur:

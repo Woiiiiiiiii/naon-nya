@@ -63,7 +63,9 @@ MUSIC_DURATIONS = {
 }
 
 # Random entry point offsets per instruction (variasi fingerprint audio)
-ENTRY_OFFSETS = [0, 10, 20, 30]
+# Full offsets for long videos, small offsets for short videos
+ENTRY_OFFSETS_LONG = [0, 10, 20, 30]       # For yt_long (120s)
+ENTRY_OFFSETS_SHORT = [0, 1, 2, 3, 5]      # For yt_short/tt/fb (prevent music gap at start)
 
 
 def _get_music_folder(category):
@@ -130,7 +132,9 @@ def _process_music_file(source_path, output_path, target_duration, produk_id, ac
         f"{produk_id}_{account_id}_{datetime.datetime.now().strftime('%Y%m%d')}".encode()
     ).hexdigest()[:8], 16)
     rng = random.Random(seed)
-    entry_offset = rng.choice(ENTRY_OFFSETS)
+    # Short videos: small offsets to avoid missing music at start
+    offsets = ENTRY_OFFSETS_SHORT if target_duration < 60 else ENTRY_OFFSETS_LONG
+    entry_offset = rng.choice(offsets)
 
     try:
         # Probe source duration

@@ -62,8 +62,8 @@ def normalize_audio_clip(audio_clip, target_rms=TARGET_RMS):
         # Calculate gain to reach target RMS
         gain = target_rms / rms
         
-        # Limit gain to prevent clipping or extreme amplification
-        gain = max(0.3, min(gain, 3.0))
+        # Limit gain — allow higher amplification for quiet tracks (was 3.0, too low)
+        gain = max(0.3, min(gain, 5.0))
         
         return audio_clip.with_effects([afx.MultiplyVolume(gain)])
     except Exception as e:

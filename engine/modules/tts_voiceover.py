@@ -513,9 +513,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--queue', default='engine/queue/storyboard_queue.jsonl')
     parser.add_argument('--platform', default='all',
-                       choices=['all', 'yt_short', 'yt_long', 'tt', 'fb'])
+                       choices=['all', 'yt', 'yt_short', 'yt_long', 'tt', 'fb'])
     args = parser.parse_args()
-    if args.platform == 'all':
-        generate_all_voiceovers(args.queue)
-    else:
-        generate_all_voiceovers(args.queue, [args.platform])
+
+    # Map shorthand platforms to actual VO platform names
+    platform_map = {
+        'all': ['yt_short', 'yt_long', 'tt', 'fb'],
+        'yt': ['yt_short', 'yt_long'],     # YT queue → both formats
+        'yt_short': ['yt_short'],
+        'yt_long': ['yt_long'],
+        'tt': ['tt'],
+        'fb': ['fb'],
+    }
+    platforms = platform_map.get(args.platform, ['yt_short', 'yt_long', 'tt', 'fb'])
+    generate_all_voiceovers(args.queue, platforms)

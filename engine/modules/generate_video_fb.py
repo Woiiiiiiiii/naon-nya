@@ -391,7 +391,7 @@ def generate_video_fb(queue_file, output_dir):
                         vo = AudioFileClip(vo_path)
                         # Clip VO to prevent overlap
                         if idx + 1 < len(scene_starts_list):
-                            max_dur = scene_starts_list[idx + 1][1] - start_time - 0.3
+                            max_dur = scene_starts_list[idx + 1][1] - start_time - 0.5
                         else:
                             max_dur = total_dur - start_time - 0.2
                         if max_dur > 0.5 and vo.duration > max_dur:

@@ -98,8 +98,13 @@ def main():
         "python engine/modules/body_retention_evaluator.py",
         # Generate per-video music (unique track per video)
         "python engine/modules/generate_music.py",
-        # AI TTS: generate voiceover for ALL platforms (yt_short, yt_long, tt, fb)
-        "python engine/modules/tts_voiceover.py --queue engine/queue/storyboard_queue.jsonl --platform all",
+        # AI TTS: generate voiceover per PLATFORM queue (each has correct account_id)
+        # YT queue → yt_short + yt_long VOs (account_id = yt_1..yt_5)
+        "python engine/modules/tts_voiceover.py --queue engine/queue/yt_queue.jsonl --platform yt",
+        # TT queue → tt VOs (account_id = tt_1)
+        "python engine/modules/tts_voiceover.py --queue engine/queue/tt_queue.jsonl --platform tt",
+        # FB queue → fb VOs (account_id = fb_1)
+        "python engine/modules/tts_voiceover.py --queue engine/queue/fb_queue.jsonl --platform fb",
     ]
     
     if is_long_slot or force_render:
