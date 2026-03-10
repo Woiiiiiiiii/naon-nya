@@ -315,7 +315,7 @@ def generate_long(queue_file, output_dir):
             overview_text = f"{nama}\n{harga}" if harga else nama
             overview_img = render_text_image(overview_text, font_bold or font_path,
                                            48, (255, 255, 255), (0, 0, 0, 210), txt_w, 22)
-            feat_text = f"> {desc[:80]}" if desc else "> Fitur unggulan produk ini"
+            feat_text = f"{desc[:80]}" if desc else "Fitur unggulan produk ini"
             feat_img = render_text_image(feat_text, font_path or "arial.ttf",
                                         42, (255, 255, 255), (40, 167, 69, 220), txt_w, 18)
             detail2_text = "Kualitas bahan premium, tahan lama"

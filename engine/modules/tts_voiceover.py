@@ -1,19 +1,24 @@
 """
 tts_voiceover.py
-Generate natural Indonesian female voiceover using Edge TTS.
+Generate natural Indonesian voiceover using Edge TTS.
 
-Voice: id-ID-GadisNeural (Microsoft Neural TTS - Indonesian female)
+Per-account voice:
+  yt_1 (fashion):   GadisNeural (female, high pitch)
+  yt_2 (gadget):    ArdiNeural  (male, neutral pitch)
+  yt_3 (beauty):    GadisNeural (female, warm pitch)
+  yt_4 (home):      ArdiNeural  (male, low pitch)
+  yt_5 (wellness):  GadisNeural (female, calm pitch)
+  tt_1, fb_1:       GadisNeural (female, default)
 
 Natural speech approach:
-  - edge-tts uses rate + pitch params (NOT SSML — SSML is blocked by Microsoft)
-  - Commas in text = natural pauses (TTS handles this automatically)
+  - edge-tts uses rate + pitch params (NOT SSML)
+  - Commas in text = natural pauses
   - Short sentences with conversational Indonesian
-  - Each scene gets voiceover for full coverage
 
 Audio pipeline:
-  TTS generates MP3 → video generator loads per scene →
-  audio_normalizer normalizes RMS → set VOICEOVER_VOLUME=1.2 →
-  CompositeAudioClip mixes with music (0.40) and SFX (0.35)
+  TTS generates MP3 -> video generator loads per scene ->
+  audio_normalizer normalizes RMS -> VOICEOVER_VOLUME=0.75 ->
+  CompositeAudioClip mixes with music (0.30) and SFX (0.30)
 """
 
 import os
@@ -22,11 +27,22 @@ import json
 import asyncio
 import random
 
-# ═══════════════════════════════════════════════════════════════════
+# ====================================================================
 #  CONFIG
-# ═══════════════════════════════════════════════════════════════════
-VOICE_ID = "id-ID-GadisNeural"
+# ====================================================================
+DEFAULT_VOICE = "id-ID-GadisNeural"
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers')
+
+# Per-account voice: each channel gets a DISTINCT voice
+ACCOUNT_VOICES = {
+    'yt_1': {'voice': 'id-ID-GadisNeural', 'pitch_offset': '+2Hz'},   # fashion: female high
+    'yt_2': {'voice': 'id-ID-ArdiNeural',  'pitch_offset': '+0Hz'},   # gadget: male neutral
+    'yt_3': {'voice': 'id-ID-GadisNeural', 'pitch_offset': '+0Hz'},   # beauty: female warm
+    'yt_4': {'voice': 'id-ID-ArdiNeural',  'pitch_offset': '-1Hz'},   # home: male low
+    'yt_5': {'voice': 'id-ID-GadisNeural', 'pitch_offset': '-1Hz'},   # wellness: female calm
+    'tt_1': {'voice': 'id-ID-GadisNeural', 'pitch_offset': '+1Hz'},   # tiktok
+    'fb_1': {'voice': 'id-ID-ArdiNeural',  'pitch_offset': '+0Hz'},   # facebook
+}
 
 # Per-scene speaking style (rate + pitch via edge-tts native params)
 # NOTE: edge-tts does NOT support SSML. Only rate/pitch/volume params work.
@@ -399,32 +415,37 @@ def generate_voiceover_script(product_info, platform='yt_short', account_id='yt_
 #  TTS ENGINE (edge-tts native params, NO SSML)
 # ═══════════════════════════════════════════════════════════════════
 
-async def _generate_tts_async(text, output_path, rate='-10%', pitch='+0Hz'):
-    """Generate TTS audio using edge-tts native Communicate params.
-    
-    NOTE: edge-tts does NOT support custom SSML (blocked by Microsoft).
-    Natural pauses come from commas and periods in the text itself.
-    """
+async def _generate_tts_async(text, output_path, rate='-10%', pitch='+0Hz', voice_id=None):
+    """Generate TTS audio using edge-tts native Communicate params."""
     import edge_tts
-    communicate = edge_tts.Communicate(text, VOICE_ID, rate=rate, pitch=pitch)
+    voice = voice_id or DEFAULT_VOICE
+    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
     await communicate.save(output_path)
 
 
-def generate_tts(text, output_path, scene_id='feature'):
-    """Generate one TTS MP3 file.
+def generate_tts(text, output_path, scene_id='feature', account_id='yt_1'):
+    """Generate one TTS MP3 file with per-account voice.
     
     Returns True if generated successfully, False if failed.
     """
     try:
-        style = SCENE_STYLES.get(scene_id, {'rate': '-10%', 'pitch': '+0Hz'})
+        style = SCENE_STYLES.get(scene_id, {'rate': '+10%', 'pitch': '+0Hz'})
         rate = style['rate']
-        pitch = style['pitch']
+        
+        # Get per-account voice and pitch
+        acct_voice = ACCOUNT_VOICES.get(account_id, {'voice': DEFAULT_VOICE, 'pitch_offset': '+0Hz'})
+        voice_id = acct_voice['voice']
+        
+        # Combine scene pitch with account pitch offset
+        scene_pitch_hz = int(style['pitch'].replace('Hz', '').replace('+', ''))
+        acct_pitch_hz = int(acct_voice['pitch_offset'].replace('Hz', '').replace('+', ''))
+        final_pitch = f"+{scene_pitch_hz + acct_pitch_hz}Hz" if (scene_pitch_hz + acct_pitch_hz) >= 0 else f"{scene_pitch_hz + acct_pitch_hz}Hz"
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        asyncio.run(_generate_tts_async(text, output_path, rate, pitch))
+        asyncio.run(_generate_tts_async(text, output_path, rate, final_pitch, voice_id=voice_id))
 
         if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
-            print(f"    [TTS] OK: {os.path.basename(output_path)} ({scene_id})")
+            print(f"    [TTS] OK: {os.path.basename(output_path)} ({scene_id}, {voice_id})")
             return True
         else:
             print(f"    [TTS] Empty/small file: {os.path.basename(output_path)}")
@@ -457,7 +478,7 @@ def generate_voiceover_for_product(product_info, produk_id, platform='yt_short',
         if not text or len(text.strip()) < 5:
             continue
         mp3_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
-        if generate_tts(text, mp3_path, scene_id):
+        if generate_tts(text, mp3_path, scene_id, account_id=account_id):
             result[scene_id] = mp3_path
 
     print(f"  [TTS] Done: {len(result)}/{len(scripts)} scenes")

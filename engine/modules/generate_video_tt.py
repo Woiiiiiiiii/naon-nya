@@ -255,7 +255,7 @@ def generate_video_tt(queue_file, output_dir):
                                         64, (255, 255, 255), (*TT_ACCENT, 240), txt_w, 28)
             product_img = render_text_image(f"{nama}\n{harga}", font_bold or font_path,
                                            52, (255, 255, 255), (0, 0, 0, 220), txt_w, 24)
-            feat_text = f"> {desc[:60]}" if desc else "> Fitur terbaik"
+            feat_text = f"{desc[:60]}" if desc else "Fitur terbaik"
             feat_img = render_text_image(feat_text, font_path or "arial.ttf",
                                         44, (255, 255, 255), (40, 167, 69, 230), txt_w, 20)
             cta_img = render_text_image(f" {cta_text}", font_bold or font_path,

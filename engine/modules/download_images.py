@@ -288,7 +288,7 @@ def _try_shopee_cookies(product_name, img_path):
 
 
 def _try_shopee_cdn(image_url, img_path):
-    """Tier 2: Download from Shopee CDN direct URL — SCORE before accepting."""
+    """Tier 2: Download from Shopee CDN — ALWAYS accept (this is our only URL)."""
     if not image_url or image_url == 'nan' or not image_url.startswith('http'):
         return False
     try:
@@ -302,13 +302,7 @@ def _try_shopee_cdn(image_url, img_path):
             resp = requests.get(image_url, timeout=15, headers=headers)
         resp.raise_for_status()
         img = Image.open(BytesIO(resp.content)).convert('RGB')
-        
-        # Score image — reject marketing images with heavy text
         score = _score_image_simplicity(img)
-        if score < 25:
-            print(f"    [SKIP] CDN image too busy (score={score}, need >=25)")
-            return False
-        
         if _save_image(img, img_path):
             tag = 'CDN+Proxy' if (_HAS_PROXY and is_proxy_available()) else 'CDN'
             print(f"    [OK] Shopee {tag} (score={score})")
@@ -360,7 +354,7 @@ def _try_shopee_page_scrape(product_name, img_path):
             except Exception:
                 continue
         
-        if best_img is not None and best_score >= 25:
+        if best_img is not None:
             if _save_image(best_img, img_path):
                 print(f"    [OK] Shopee page scrape (score={best_score})")
                 return True

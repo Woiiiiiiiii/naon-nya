@@ -253,7 +253,7 @@ def generate_video_fb(queue_file, output_dir):
             product_text = f"{nama}\nHarga: {harga}" if harga else nama
             product_img = render_text_image(product_text, font_bold or font_path,
                                            46, (255, 255, 255), (0, 0, 0, 210), txt_w, 20)
-            feat_text = f"> {desc[:90]}" if desc else "> Fitur unggulan produk ini"
+            feat_text = f"{desc[:90]}" if desc else "Fitur unggulan produk ini"
             feat_img = render_text_image(feat_text, font_path or "arial.ttf",
                                         40, (255, 255, 255), (40, 167, 69, 215), txt_w, 18)
             cta_img = render_text_image(f" {cta_text}", font_bold or font_path,
