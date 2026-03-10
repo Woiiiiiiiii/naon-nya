@@ -124,110 +124,275 @@ def harga_ke_kata(harga_str):
 #    - Price in full Indonesian words
 # ═══════════════════════════════════════════════════════════════════
 
-POOL_HOOK = [
-    "Hai, kamu harus lihat yang satu ini.",
-    "Eh, jangan dilewatkan ya.",
-    "Ini dia, yang lagi banyak dicari orang.",
-    "Hai, simak sampai selesai ya.",
-    "Kamu pasti suka yang ini, coba deh lihat.",
-]
+# ═══════════════════════════════════════════════════════════════════
+#  PER-CATEGORY VOICEOVER POOLS
+#  Each YT account has a DIFFERENT category → DIFFERENT themed scripts.
+#  No duplicate phrases across scenes in the same video.
+# ═══════════════════════════════════════════════════════════════════
 
-POOL_FEATURE_TEMPLATE = [
-    "Kualitasnya sudah terjamin ya, banyak yang sudah membuktikan.",
-    "Bahannya bagus, tapi harganya masih terjangkau.",
-    "Cocok untuk dipakai setiap hari, dan tahan lama juga.",
-    "Desainnya sederhana, tapi tetap terlihat berkelas.",
-    "Fiturnya lengkap, dan mudah digunakan siapa saja.",
-]
+CATEGORY_HOOKS = {
+    'fashion': [
+        "Hai, cek gaya terbaru yang satu ini.",
+        "Mau tampil beda? Simak sampai habis ya.",
+        "Ini dia item fashion yang lagi banyak dicari.",
+        "Buat kamu yang suka tampil keren, wajib lihat.",
+        "Pengen upgrade penampilan? Lihat dulu yang ini.",
+    ],
+    'gadget': [
+        "Hai, ada gadget menarik yang perlu kamu tahu.",
+        "Buat kamu yang suka teknologi, ini wajib cek.",
+        "Gadget yang satu ini lagi banyak dibicarakan.",
+        "Mau setup makin keren? Simak dulu ya.",
+        "Ini dia perangkat yang lagi trending.",
+    ],
+    'beauty': [
+        "Hai, ada produk perawatan yang wajib kamu coba.",
+        "Mau kulit makin sehat? Simak yang satu ini.",
+        "Produk kecantikan yang lagi banyak dicari orang.",
+        "Buat kamu yang suka merawat diri, wajib lihat.",
+        "Pengen tampil segar setiap hari? Cek ini dulu.",
+    ],
+    'home': [
+        "Hai, ada solusi rumah tangga yang praktis.",
+        "Mau rumah makin rapi? Lihat yang satu ini.",
+        "Alat rumah tangga yang memang berguna.",
+        "Buat kamu yang suka rumah bersih dan tertata.",
+        "Ini dia peralatan rumah yang lagi diminati.",
+    ],
+    'wellness': [
+        "Hai, ada produk kesehatan yang perlu kamu tahu.",
+        "Mau hidup lebih sehat? Simak sampai habis.",
+        "Produk kebugaran yang lagi banyak diminati.",
+        "Buat kamu yang peduli kesehatan, wajib cek.",
+        "Ini dia alat olahraga yang lagi naik daun.",
+    ],
+}
 
-POOL_PROOF = [
-    "Ratingnya tinggi, dan sudah banyak sekali yang membeli.",
-    "Banyak pembeli yang memberikan ulasan positif.",
-    "Sudah terbukti ya, bukan sekedar klaim saja.",
-    "Ulasan dari para pembeli, memang sangat memuaskan.",
-    "Banyak yang membeli lagi, karena memang puas.",
-]
+CATEGORY_FEATURES = {
+    'fashion': [
+        "Bahannya adem dan nyaman dipakai seharian.",
+        "Kualitas jahitan rapi, tahan lama dipakai.",
+        "Modelnya kekinian, bisa dipadupadankan.",
+        "Tersedia banyak pilihan warna dan ukuran.",
+        "Ringan dan pas di badan, tidak gerah.",
+    ],
+    'gadget': [
+        "Performanya stabil dan baterainya tahan lama.",
+        "Mudah digunakan dan hasilnya memuaskan.",
+        "Koneksinya cepat dan tidak mudah putus.",
+        "Desainnya ringkas dan tidak makan tempat.",
+        "Fiturnya lengkap untuk harga di kelasnya.",
+    ],
+    'beauty': [
+        "Teksturnya ringan dan cepat meresap di kulit.",
+        "Hasilnya terasa dari pemakaian pertama.",
+        "Aman untuk kulit sensitif dan sudah teruji.",
+        "Aromanya lembut dan tidak menyengat.",
+        "Membuat kulit terasa halus dan terhidrasi.",
+    ],
+    'home': [
+        "Mudah dipasang dan tidak butuh alat tambahan.",
+        "Ukurannya pas dan tidak makan banyak tempat.",
+        "Bahannya kuat dan tahan dipakai lama.",
+        "Membantu pekerjaan rumah jadi lebih cepat.",
+        "Desainnya rapi sehingga rumah terlihat bersih.",
+    ],
+    'wellness': [
+        "Nyaman dipakai dan tidak mudah selip.",
+        "Membuat olahraga jadi lebih menyenangkan.",
+        "Bahannya aman dan tidak mengiritasi kulit.",
+        "Ringan dibawa kemana saja, praktis.",
+        "Membantu menjaga kebugaran setiap hari.",
+    ],
+}
 
-POOL_CTA = [
-    "Tertarik? Langsung saja cek di link ya.",
-    "Ayo, langsung cek di link yang ada di bawah.",
-    "Sebelum kehabisan, langsung saja cek ya.",
-    "Link pembelian sudah tersedia di bawah.",
-    "Jangan sampai kelewatan, langsung cek sekarang.",
-]
+CATEGORY_PROOF = {
+    'fashion': [
+        "Ratingnya tinggi di toko dan sudah banyak terjual.",
+        "Banyak pembeli yang memberikan ulasan positif.",
+        "Sudah terbukti kualitasnya dari para pembeli.",
+        "Ulasan dari para pembeli memang memuaskan.",
+        "Banyak yang beli lagi karena memang puas.",
+    ],
+    'gadget': [
+        "Sudah banyak yang pakai dan hasilnya memuaskan.",
+        "Ulasan teknisnya sangat positif dari pembeli.",
+        "Rating di toko menunjukkan kualitas yang konsisten.",
+        "Banyak pengguna yang merekomendasikan produk ini.",
+        "Terbukti handal dan banyak yang repeat order.",
+    ],
+    'beauty': [
+        "Banyak yang merasakan perubahan setelah pemakaian.",
+        "Ulasan di toko menunjukkan hasil yang nyata.",
+        "Sudah terbukti aman dan banyak yang merekomendasikan.",
+        "Rating tinggi menunjukkan kepuasan pelanggan.",
+        "Banyak yang berlangganan karena memang hasilnya bagus.",
+    ],
+    'home': [
+        "Sudah banyak yang pakai dan rumahnya jadi lebih rapi.",
+        "Rating tinggi di toko, banyak yang puas.",
+        "Ulasan pembeli menunjukkan kualitas yang baik.",
+        "Terbukti tahan lama dari pengalaman para pembeli.",
+        "Banyak yang beli untuk hadiah karena memang bagus.",
+    ],
+    'wellness': [
+        "Banyak yang merasakan manfaatnya untuk kesehatan.",
+        "Rating tinggi menunjukkan kepuasan pengguna.",
+        "Sudah terbukti membantu rutinitas kebugaran.",
+        "Ulasan positif dari para pengguna aktif.",
+        "Banyak yang merekomendasikan untuk gaya hidup sehat.",
+    ],
+}
+
+CATEGORY_CTA = {
+    'fashion': [
+        "Tertarik? Langsung cek di link yang tersedia.",
+        "Jangan lewatkan, cek linknya sekarang.",
+        "Sebelum kehabisan ukuranmu, langsung cek ya.",
+        "Link pembelian ada di deskripsi.",
+        "Yuk langsung lihat di toko, link di bawah.",
+    ],
+    'gadget': [
+        "Tertarik? Langsung cek spesifikasinya di link.",
+        "Jangan lewatkan, cek harganya sekarang.",
+        "Link pembelian sudah tersedia di bawah.",
+        "Langsung cek di toko, link ada di deskripsi.",
+        "Sebelum harga naik, langsung cek ya.",
+    ],
+    'beauty': [
+        "Tertarik mencoba? Cek linknya sekarang.",
+        "Jangan lewatkan, langsung cek di deskripsi.",
+        "Link pembelian ada di bawah ya.",
+        "Yuk rawat kulitmu, cek linknya sekarang.",
+        "Langsung cek di toko, link tersedia di bawah.",
+    ],
+    'home': [
+        "Tertarik? Langsung cek di link ya.",
+        "Yuk bikin rumah makin rapi, cek linknya.",
+        "Link pembelian ada di deskripsi.",
+        "Sebelum kehabisan, langsung cek sekarang.",
+        "Langsung cek di toko, link di bawah.",
+    ],
+    'wellness': [
+        "Tertarik memulai hidup sehat? Cek linknya.",
+        "Jangan tunda, langsung cek di deskripsi.",
+        "Link pembelian sudah tersedia di bawah.",
+        "Yuk mulai sekarang, cek linknya.",
+        "Langsung cek di toko, link ada di bawah.",
+    ],
+}
 
 
-def generate_voiceover_script(product_info, platform='yt_short'):
-    """Generate voiceover scripts including product name, function, and price."""
+def _pick_unique(pool, used_set, rng):
+    """Pick item from pool that hasn't been used yet. Prevents repetition."""
+    available = [p for p in pool if p not in used_set]
+    if not available:
+        available = pool  # fallback: all used, start fresh
+    picked = rng.choice(available)
+    used_set.add(picked)
+    return picked
+
+
+def generate_voiceover_script(product_info, platform='yt_short', account_id='yt_1'):
+    """Generate per-account themed voiceover scripts. No duplicate phrases."""
     nama = product_info.get('nama', '')
     harga = product_info.get('harga', '')
     desc = product_info.get('deskripsi_singkat', '')
     
+    # Determine category from account
+    cat = 'home'  # default
+    cat_map = {
+        'yt_1': 'fashion', 'yt_2': 'gadget', 'yt_3': 'beauty',
+        'yt_4': 'home', 'yt_5': 'wellness',
+        'tt_1': 'beauty', 'fb_1': 'home',
+    }
+    cat = cat_map.get(account_id, 'home')
+    
+    # Seed RNG per product+account so same product gets different script per account
+    seed_str = f"{nama}_{account_id}_{platform}"
+    rng = random.Random(hash(seed_str))
+    
+    # Track used phrases to prevent repetition within this video
+    used = set()
+    
     # Convert price to Indonesian words
     harga_kata = harga_ke_kata(harga)
     
-    # Hero text: mention product name
+    # HOOK (category-themed)
+    hooks = CATEGORY_HOOKS.get(cat, CATEGORY_HOOKS['home'])
+    hook_text = _pick_unique(hooks, used, rng)
+    
+    # HERO: mention product name
     if nama:
-        hero_options = [
-            f"Ini dia {nama}, yang lagi jadi favorit banyak orang.",
-            f"{nama}, produk yang memang sudah terbukti bagus.",
-            f"Kenalkan, {nama}, cocok banget untuk kamu.",
+        hero_templates = [
+            f"Ini dia {nama}, yang lagi diminati banyak orang.",
+            f"{nama}, produk yang sudah terbukti bagus.",
+            f"Kenalkan, {nama}, pas untuk kebutuhan kamu.",
         ]
-        hero_text = random.choice(hero_options)
+        hero_text = rng.choice(hero_templates)
     else:
-        hero_text = "Produk yang satu ini, memang lagi jadi favorit banyak orang."
+        hero_text = "Produk yang satu ini, memang lagi diminati banyak orang."
     
-    # Feature text: mention function/description
+    # FEATURE: category-themed + product description
+    features = CATEGORY_FEATURES.get(cat, CATEGORY_FEATURES['home'])
     if desc:
-        # Use first 60 chars of description
         short_desc = desc[:60].rstrip('.')
-        feat_text = f"{short_desc}, cocok banget untuk kebutuhan kamu."
+        feat_text = f"{short_desc}, pas untuk kebutuhan sehari-hari."
     else:
-        feat_text = random.choice(POOL_FEATURE_TEMPLATE)
+        feat_text = _pick_unique(features, used, rng)
     
-    # Price mention in proof scene
+    # PROOF: mention price in Indonesian words
+    proofs = CATEGORY_PROOF.get(cat, CATEGORY_PROOF['home'])
     if harga_kata:
-        price_options = [
-            f"Dengan harga hanya {harga_kata}, kualitasnya memang tidak mengecewakan.",
+        price_templates = [
+            f"Dengan harga hanya {harga_kata}, kualitasnya tidak mengecewakan.",
             f"Harganya cuma {harga_kata}, dan sudah banyak yang puas.",
-            f"Cuma {harga_kata} saja, tapi kualitasnya luar biasa.",
+            f"Cuma {harga_kata} saja, tapi kualitasnya sangat baik.",
         ]
-        proof_text = random.choice(price_options)
+        proof_text = rng.choice(price_templates)
     else:
-        proof_text = random.choice(POOL_PROOF)
+        proof_text = _pick_unique(proofs, used, rng)
+    
+    # CTA (category-themed)
+    ctas = CATEGORY_CTA.get(cat, CATEGORY_CTA['home'])
+    cta_text = _pick_unique(ctas, used, rng)
+    
+    # Extra proof for yt_long
+    extra_proof = _pick_unique(proofs, used, rng)
 
     if platform == 'yt_short':
         return {
-            'hook': random.choice(POOL_HOOK),
+            'hook': hook_text,
             'hero': hero_text,
             'feature': feat_text,
             'proof': proof_text,
-            'cta': random.choice(POOL_CTA),
+            'cta': cta_text,
         }
     elif platform == 'yt_long':
         return {
-            'hook': random.choice(POOL_HOOK),
+            'hook': hook_text,
             'hero': hero_text,
             'detail1': feat_text,
             'detail2': proof_text,
-            'detail3': random.choice(POOL_PROOF),
-            'cta': random.choice(POOL_CTA),
+            'detail3': extra_proof,
+            'cta': cta_text,
         }
     elif platform == 'tt':
         return {
-            'hook': random.choice(POOL_HOOK),
+            'hook': hook_text,
             'product': hero_text,
             'feature': feat_text,
-            'cta': random.choice(POOL_CTA),
+            'cta': cta_text,
         }
     else:  # fb
         return {
-            'hook': random.choice(POOL_HOOK),
+            'hook': hook_text,
             'product': hero_text,
             'feature': feat_text,
             'proof': proof_text,
-            'cta': random.choice(POOL_CTA),
+            'cta': cta_text,
         }
+
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -269,7 +434,7 @@ def generate_tts(text, output_path, scene_id='feature'):
         return False
 
 
-def generate_voiceover_for_product(product_info, produk_id, platform='yt_short', output_dir=None):
+def generate_voiceover_for_product(product_info, produk_id, platform='yt_short', output_dir=None, account_id='yt_1'):
     """Generate voiceover MP3s for a product (one per scene)."""
     if output_dir is None:
         output_dir = OUTPUT_DIR
@@ -284,9 +449,9 @@ def generate_voiceover_for_product(product_info, produk_id, platform='yt_short',
             except Exception:
                 pass
 
-    scripts = generate_voiceover_script(product_info, platform)
+    scripts = generate_voiceover_script(product_info, platform, account_id=account_id)
     result = {}
-    print(f"  [TTS] {platform} for {produk_id}...")
+    print(f"  [TTS] {platform}/{account_id} for {produk_id}...")
 
     for scene_id, text in scripts.items():
         if not text or len(text.strip()) < 5:
@@ -316,8 +481,9 @@ def generate_all_voiceovers(queue_file, platforms=None):
     print(f"[TTS] {len(jobs)} products x {len(platforms)} platforms...")
     for job in jobs:
         produk_id = job.get('produk_id', '')
+        account_id = job.get('account_id', 'yt_1')
         for platform in platforms:
-            generate_voiceover_for_product(job, produk_id, platform)
+            generate_voiceover_for_product(job, produk_id, platform, account_id=account_id)
     print(f"[TTS] All done")
 
 

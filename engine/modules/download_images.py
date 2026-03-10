@@ -288,7 +288,7 @@ def _try_shopee_cookies(product_name, img_path):
 
 
 def _try_shopee_cdn(image_url, img_path):
-    """Tier 2: Download from Shopee CDN direct URL (via proxy if available)."""
+    """Tier 2: Download from Shopee CDN direct URL — SCORE before accepting."""
     if not image_url or image_url == 'nan' or not image_url.startswith('http'):
         return False
     try:
@@ -302,9 +302,16 @@ def _try_shopee_cdn(image_url, img_path):
             resp = requests.get(image_url, timeout=15, headers=headers)
         resp.raise_for_status()
         img = Image.open(BytesIO(resp.content)).convert('RGB')
+        
+        # Score image — reject marketing images with heavy text
+        score = _score_image_simplicity(img)
+        if score < 25:
+            print(f"    [SKIP] CDN image too busy (score={score}, need >=25)")
+            return False
+        
         if _save_image(img, img_path):
             tag = 'CDN+Proxy' if (_HAS_PROXY and is_proxy_available()) else 'CDN'
-            print(f"    [OK] Shopee {tag}")
+            print(f"    [OK] Shopee {tag} (score={score})")
             return True
         print(f"    [WARN] CDN image too small")
         return False
@@ -314,7 +321,7 @@ def _try_shopee_cdn(image_url, img_path):
 
 
 def _try_shopee_page_scrape(product_name, img_path):
-    """Tier 1.5: Scrape Shopee search page for product image hashes."""
+    """Tier 1.5: Scrape Shopee search page — download ALL, pick SIMPLEST."""
     try:
         query = product_name.replace(' ', '+')
         url = f"https://shopee.co.id/search?keyword={query}"
@@ -334,8 +341,10 @@ def _try_shopee_page_scrape(product_name, img_path):
         if not img_hashes:
             return False
         
-        # Try downloading from Shopee CDN
-        for img_hash in img_hashes[:5]:
+        # Download ALL candidates, score each, pick BEST
+        best_img = None
+        best_score = -999
+        for img_hash in img_hashes[:8]:
             cdn_url = f"https://down-id.img.susercontent.com/file/{img_hash}"
             try:
                 img_resp = requests.get(cdn_url, timeout=10, headers={
@@ -344,11 +353,17 @@ def _try_shopee_page_scrape(product_name, img_path):
                 })
                 if img_resp.status_code == 200 and len(img_resp.content) > 5000:
                     img = Image.open(BytesIO(img_resp.content)).convert('RGB')
-                    if _save_image(img, img_path):
-                        print(f"    [OK] Shopee page scrape")
-                        return True
+                    score = _score_image_simplicity(img)
+                    if score > best_score:
+                        best_score = score
+                        best_img = img
             except Exception:
                 continue
+        
+        if best_img is not None and best_score >= 25:
+            if _save_image(best_img, img_path):
+                print(f"    [OK] Shopee page scrape (score={best_score})")
+                return True
         return False
     except Exception as e:
         print(f"    [WARN] Page scrape failed: {e}")
