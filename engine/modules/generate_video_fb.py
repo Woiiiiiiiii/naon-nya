@@ -381,14 +381,21 @@ def generate_video_fb(queue_file, output_dir):
                     except Exception:
                         pass
 
-            # === VOICEOVER: covers every scene (professional narration) ===
+            # === VOICEOVER: clip each VO to fit scene gap ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'fb')
-            scene_starts = {'hook': 1.0, 'product': 6.0, 'feature': 16.0, 'proof': 31.0, 'cta': 46.0}
-            for scene_id, start_time in scene_starts.items():
+            scene_starts_list = [('hook', 1.0), ('product', 6.0), ('feature', 16.0), ('proof', 31.0), ('cta', 46.0)]
+            for idx, (scene_id, start_time) in enumerate(scene_starts_list):
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:
                     try:
                         vo = AudioFileClip(vo_path)
+                        # Clip VO to prevent overlap
+                        if idx + 1 < len(scene_starts_list):
+                            max_dur = scene_starts_list[idx + 1][1] - start_time - 0.3
+                        else:
+                            max_dur = total_dur - start_time - 0.2
+                        if max_dur > 0.5 and vo.duration > max_dur:
+                            vo = vo.subclipped(0, max_dur)
                         from engine.modules.audio_normalizer import normalize_audio_clip, VOICEOVER_VOLUME
                         vo = normalize_audio_clip(vo)
                         vo = vo.with_effects([afx.MultiplyVolume(VOICEOVER_VOLUME)])

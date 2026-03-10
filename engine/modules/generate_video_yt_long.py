@@ -486,16 +486,22 @@ def generate_long(queue_file, output_dir):
                 except Exception as e:
                     print(f"  [WARN] Audio failed: {e}")
 
-            # === VOICEOVER: per-scene TTS ===
-            # Re-build audio with voiceover if available
+            # === VOICEOVER: per-scene TTS (clip to scene gap) ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'yt_long')
-            vo_scenes = {s['id']: s['s'] + 0.5 for s in scenes}
+            vo_scenes_list = [(s['id'], s['s'] + 0.5) for s in scenes]
             vo_found = False
-            for scene_id, start_time in vo_scenes.items():
+            for idx, (scene_id, start_time) in enumerate(vo_scenes_list):
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:
                     try:
                         vo = AudioFileClip(vo_path)
+                        # Clip VO so it doesn't overlap with next scene
+                        if idx + 1 < len(vo_scenes_list):
+                            max_dur = vo_scenes_list[idx + 1][1] - start_time - 0.3
+                        else:
+                            max_dur = total_dur - start_time - 0.2
+                        if max_dur > 0.5 and vo.duration > max_dur:
+                            vo = vo.subclipped(0, max_dur)
                         from engine.modules.audio_normalizer import normalize_audio_clip, VOICEOVER_VOLUME
                         vo = normalize_audio_clip(vo)
                         vo = vo.with_effects([afx.MultiplyVolume(VOICEOVER_VOLUME)])

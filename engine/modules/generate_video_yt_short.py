@@ -487,15 +487,21 @@ def generate_shorts(queue_file, output_dir):
                     except Exception:
                         pass
 
-            # === VOICEOVER: covers every scene (professional narration) ===
+            # === VOICEOVER: covers every scene (clip to scene gap) ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'yt_short')
-            scene_starts = {'hook': 0.5, 'hero': 4.0, 'feature': 13.0, 'proof': 31.0, 'cta': 41.0}
-            for scene_id, start_time in scene_starts.items():
+            scene_starts_list = [('hook', 0.5), ('hero', 4.0), ('feature', 13.0), ('proof', 31.0), ('cta', 41.0)]
+            for idx, (scene_id, start_time) in enumerate(scene_starts_list):
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:
                     try:
                         vo = AudioFileClip(vo_path)
-                        # Voiceover is loudest (1.0 volume via normalizer)
+                        # Clip VO so it doesn't overlap with next scene
+                        if idx + 1 < len(scene_starts_list):
+                            max_dur = scene_starts_list[idx + 1][1] - start_time - 0.3
+                        else:
+                            max_dur = total_dur - start_time - 0.2
+                        if max_dur > 0.5 and vo.duration > max_dur:
+                            vo = vo.subclipped(0, max_dur)
                         from engine.modules.audio_normalizer import normalize_audio_clip, VOICEOVER_VOLUME
                         vo = normalize_audio_clip(vo)
                         vo = vo.with_effects([afx.MultiplyVolume(VOICEOVER_VOLUME)])

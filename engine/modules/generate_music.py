@@ -106,8 +106,10 @@ def _select_music_from_library(category, produk_id, account_id):
     api_files = [f for f in files if '_synth_' not in os.path.basename(f)]
     synth_files = [f for f in files if '_synth_' in os.path.basename(f)]
 
-    # Use deterministic-but-varied selection based on product+account
-    seed = int(hashlib.md5(f"{produk_id}_{account_id}".encode()).hexdigest()[:8], 16)
+    # Use deterministic-but-varied selection: include DATE so different track each day
+    import datetime
+    today = datetime.datetime.now().strftime('%Y%m%d')
+    seed = int(hashlib.md5(f"{produk_id}_{account_id}_{today}".encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
 
     if api_files:

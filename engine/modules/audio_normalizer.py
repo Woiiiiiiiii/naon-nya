@@ -18,8 +18,8 @@ from io import BytesIO
 # ═══════════════════════════════════════════════════════════════════
 #  STANDARD VOLUME LEVELS (consistent across ALL platforms)
 # ═══════════════════════════════════════════════════════════════════
-MUSIC_VOLUME = 0.30      # Background music (user-set: fixed 30%)
-SFX_VOLUME = 0.30        # Sound effects (match music level)
+MUSIC_VOLUME = 0.40      # Background music (audible atmosphere)
+SFX_VOLUME = 0.30        # Sound effects
 VOICEOVER_VOLUME = 0.75  # Voiceover (clear, balanced with music)
 
 # Target RMS loudness (linear scale, ~-18 dBFS)
