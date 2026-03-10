@@ -30,17 +30,17 @@ OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers')
 
 # Per-scene speaking style (rate + pitch via edge-tts native params)
 # NOTE: edge-tts does NOT support SSML. Only rate/pitch/volume params work.
-# Rates slightly POSITIVE = natural conversational pace, luwes, tidak lambat
+# Rates POSITIVE = cepat natural, luwes, tidak lambat
 SCENE_STYLES = {
-    'hook':    {'rate': '+8%',  'pitch': '+3Hz'},    # Energetic, menarik perhatian
-    'hero':    {'rate': '+3%',  'pitch': '+1Hz'},    # Normal, hangat
-    'feature': {'rate': '+5%',  'pitch': '+1Hz'},    # Natural, informatif
-    'proof':   {'rate': '+3%',  'pitch': '+0Hz'},    # Tenang tapi tetap natural
-    'cta':     {'rate': '+8%',  'pitch': '+2Hz'},    # Energetic, mengajak
-    'product': {'rate': '+5%',  'pitch': '+1Hz'},    # Normal
-    'detail1': {'rate': '+5%',  'pitch': '+1Hz'},
-    'detail2': {'rate': '+3%',  'pitch': '+1Hz'},
-    'detail3': {'rate': '+5%',  'pitch': '+0Hz'},
+    'hook':    {'rate': '+15%', 'pitch': '+3Hz'},    # Cepat, menarik perhatian
+    'hero':    {'rate': '+10%', 'pitch': '+1Hz'},    # Natural cepat
+    'feature': {'rate': '+12%', 'pitch': '+1Hz'},    # Informatif cepat
+    'proof':   {'rate': '+10%', 'pitch': '+0Hz'},    # Tenang tapi cepat
+    'cta':     {'rate': '+15%', 'pitch': '+2Hz'},    # Energetic, cepat
+    'product': {'rate': '+12%', 'pitch': '+1Hz'},    # Normal cepat
+    'detail1': {'rate': '+12%', 'pitch': '+1Hz'},
+    'detail2': {'rate': '+10%', 'pitch': '+1Hz'},
+    'detail3': {'rate': '+12%', 'pitch': '+0Hz'},
 }
 
 

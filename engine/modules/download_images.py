@@ -98,6 +98,7 @@ def _score_image_simplicity(img):
     - Text overlays (seller promotions, watermarks)
     - Multiple product variants in one image
     - Busy decorated backgrounds
+    - Shopee promo bands (top/bottom colored strips)
     """
     import numpy as np
     data = np.array(img)
@@ -119,12 +120,12 @@ def _score_image_simplicity(img):
         elif std < 25:     # Fairly uniform
             score += 5
         elif std > 50:     # Busy border = likely has text/graphics
-            score -= 10
+            score -= 20
     
     # 2. White/light percentage — more white = cleaner product photo
     brightness = data.mean(axis=2)
     white_pct = (brightness > 230).sum() / (h * w)
-    score += white_pct * 40   # Up to 40 points for all-white bg
+    score += white_pct * 50   # Up to 50 points for all-white bg
     
     # 3. TEXT DETECTION (AGGRESSIVE) — detect high-frequency edges
     gray = brightness.astype(np.uint8)
@@ -134,13 +135,13 @@ def _score_image_simplicity(img):
     edge_ratio = edge_density / (h * w)
     
     if edge_ratio > 0.20:
-        score -= 50  # EXTREMELY busy (guaranteed text/graphics)
+        score -= 60  # EXTREMELY busy (guaranteed text/graphics)
     elif edge_ratio > 0.12:
-        score -= 35  # Very likely has text overlays
+        score -= 40  # Very likely has text overlays
     elif edge_ratio > 0.08:
-        score -= 15  # Some text
+        score -= 20  # Some text
     elif edge_ratio < 0.03:
-        score += 15  # Very clean
+        score += 20  # Very clean
     
     # 4. Color variety in borders — colorful borders = promo text/graphics
     for strip in [top_strip, bot_strip]:
@@ -148,12 +149,25 @@ def _score_image_simplicity(img):
         if color_std.mean() > 40:
             score -= 15  # Colorful border = promo graphics
     
-    # 5. Center region should be dominant (product in center)
+    # 5. Shopee promo band detection — top/bottom 20% of image
+    top_band = data[:h // 5, :, :]
+    bot_band = data[-h // 5:, :, :]
+    for band in [top_band, bot_band]:
+        band_edge_h = np.abs(band[1:, :, :].astype(int) - band[:-1, :, :].astype(int))
+        if band_edge_h.mean() > 15:
+            score -= 20  # Promo band with text/graphics
+    
+    # 6. Center region should be dominant and CLEANER than edges
     center_h = h // 3
     center_w = w // 3
     center = data[center_h:2*center_h, center_w:2*center_w, :]
     center_brightness = center.mean()
-    # Center should not be too dark or too bright
+    center_gray = center.mean(axis=2).astype(np.uint8)
+    center_edge_h = np.abs(center_gray[1:, :].astype(int) - center_gray[:-1, :].astype(int))
+    center_edge_ratio = (center_edge_h > 40).sum() / max(center_gray.size, 1)
+    
+    if center_edge_ratio < edge_ratio * 0.5:
+        score += 15  # Center is much cleaner than overall = product-focused
     if 60 < center_brightness < 220:
         score += 10  # Good center content
     
