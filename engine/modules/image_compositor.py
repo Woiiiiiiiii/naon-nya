@@ -1,4 +1,4 @@
-﻿"""
+"""
 image_compositor.py
 Isolates product from original photo, composites onto new backgrounds.
 
@@ -70,40 +70,53 @@ BADGE_TEXTS = [
 
 
 def composite_product_fullframe(img_path, placement, accent_color,
-                                badge_text=None, channel_name=None):
-    """Fill entire 9:16 frame with product image — COVER mode.
+                                badge_text=None, channel_name=None,
+                                category='home'):
+    """Product on premium gradient background — CONTAIN mode (75% of frame).
     
-    Product image fills THE ENTIRE SCREEN:
-    1. Scale image to COVER both width AND height (no empty space)
-    2. Center-crop excess (Shopee images have product centered,
-       so cropping edges removes only white/empty space)
-    3. Result: product fills entire 1080x1920 screen
+    Product is scaled to fit 75% of the frame, centered on a premium gradient
+    background with glow and vignette effects. This ensures the product is
+    always fully visible with room for text overlays.
     """
+    from engine.modules.premium_background import create_premium_background, add_product_shadow
+
     W, H = OUTPUT_SIZE
 
     try:
-        img = Image.open(img_path).convert('RGB')
+        img = Image.open(img_path)
+        if img.mode == 'RGBA':
+            is_transparent = True
+        else:
+            img = img.convert('RGB')
+            is_transparent = False
     except Exception:
-        img = Image.new('RGB', (W, W), (40, 40, 60))
+        return Image.new('RGB', (W, H), (40, 40, 60))
 
     iw, ih = img.size
     if iw == 0 or ih == 0:
         return Image.new('RGB', (W, H), (40, 40, 60))
 
-    # === COVER: scale to fill BOTH width AND height ===
-    scale = max(W / iw, H / ih)
+    # === CONTAIN: fit product in 75% of frame ===
+    scale = min(W / iw, H / ih) * 0.75
     new_w = int(iw * scale)
     new_h = int(ih * scale)
     img_scaled = img.resize((new_w, new_h), Image.LANCZOS)
 
-    # === CENTER CROP with subtle vertical shift per variation ===
+    # Premium gradient background
     vy_shift = placement.get('vy', 0.0)
-    crop_x = (new_w - W) // 2
-    crop_y = (new_h - H) // 2 + int(H * vy_shift)
-    crop_y = max(0, min(crop_y, new_h - H))
-    crop_x = max(0, min(crop_x, new_w - W))
-    
-    canvas = img_scaled.crop((crop_x, crop_y, crop_x + W, crop_y + H))
+    canvas = create_premium_background(W, H, category=category, variant=0)
+    paste_x = (W - new_w) // 2
+    paste_y = (H - new_h) // 2 + int(H * vy_shift)
+    paste_y = max(0, min(paste_y, H - new_h))
+
+    # Shadow
+    add_product_shadow(canvas, img_scaled, paste_x, paste_y)
+
+    # Paste product
+    if is_transparent:
+        canvas.paste(img_scaled, (paste_x, paste_y), img_scaled.split()[3])
+    else:
+        canvas.paste(img_scaled, (paste_x, paste_y))
 
     # Add badge
     canvas_rgba = canvas.convert('RGBA')
@@ -185,7 +198,8 @@ def generate_variations(product_img_path, category, num_variations=5,
 
         composite = composite_product_fullframe(
             product_img_path, placement, accent,
-            badge_text=badge, channel_name=channel_name
+            badge_text=badge, channel_name=channel_name,
+            category=category
         )
 
         # Save — MUST match filename pattern generators expect!

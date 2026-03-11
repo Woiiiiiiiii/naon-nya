@@ -80,7 +80,7 @@ def _load_composites(produk_id, category='home', count=4):
 
 def _generate_fallback(produk_id, category, count=4):
     """Product on PREMIUM TikTok gradient (bold vibrant + glow + shadow)."""
-    from engine.modules.premium_background import create_premium_background, add_product_shadow, add_product_reflection
+    from engine.modules.premium_background import create_premium_background, add_product_shadow
     composites = []
 
     img_path = None
@@ -129,8 +129,6 @@ def _generate_fallback(produk_id, category, count=4):
             canvas.paste(img_scaled, (paste_x, paste_y), img_scaled.split()[3])
         else:
             canvas.paste(img_scaled, (paste_x, paste_y))
-        # Mirror reflection below product
-        add_product_reflection(canvas, img_scaled, paste_x, paste_y, is_transparent)
         composites.append(np.array(canvas))
 
     return composites
@@ -313,7 +311,7 @@ def generate_video_tt(queue_file, output_dir):
                                                ((W - title_label.width) // 2, title_y))
 
                 if harga:
-                    price_label = create_simple_price(f"Rp {harga}", font_bold or font_path or "arial.ttf",
+                    price_label = create_simple_price(harga, font_bold or font_path or "arial.ttf",
                                                       52, TT_ACCENT)
                     price_y = title_y + title_label.height + 10
                     frame = paste_overlay_on_frame(frame, price_label,
@@ -388,7 +386,7 @@ def generate_video_tt(queue_file, output_dir):
 
             # === VOICEOVER: clip each VO to fit scene gap ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'tt')
-            scene_starts_list = [('hook', 0.3), ('product', 3.0), ('feature', 10.5), ('cta', 21.0)]
+            scene_starts_list = [('hook', 0.0), ('product', 2.5), ('feature', 10.5), ('cta', 21.0)]
             for idx, (scene_id, start_time) in enumerate(scene_starts_list):
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:
