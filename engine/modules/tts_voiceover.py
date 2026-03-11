@@ -360,36 +360,42 @@ def generate_voiceover_script(product_info, platform='yt_short', account_id='yt_
     # Convert price to Indonesian words
     harga_kata = harga_ke_kata(harga)
     
-    # ALL scripts MUST mention product name — no generic category text
+    # ALL scripts mention product name AT MOST ONCE (in hero only)
     nama_pendek = _clean_vo_text(nama[:40].strip()) if nama else 'produk ini'
     desc = _clean_vo_text(desc) if desc else ''
     
-    # HOOK: casual/question style (NEVER starts with "Ini dia" or "Kenalkan")
-    if nama:
-        hook_templates = [
-            f"Hai, kali ini kita bahas {nama_pendek}.",
-            f"Mau tahu tentang {nama_pendek}? Simak sampai habis.",
-            f"Lagi cari {nama_pendek}? Pas banget.",
-            f"Pengen tahu soal {nama_pendek}? Yuk simak.",
-            f"Cek dulu {nama_pendek}, yang lagi banyak dicari.",
-        ]
-        hook_text = rng.choice(hook_templates)
-    else:
-        hooks = CATEGORY_HOOKS.get(cat, CATEGORY_HOOKS['home'])
-        hook_text = _pick_unique(hooks, used, rng)
+    # HOOK: attention-grabbing openers WITHOUT product name
+    # (name is ONLY introduced in hero scene — no repetition)
+    hook_templates = [
+        "Stop scroll dulu! Kamu harus lihat ini.",
+        "Eh, tunggu sebentar, ada yang menarik banget nih.",
+        "Banyak yang belum tahu soal ini, padahal bagus banget.",
+        "Serius, ini tuh game changer banget.",
+        "Kamu pasti butuh ini, tapi belum tahu aja.",
+        "Wajib simak sampai habis, biar nggak nyesel.",
+        "Lagi viral dan banyak yang cari, penasaran kan?",
+        "Satu produk ini bikin hidup lebih gampang.",
+        "Jangan sampai ketinggalan yang satu ini.",
+        "Ini sih rahasia yang jarang orang kasih tahu.",
+        "Review jujur, tanpa basa basi, langsung gas.",
+        "Udah dicoba ribuan orang, hasilnya luar biasa.",
+    ]
+    hooks = CATEGORY_HOOKS.get(cat, CATEGORY_HOOKS['home'])
+    all_hooks = hook_templates + list(hooks)
+    hook_text = _pick_unique(all_hooks, used, rng)
     
-    # HERO: introduction style (NEVER starts with "Hai" or "Mau" or "Lagi")
+    # HERO: introduce product name HERE (only place in entire script)
     if nama:
         hero_templates = [
-            f"Kenalkan, {nama_pendek}, pas untuk kebutuhan kamu.",
-            f"Namanya {nama_pendek}, dan sudah banyak yang pakai.",
-            f"Jadi ini {nama_pendek}, yang lagi diminati banyak orang.",
-            f"Produk ini adalah {nama_pendek}, yang terbukti bagus.",
-            f"Nah, {nama_pendek} ini memang lagi populer.",
+            f"Kenalkan, ini {nama_pendek}.",
+            f"Namanya {nama_pendek}, dan kualitasnya terbukti.",
+            f"Nah, ini dia {nama_pendek}.",
+            f"Produk yang dimaksud adalah {nama_pendek}.",
+            f"Yap, {nama_pendek}, yang lagi banyak diminati.",
         ]
         hero_text = rng.choice(hero_templates)
     else:
-        hero_text = "Produk yang satu ini, memang lagi diminati banyak orang."
+        hero_text = "Produk yang satu ini memang lagi diminati banyak orang."
     
     # FEATURE: describe product WITHOUT repeating name (already introduced in hook+hero)
     if desc:

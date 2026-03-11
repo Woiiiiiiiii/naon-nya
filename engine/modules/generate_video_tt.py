@@ -306,7 +306,7 @@ def generate_video_tt(queue_file, output_dir):
                     f" {nama} ", font_bold or font_path or "arial.ttf",
                     TT_ACCENT, t, 1.0, font_size=48
                 )
-                title_y = 70
+                title_y = 130
                 frame = paste_overlay_on_frame(frame, title_label,
                                                ((W - title_label.width) // 2, title_y))
 
@@ -318,7 +318,7 @@ def generate_video_tt(queue_file, output_dir):
                                                    ((W - price_label.width) // 2, price_y))
 
                 # === BOTTOM ZONE ===
-                BOTTOM_Y = 1460
+                BOTTOM_Y = 1580
 
                 if scene_id == 'hook' and scene_t > 0.2:
                     ty = text_slide_up(hook_img, H, BOTTOM_Y, scene_t - 0.2, 0.25)
