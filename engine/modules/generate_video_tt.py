@@ -235,10 +235,10 @@ def generate_video_tt(queue_file, output_dir):
 
         total_dur = target_dur
         scenes = [
-            {'id': 'hook',    's': 0,  'e': 2},
-            {'id': 'product', 's': 2,  'e': 10},
-            {'id': 'feature', 's': 10, 'e': 20},
-            {'id': 'cta',     's': 20, 'e': total_dur},
+            {'id': 'hook',    's': 0,    'e': 3.5},
+            {'id': 'product', 's': 3.5,  'e': 10},
+            {'id': 'feature', 's': 10,   'e': 20},
+            {'id': 'cta',     's': 20,   'e': total_dur},
         ]
 
         kb_dirs = ['zoom_in', 'pan_left', 'pan_right', 'zoom_out']
@@ -380,7 +380,7 @@ def generate_video_tt(queue_file, output_dir):
 
             # === VOICEOVER: clip each VO to fit scene gap ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'tt')
-            scene_starts_list = [('hook', 0.0), ('product', 2.5), ('feature', 10.5), ('cta', 21.0)]
+            scene_starts_list = [('hook', 0.0), ('product', 3.5), ('feature', 10.5), ('cta', 21.0)]
             for idx, (scene_id, start_time) in enumerate(scene_starts_list):
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:
