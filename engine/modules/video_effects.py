@@ -237,27 +237,50 @@ def render_text_image(text, font_path, font_size, text_color, bg_color,
         # Fallback â€” original plain style
         d.rounded_rectangle([0, 0, iw, ih], radius=radius, fill=bg_color)
 
-    # === Draw text â€” centered using midpoint approach ===
-    cy = (ih - th) // 2  # Start Y for vertical centering
-    center_x = iw // 2   # Horizontal center of pill
+    # === Draw text - PERFECTLY centered using bbox offsets ===
+    # textbbox(0,0) returns (x0, y0, x2, y2) where x0/y0 are glyph offsets
+    # We must account for these to truly center rendered pixels in the pill
+
+    line_bboxes = []
+    for l in lines:
+        bb = dummy.textbbox((0, 0), l, font=font)
+        line_bboxes.append(bb)
+
+    # Recompute total height using actual bbox heights
+    total_text_h = 0
+    for idx_b, bb in enumerate(line_bboxes):
+        total_text_h += bb[3] - bb[1]
+        if idx_b < len(line_bboxes) - 1:
+            total_text_h += spacing
+
+    cy = (ih - total_text_h) // 2
+    center_x = iw // 2
 
     for i, line in enumerate(lines):
-        draw_x = center_x - line_widths[i] // 2  # Manual center: midpoint - half width
+        bb = line_bboxes[i]
+        text_w = bb[2] - bb[0]
+        text_h = bb[3] - bb[1]
+        x_off = bb[0]  # left-side bearing
+        y_off = bb[1]  # top bearing
+
+        draw_x = center_x - text_w // 2 - x_off
+        draw_y = cy - y_off
 
         # Text outline (dark border for readability)
         outline_color = (0, 0, 0, 200)
         for ox, oy in [(-2,-2),(2,-2),(-2,2),(2,2),(-1,0),(1,0),(0,-1),(0,1)]:
-            d.text((draw_x + ox, cy + oy), line, fill=outline_color, font=font)
+            d.text((draw_x + ox, draw_y + oy), line, fill=outline_color, font=font)
 
         # Glow for glow style
         if style == 'glow':
             glow_color = (br, bg_g, bb_c, 120)
             for ox, oy in [(-3,-3),(3,-3),(-3,3),(3,3)]:
-                d.text((draw_x + ox, cy + oy), line, fill=glow_color, font=font)
+                d.text((draw_x + ox, draw_y + oy), line, fill=glow_color, font=font)
 
         # Main text
-        d.text((draw_x, cy), line, fill=text_color, font=font)
-        cy += line_heights[i] + spacing
+        d.text((draw_x, draw_y), line, fill=text_color, font=font)
+        cy += text_h + spacing
+
 
     return img
 
