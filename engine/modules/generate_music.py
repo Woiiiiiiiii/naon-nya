@@ -108,19 +108,28 @@ def _select_music_from_library(category, produk_id, account_id):
     api_files = [f for f in files if '_synth_' not in os.path.basename(f)]
     synth_files = [f for f in files if '_synth_' in os.path.basename(f)]
 
-    # Use deterministic-but-varied selection: include DATE so different track each day
+    # Use TIMESTAMP-based seed so each generation run picks DIFFERENT tracks
+    # Old: date-only seed -> same track all day
+    # New: include microsecond timestamp -> different track every run
     import datetime
-    today = datetime.datetime.now().strftime('%Y%m%d')
-    seed = int(hashlib.md5(f"{produk_id}_{account_id}_{today}".encode()).hexdigest()[:8], 16)
+    now = datetime.datetime.now()
+    # Combine product identity + current time for unique selection each run
+    run_id = f"{produk_id}_{account_id}_{now.strftime('%Y%m%d%H%M%S')}_{now.microsecond}"
+    seed = int(hashlib.md5(run_id.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
 
     if api_files:
-        print(f"      [INFO] {len(api_files)} API tracks, {len(synth_files)} synth tracks -> using API")
-        return rng.choice(api_files)
+        rng.shuffle(api_files)  # Extra shuffle for variety
+        pick = api_files[0]
+        print(f"      [INFO] {len(api_files)} API tracks -> {os.path.basename(pick)}")
+        return pick
     elif synth_files:
-        print(f"      [INFO] No API tracks, using synth ({len(synth_files)} available)")
-        return rng.choice(synth_files)
-    return rng.choice(files)
+        rng.shuffle(synth_files)
+        pick = synth_files[0]
+        print(f"      [INFO] No API tracks, using synth -> {os.path.basename(pick)}")
+        return pick
+    rng.shuffle(files)
+    return files[0]
 
 
 def _process_music_file(source_path, output_path, target_duration, produk_id, account_id):

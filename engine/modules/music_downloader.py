@@ -480,9 +480,9 @@ def restock_all():
 
 
 def restock_category(category):
-    """Restock a single category.
+    """Restock a single category WITH ROTATION.
     ALWAYS tries APIs first (Freesound -> Pixabay).
-    Deletes old synth files when API music is available.
+    Rotates oldest tracks to force variety each run.
     Synth is LAST RESORT only."""
     d = get_music_dir(category)
     local = count_local(category)
@@ -495,8 +495,25 @@ def restock_category(category):
     
     print(f"    [{category}] Current: {api_count} API, {synth_count} synth")
     
+    # ROTATION: delete oldest API tracks to force fresh variety
+    if api_count >= ROTATE_COUNT:
+        api_files = sorted(
+            [f for f in os.listdir(d)
+             if f.lower().endswith(('.mp3', '.ogg', '.m4a'))
+             and '_synth_' not in f],
+            key=lambda f: os.path.getmtime(os.path.join(d, f))
+        )
+        to_delete = api_files[:ROTATE_COUNT]
+        for f in to_delete:
+            try:
+                os.remove(os.path.join(d, f))
+                print(f"    [ROTATE] Deleted old: {f}")
+            except Exception:
+                pass
+        api_count -= len(to_delete)
+    
     # ALWAYS try Freesound (even if we have stock)
-    need = max(MIN_STOCK - api_count, 2)  # Always try at least 2
+    need = max(MIN_STOCK - api_count, ROTATE_COUNT + 2)
     fs_got = fetch_freesound(category, count=need)
     
     # ALWAYS try Pixabay too
