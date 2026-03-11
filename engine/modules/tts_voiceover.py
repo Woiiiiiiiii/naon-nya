@@ -338,50 +338,48 @@ def generate_voiceover_script(product_info, platform='yt_short', account_id='yt_
     # ALL scripts MUST mention product name — no generic category text
     nama_pendek = nama[:40].strip() if nama else 'produk ini'
     
-    # HOOK: always mention product name
+    # HOOK: casual/question style (NEVER starts with "Ini dia" or "Kenalkan")
     if nama:
         hook_templates = [
             f"Hai, kali ini kita bahas {nama_pendek}.",
             f"Mau tahu tentang {nama_pendek}? Simak sampai habis.",
-            f"Ini dia {nama_pendek}, yang lagi banyak dicari.",
-            f"Buat kamu yang cari {nama_pendek}, wajib lihat ini.",
-            f"Ada rekomendasi menarik, yaitu {nama_pendek}.",
+            f"Lagi cari {nama_pendek}? Pas banget.",
+            f"Pengen tahu soal {nama_pendek}? Yuk simak.",
+            f"Cek dulu {nama_pendek}, yang lagi banyak dicari.",
         ]
         hook_text = rng.choice(hook_templates)
     else:
         hooks = CATEGORY_HOOKS.get(cat, CATEGORY_HOOKS['home'])
         hook_text = _pick_unique(hooks, used, rng)
     
-    # HERO: product name + intro
+    # HERO: introduction style (NEVER starts with "Hai" or "Mau" or "Lagi")
     if nama:
         hero_templates = [
-            f"Ini dia {nama_pendek}, yang lagi diminati banyak orang.",
-            f"{nama_pendek}, produk yang sudah terbukti bagus.",
             f"Kenalkan, {nama_pendek}, pas untuk kebutuhan kamu.",
+            f"Namanya {nama_pendek}, dan sudah banyak yang pakai.",
+            f"Jadi ini {nama_pendek}, yang lagi diminati banyak orang.",
+            f"Produk ini adalah {nama_pendek}, yang terbukti bagus.",
+            f"Nah, {nama_pendek} ini memang lagi populer.",
         ]
         hero_text = rng.choice(hero_templates)
     else:
         hero_text = "Produk yang satu ini, memang lagi diminati banyak orang."
     
-    # FEATURE: product name + description (NEVER generic category text)
+    # FEATURE: describe product WITHOUT repeating name (already introduced in hook+hero)
     if desc:
-        short_desc = desc[:60].rstrip('.')
-        feat_text = f"{nama_pendek}, {short_desc}."
-    elif nama:
-        features = CATEGORY_FEATURES.get(cat, CATEGORY_FEATURES['home'])
-        generic_feat = _pick_unique(features, used, rng)
-        feat_text = f"{nama_pendek}, {generic_feat.lower()}"
+        short_desc = desc[:80].rstrip('.')
+        feat_text = f"{short_desc}."
     else:
         features = CATEGORY_FEATURES.get(cat, CATEGORY_FEATURES['home'])
         feat_text = _pick_unique(features, used, rng)
     
-    # PROOF: product name + price (NEVER generic)
+    # PROOF: price WITHOUT repeating name (use "Harganya" / "Produk ini")
     proofs = CATEGORY_PROOF.get(cat, CATEGORY_PROOF['home'])
     if harga_kata:
         price_templates = [
-            f"{nama_pendek} dengan harga hanya {harga_kata}, kualitasnya terjamin.",
-            f"Harga {nama_pendek} cuma {harga_kata}, dan sudah banyak yang puas.",
-            f"Cuma {harga_kata} untuk {nama_pendek}, tapi kualitasnya sangat baik.",
+            f"Harganya cuma {harga_kata}, dan kualitasnya terjamin.",
+            f"Dengan harga {harga_kata}, sudah banyak yang puas.",
+            f"Cuma {harga_kata} saja, tapi kualitasnya sangat baik.",
         ]
         proof_text = rng.choice(price_templates)
     else:
