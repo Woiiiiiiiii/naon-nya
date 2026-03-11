@@ -515,7 +515,7 @@ def generate_long(queue_file, output_dir):
 
             # === VOICEOVER: per-scene TTS (clip to scene gap) ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'yt_long')
-            vo_scenes_list = [(s['id'], s['s'] + 0.3) for s in scenes]
+            vo_scenes_list = [(s['id'], max(0.0, s['s'])) for s in scenes]
             vo_found = False
             for idx, (scene_id, start_time) in enumerate(vo_scenes_list):
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")

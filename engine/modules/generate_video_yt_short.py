@@ -524,7 +524,7 @@ def generate_shorts(queue_file, output_dir):
 
             # === VOICEOVER: covers every scene (clip to scene gap) ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'yt_short')
-            scene_starts_list = [('hook', 0.3), ('hero', 4.0), ('feature', 13.0), ('proof', 31.0), ('cta', 41.0)]
+            scene_starts_list = [('hook', 0.0), ('hero', 3.5), ('feature', 13.0), ('proof', 31.0), ('cta', 41.0)]
             for idx, (scene_id, start_time) in enumerate(scene_starts_list):
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:

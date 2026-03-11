@@ -410,7 +410,7 @@ def generate_video_fb(queue_file, output_dir):
 
             # === VOICEOVER: clip each VO to fit scene gap ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'fb')
-            scene_starts_list = [('hook', 1.0), ('product', 6.0), ('feature', 16.0), ('proof', 31.0), ('cta', 46.0)]
+            scene_starts_list = [('hook', 0.0), ('product', 5.5), ('feature', 16.0), ('proof', 31.0), ('cta', 46.0)]
             for idx, (scene_id, start_time) in enumerate(scene_starts_list):
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:
