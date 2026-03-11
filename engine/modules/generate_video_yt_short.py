@@ -90,16 +90,21 @@ def _generate_fallback_composites(produk_id, category, count=5):
     composites = []
 
     img_path = None
-    for ext in ['jpg', 'png', 'webp']:
+    for ext in ['png', 'jpg', 'webp']:  # PNG first (transparent product from rembg)
         p = os.path.join(os.path.dirname(__file__), '..', 'data', 'images', f"{produk_id}.{ext}")
         if os.path.exists(p):
             img_path = p
             break
 
     product_img = None
+    is_transparent = False
     if img_path:
         try:
-            product_img = Image.open(img_path).convert('RGB')
+            product_img = Image.open(img_path)
+            if product_img.mode == 'RGBA':
+                is_transparent = True
+            else:
+                product_img = product_img.convert('RGB')
             pw, ph = product_img.size
             if pw < 50 or ph < 50:
                 product_img = None
@@ -123,11 +128,14 @@ def _generate_fallback_composites(produk_id, category, count=5):
         vy = vy_shifts[i % len(vy_shifts)]
         # Create gradient background
         canvas = _make_gradient_short(accent, i)
-        # Center product on canvas
+        # Center product on canvas (alpha-aware for transparent products)
         paste_x = (W - new_w) // 2
         paste_y = (H - new_h) // 2 + int(H * vy)
         paste_y = max(0, min(paste_y, H - new_h))
-        canvas.paste(img_scaled, (paste_x, paste_y))
+        if is_transparent:
+            canvas.paste(img_scaled, (paste_x, paste_y), img_scaled.split()[3])
+        else:
+            canvas.paste(img_scaled, (paste_x, paste_y))
         composites.append(np.array(canvas))
 
     return composites

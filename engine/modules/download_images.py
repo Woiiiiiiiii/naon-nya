@@ -1,4 +1,4 @@
-﻿"""
+"""
 download_images.py
 Download product images with MULTI-TIER fallback (Shopee only).
 
@@ -80,15 +80,84 @@ def _build_shopee_session():
         return False
 
 
+def _isolate_product(img, img_path):
+    """Remove background using AI (rembg/HF API) and auto-crop to product bounds.
+    
+    Steps:
+      1. Save temp file for rembg processing
+      2. AI removes background → transparent PNG
+      3. Auto-crop to product bounding box (tight fit)
+      4. Add 5% padding so product isn't edge-to-edge
+    
+    Returns: clean product image (RGBA with transparent BG) or original if fails.
+    """
+    try:
+        from engine.modules.object_isolator import isolate_via_hf
+        
+        # Save temp for rembg
+        temp_path = img_path + '.tmp_rembg.jpg'
+        img.convert('RGB').save(temp_path, 'JPEG', quality=95)
+        
+        # AI background removal
+        result = isolate_via_hf(temp_path)
+        
+        # Cleanup temp
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
+        
+        if result is None:
+            return img
+        
+        # Auto-crop to product bounding box
+        alpha = result.split()[3]  # Alpha channel
+        bbox = alpha.getbbox()
+        if bbox:
+            # Add 5% padding around product
+            x1, y1, x2, y2 = bbox
+            pw, ph = result.size
+            pad_x = int((x2 - x1) * 0.05)
+            pad_y = int((y2 - y1) * 0.05)
+            x1 = max(0, x1 - pad_x)
+            y1 = max(0, y1 - pad_y)
+            x2 = min(pw, x2 + pad_x)
+            y2 = min(ph, y2 + pad_y)
+            result = result.crop((x1, y1, x2, y2))
+        
+        return result
+        
+    except Exception as e:
+        print(f"    [WARN] AI isolation failed: {e}")
+        return img
+
+
 def _save_image(img, img_path, min_target=1620):
-    """Save and upscale image if needed. Returns True if saved ok."""
+    """Save image with AI background removal. Returns True if saved ok."""
     w, h = img.size
     if w < 200 or h < 200:
         return False  # Too small, reject
-    if w < min_target or h < min_target:
-        scale = max(min_target / w, min_target / h)
-        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
-    img.save(img_path, 'JPEG', quality=95)
+    
+    # AI background removal: isolate product, remove text/branding
+    isolated = _isolate_product(img, img_path)
+    
+    # Save as PNG (preserves transparency) for video compositing
+    png_path = os.path.splitext(img_path)[0] + '.png'
+    iw, ih = isolated.size
+    if iw < min_target or ih < min_target:
+        scale = max(min_target / iw, min_target / ih)
+        isolated = isolated.resize((int(iw * scale), int(ih * scale)), Image.LANCZOS)
+    
+    # Save both PNG (for compositing) and JPG (for compatibility)
+    if isolated.mode == 'RGBA':
+        isolated.save(png_path, 'PNG')
+        # Also save JPG with white background for fallback
+        jpg = Image.new('RGB', isolated.size, (255, 255, 255))
+        jpg.paste(isolated, mask=isolated.split()[3])
+        jpg.save(img_path, 'JPEG', quality=95)
+    else:
+        isolated.convert('RGB').save(img_path, 'JPEG', quality=95)
+    
     return True
 
 def _score_image_simplicity(img):
