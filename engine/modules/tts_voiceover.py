@@ -48,15 +48,17 @@ ACCOUNT_VOICES = {
 # NOTE: edge-tts does NOT support SSML. Only rate/pitch/volume params work.
 # Rates POSITIVE = cepat natural, luwes, tidak lambat
 SCENE_STYLES = {
-    'hook':    {'rate': '+15%', 'pitch': '+3Hz'},    # Cepat, menarik perhatian
-    'hero':    {'rate': '+10%', 'pitch': '+1Hz'},    # Natural cepat
-    'feature': {'rate': '+12%', 'pitch': '+1Hz'},    # Informatif cepat
-    'proof':   {'rate': '+10%', 'pitch': '+0Hz'},    # Tenang tapi cepat
-    'cta':     {'rate': '+15%', 'pitch': '+2Hz'},    # Energetic, cepat
-    'product': {'rate': '+12%', 'pitch': '+1Hz'},    # Normal cepat
-    'detail1': {'rate': '+12%', 'pitch': '+1Hz'},
-    'detail2': {'rate': '+10%', 'pitch': '+1Hz'},
-    'detail3': {'rate': '+12%', 'pitch': '+0Hz'},
+    'hook':       {'rate': '+18%', 'pitch': '+3Hz'},   # Fast hook (prevent cutoff)
+    'hero':       {'rate': '+12%', 'pitch': '+1Hz'},   # Natural
+    'overview':   {'rate': '+12%', 'pitch': '+1Hz'},   # yt_long overview
+    'feature':    {'rate': '+12%', 'pitch': '+1Hz'},   # Informatif
+    'proof':      {'rate': '+10%', 'pitch': '+0Hz'},   # Calm
+    'comparison': {'rate': '+12%', 'pitch': '+1Hz'},   # yt_long comparison
+    'verdict':    {'rate': '+10%', 'pitch': '+0Hz'},   # yt_long verdict
+    'cta':        {'rate': '+15%', 'pitch': '+2Hz'},   # Energetic
+    'product':    {'rate': '+12%', 'pitch': '+1Hz'},   # tt/fb product
+    'detail1':    {'rate': '+12%', 'pitch': '+1Hz'},
+    'detail2':    {'rate': '+10%', 'pitch': '+1Hz'},
 }
 
 
@@ -309,6 +311,29 @@ def _pick_unique(pool, used_set, rng):
     return picked
 
 
+def _clean_vo_text(text):
+    """Clean text for natural TTS pronunciation.
+    Fixes Shopee description issues: formal language, jargon, special chars."""
+    import re
+    if not text:
+        return ''
+    t = text.strip()
+    # Formal → casual
+    t = re.sub(r'\bAnda\b', 'kamu', t)
+    t = re.sub(r'\banda\b', 'kamu', t)
+    # Remove URLs, emails
+    t = re.sub(r'https?://\S+', '', t)
+    t = re.sub(r'\S+@\S+', '', t)
+    # Remove excessive punctuation
+    t = re.sub(r'[!]{2,}', '!', t)
+    t = re.sub(r'[.]{2,}', '.', t)
+    # Strip emojis and special Unicode
+    t = re.sub(r'[^\w\s.,!?%&/()-]', '', t)
+    # Collapse whitespace
+    t = re.sub(r'\s+', ' ', t).strip()
+    return t
+
+
 def generate_voiceover_script(product_info, platform='yt_short', account_id='yt_1'):
     """Generate per-account themed voiceover scripts. No duplicate phrases."""
     nama = product_info.get('nama', '')
@@ -336,7 +361,8 @@ def generate_voiceover_script(product_info, platform='yt_short', account_id='yt_
     harga_kata = harga_ke_kata(harga)
     
     # ALL scripts MUST mention product name — no generic category text
-    nama_pendek = nama[:40].strip() if nama else 'produk ini'
+    nama_pendek = _clean_vo_text(nama[:40].strip()) if nama else 'produk ini'
+    desc = _clean_vo_text(desc) if desc else ''
     
     # HOOK: casual/question style (NEVER starts with "Ini dia" or "Kenalkan")
     if nama:
@@ -487,7 +513,7 @@ def _normalize_vo_loudness(mp3_path):
     try:
         result = subprocess.run([
             'ffmpeg', '-y', '-i', mp3_path,
-            '-af', 'loudnorm=I=-14:TP=-1:LRA=7',
+            '-af', 'loudnorm=I=-12:TP=-1:LRA=7',
             '-b:a', '192k', '-ar', '44100',
             tmp_path
         ], capture_output=True, text=True, timeout=30)
