@@ -74,13 +74,12 @@ def _load_composites(produk_id, category='home', count=5):
 
 
 def _generate_fallback(produk_id, category, count=5):
-    """COVER mode: product image fills entire screen."""
-    from engine.modules.category_router import get_accent_color
-    accent = get_accent_color(category)
+    """Product on PREMIUM Facebook gradient (professional + glow + shadow)."""
+    from engine.modules.premium_background import create_premium_background, add_product_shadow
     composites = []
 
     img_path = None
-    for ext in ['png', 'jpg', 'webp']:  # PNG first (transparent product from rembg)
+    for ext in ['png', 'jpg', 'webp']:
         p = os.path.join(os.path.dirname(__file__), '..', 'data', 'images', f"{produk_id}.{ext}")
         if os.path.exists(p):
             img_path = p
@@ -104,22 +103,23 @@ def _generate_fallback(produk_id, category, count=5):
     if product_img is None:
         print(f"    [WARN] No valid image for {produk_id}")
         for i in range(count):
-            composites.append(np.array(_make_gradient_fb(accent, i).convert('RGB')))
+            bg = create_premium_background(W, H, category=category, variant=i, platform='facebook')
+            composites.append(np.array(bg))
         return composites
 
     pw, ph = product_img.size
-    # CONTAIN mode: fit ENTIRE product in frame (never crop the product)
-    scale = min(W / pw, H / ph) * 0.85
+    scale = min(W / pw, H / ph) * 0.75
     new_w, new_h = int(pw * scale), int(ph * scale)
     img_scaled = product_img.resize((new_w, new_h), Image.LANCZOS)
 
     vy_shifts = [0.0, -0.02, 0.02, -0.03, 0.03]
     for i in range(count):
         vy = vy_shifts[i % len(vy_shifts)]
-        canvas = _make_gradient_fb(accent, i)
+        canvas = create_premium_background(W, H, category=category, variant=i, platform='facebook')
         paste_x = (W - new_w) // 2
         paste_y = (H - new_h) // 2 + int(H * vy)
         paste_y = max(0, min(paste_y, H - new_h))
+        add_product_shadow(canvas, img_scaled, paste_x, paste_y)
         if is_transparent:
             canvas.paste(img_scaled, (paste_x, paste_y), img_scaled.split()[3])
         else:
