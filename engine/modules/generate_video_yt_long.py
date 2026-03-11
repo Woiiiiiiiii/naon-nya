@@ -1,4 +1,4 @@
-﻿"""
+"""
 generate_video_yt_long.py
 YouTube Long-form: 90-120s DETAILED product review.
 
@@ -144,18 +144,19 @@ def _generate_fallback_composites(produk_id, category, count=7):
         return composites
 
     pw, ph = product_img.size
-    scale = max(W / pw, H / ph)
+    # CONTAIN mode: fit ENTIRE product in frame (never crop the product)
+    scale = min(W / pw, H / ph) * 0.85
     new_w, new_h = int(pw * scale), int(ph * scale)
     img_scaled = product_img.resize((new_w, new_h), Image.LANCZOS)
 
-    vy_shifts = [0.0, -0.03, 0.03, -0.05, 0.05, -0.02, 0.02]
+    vy_shifts = [0.0, -0.02, 0.02, -0.03, 0.03, -0.01, 0.01]
     for i in range(count):
         vy = vy_shifts[i % len(vy_shifts)]
-        crop_x = (new_w - W) // 2
-        crop_y = (new_h - H) // 2 + int(H * vy)
-        crop_y = max(0, min(crop_y, new_h - H))
-        crop_x = max(0, min(crop_x, new_w - W))
-        canvas = img_scaled.crop((crop_x, crop_y, crop_x + W, crop_y + H))
+        canvas = _make_gradient_canvas(accent, i)
+        paste_x = (W - new_w) // 2
+        paste_y = (H - new_h) // 2 + int(H * vy)
+        paste_y = max(0, min(paste_y, H - new_h))
+        canvas.paste(img_scaled, (paste_x, paste_y))
         composites.append(np.array(canvas))
 
     return composites
