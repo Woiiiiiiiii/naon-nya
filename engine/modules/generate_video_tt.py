@@ -45,6 +45,19 @@ TT_GRAD_BOT = (15, 0, 25)
 
 def _load_composites(produk_id, category='home', count=4):
     """Generate FRESH composite images every run."""
+    import glob
+
+    # CLEANUP: delete old cached composites
+    prod_dir = os.path.join(COMPOSITES_DIR, produk_id)
+    if os.path.isdir(prod_dir):
+        old = glob.glob(os.path.join(prod_dir, '*.png')) + glob.glob(os.path.join(prod_dir, '*.jpg'))
+        for f in old:
+            try: os.remove(f)
+            except Exception: pass
+    flat_old = glob.glob(os.path.join(COMPOSITES_DIR, f"{produk_id}_composite_*.png"))
+    for f in flat_old:
+        try: os.remove(f)
+        except Exception: pass
 
     composites = _generate_fallback(produk_id, category, count)
 

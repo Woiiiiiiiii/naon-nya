@@ -75,9 +75,22 @@ TEMPLATES = {
 
 def _load_composites(produk_id, category='home', count=7):
     """Generate FRESH composite images every run.
-    Always regenerates with varied backgrounds — never uses stale cached files."""
+    Deletes old cached composites to prevent duplicate content detection."""
+    import glob
 
-    # ALWAYS generate fresh composites (varied backgrounds each run)
+    # CLEANUP: delete old cached composites
+    prod_dir = os.path.join(COMPOSITES_DIR, produk_id)
+    if os.path.isdir(prod_dir):
+        old = glob.glob(os.path.join(prod_dir, '*.png')) + glob.glob(os.path.join(prod_dir, '*.jpg'))
+        for f in old:
+            try: os.remove(f)
+            except Exception: pass
+    flat_old = glob.glob(os.path.join(COMPOSITES_DIR, f"{produk_id}_composite_*.png"))
+    for f in flat_old:
+        try: os.remove(f)
+        except Exception: pass
+
+    # ALWAYS generate fresh composites
     composites = _generate_fallback_composites(produk_id, category, count)
 
     # Ensure enough composites

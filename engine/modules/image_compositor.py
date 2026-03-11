@@ -192,6 +192,18 @@ def generate_variations(product_img_path, category, num_variations=5,
     accent = get_accent_color(category)
     results = []
 
+    # CLEANUP: delete old composites for this product before generating fresh ones
+    if output_dir and os.path.isdir(output_dir):
+        import glob
+        old_files = glob.glob(os.path.join(output_dir, f"{produk_id}_composite_*.png"))
+        for old_f in old_files:
+            try:
+                os.remove(old_f)
+            except Exception:
+                pass
+        if old_files:
+            print(f"    [CLEANUP] Deleted {len(old_files)} old composites")
+
     for i in range(min(num_variations, len(PLACEMENT_PRESETS))):
         placement = PLACEMENT_PRESETS[i]
         badge = random.choice(BADGE_TEXTS) if random.random() > 0.5 else None

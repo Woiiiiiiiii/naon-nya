@@ -46,8 +46,23 @@ DEPTH_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'depth_maps'
 
 def _load_composites(produk_id, category='home', count=5):
     """Generate FRESH composite images every run.
-    Always regenerates with varied backgrounds — never uses stale cached files."""
-    import time as _time
+    Deletes old cached composites to prevent duplicate content detection."""
+    import glob
+
+    # CLEANUP: delete old cached composites for this product
+    prod_dir = os.path.join(COMPOSITES_DIR, produk_id)
+    if os.path.isdir(prod_dir):
+        old = glob.glob(os.path.join(prod_dir, '*.png')) + glob.glob(os.path.join(prod_dir, '*.jpg'))
+        for f in old:
+            try: os.remove(f)
+            except Exception: pass
+        if old:
+            print(f"    [CLEANUP] Deleted {len(old)} old composites from {produk_id}/")
+    # Also clean flat naming
+    flat_old = glob.glob(os.path.join(COMPOSITES_DIR, f"{produk_id}_composite_*.png"))
+    for f in flat_old:
+        try: os.remove(f)
+        except Exception: pass
 
     # ALWAYS generate fresh composites (varied backgrounds each run)
     composites = _generate_fallback_composites(produk_id, category, count)
