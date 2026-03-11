@@ -266,11 +266,8 @@ def generate_long(queue_file, output_dir):
     if not long_jobs:
         long_jobs = jobs
 
-    # QC mode: limit to 2 videos to avoid timeout
-    skip_upload = os.environ.get('SKIP_YT_UPLOAD', '').lower() == 'true'
-    if skip_upload and len(long_jobs) > 2:
-        print(f"  [QC MODE] Limiting from {len(long_jobs)} to 2 videos (avoid timeout)")
-        long_jobs = long_jobs[:2]
+    # NOTE: QC mode no longer limits videos — ALL accounts must render
+    # Previously: limited to 2 videos in QC mode, causing missing v1_yt
 
     font_path = _load_font(bold=False)
     font_bold = _load_font(bold=True)
@@ -497,7 +494,7 @@ def generate_long(queue_file, output_dir):
 
             # === VOICEOVER: per-scene TTS (clip to scene gap) ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'yt_long')
-            vo_scenes_list = [(s['id'], s['s'] + 0.5) for s in scenes]
+            vo_scenes_list = [(s['id'], s['s'] + 0.3) for s in scenes]
             vo_found = False
             for idx, (scene_id, start_time) in enumerate(vo_scenes_list):
                 vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
@@ -506,7 +503,7 @@ def generate_long(queue_file, output_dir):
                         vo = AudioFileClip(vo_path)
                         # Clip VO so it doesn't overlap with next scene
                         if idx + 1 < len(vo_scenes_list):
-                            max_dur = vo_scenes_list[idx + 1][1] - start_time - 0.5
+                            max_dur = vo_scenes_list[idx + 1][1] - start_time - 0.3
                         else:
                             max_dur = total_dur - start_time - 0.2
                         if max_dur > 0.5 and vo.duration > max_dur:
