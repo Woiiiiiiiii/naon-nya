@@ -44,36 +44,14 @@ TT_GRAD_BOT = (15, 0, 25)
 
 
 def _load_composites(produk_id, category='home', count=4):
-    """Load pre-made composite images."""
-    composites = []
-    prod_dir = os.path.join(COMPOSITES_DIR, produk_id)
+    """Generate FRESH composite images every run."""
 
-    if os.path.isdir(prod_dir):
-        files = sorted([f for f in os.listdir(prod_dir)
-                       if f.endswith(('.png', '.jpg')) and 'composite' in f.lower()])
-        for f in files[:count]:
-            img = Image.open(os.path.join(prod_dir, f)).convert('RGB')
-            img = img.resize((W, H), Image.LANCZOS)
-            composites.append(np.array(img))
-
-    if not composites:
-        for i in range(count):
-            p = os.path.join(COMPOSITES_DIR, f"{produk_id}_composite_{i:03d}.png")
-            if os.path.exists(p):
-                img = Image.open(p).convert('RGB')
-                img = img.resize((W, H), Image.LANCZOS)
-                composites.append(np.array(img))
-
-    if not composites:
-        composites = _generate_fallback(produk_id, category, count)
+    composites = _generate_fallback(produk_id, category, count)
 
     while len(composites) < count:
         composites.append(composites[len(composites) % max(1, len(composites))].copy())
 
-    # Platform-specific shuffle so TT uses DIFFERENT composite order than YT/FB
-    import random as _rng
-    _rng.seed(f"tt_{produk_id}")
-    _rng.shuffle(composites)
+    random.shuffle(composites)
 
     return composites
 
@@ -107,8 +85,9 @@ def _generate_fallback(produk_id, category, count=4):
 
     if product_img is None:
         print(f"    [WARN] No valid image for {produk_id}")
+        variant_offset = random.randint(0, 100)
         for i in range(count):
-            bg = create_premium_background(W, H, category=category, variant=i, platform='tiktok')
+            bg = create_premium_background(W, H, category=category, variant=i + variant_offset, platform='tiktok')
             composites.append(np.array(bg))
         return composites
 
@@ -118,9 +97,10 @@ def _generate_fallback(produk_id, category, count=4):
     img_scaled = product_img.resize((new_w, new_h), Image.LANCZOS)
 
     vy_shifts = [0.0, -0.02, 0.02, -0.03]
+    variant_offset = random.randint(0, 100)
     for i in range(count):
         vy = vy_shifts[i % len(vy_shifts)]
-        canvas = create_premium_background(W, H, category=category, variant=i, platform='tiktok')
+        canvas = create_premium_background(W, H, category=category, variant=i + variant_offset, platform='tiktok')
         paste_x = (W - new_w) // 2
         paste_y = (H - new_h) // 2 + int(H * vy)
         paste_y = max(0, min(paste_y, H - new_h))

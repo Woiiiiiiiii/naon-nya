@@ -45,40 +45,19 @@ DEPTH_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'depth_maps'
 
 
 def _load_composites(produk_id, category='home', count=5):
-    """Load pre-made composite images for this product.
-    Falls back to generating simple composites if none found."""
-    composites = []
-    prod_dir = os.path.join(COMPOSITES_DIR, produk_id)
+    """Generate FRESH composite images every run.
+    Always regenerates with varied backgrounds — never uses stale cached files."""
+    import time as _time
 
-    if os.path.isdir(prod_dir):
-        files = sorted([f for f in os.listdir(prod_dir)
-                       if f.endswith(('.png', '.jpg')) and 'composite' in f.lower()])
-        for f in files[:count]:
-            img = Image.open(os.path.join(prod_dir, f)).convert('RGB')
-            img = img.resize((W, H), Image.LANCZOS)
-            composites.append(np.array(img))
-
-    # Also check flat naming convention
-    if not composites:
-        for i in range(count):
-            p = os.path.join(COMPOSITES_DIR, f"{produk_id}_composite_{i:03d}.png")
-            if os.path.exists(p):
-                img = Image.open(p).convert('RGB')
-                img = img.resize((W, H), Image.LANCZOS)
-                composites.append(np.array(img))
-
-    # Fallback: generate simple composites from product image + gradient bg
-    if not composites:
-        composites = _generate_fallback_composites(produk_id, category, count)
+    # ALWAYS generate fresh composites (varied backgrounds each run)
+    composites = _generate_fallback_composites(produk_id, category, count)
 
     # Ensure we have at least 'count' composites (duplicate if needed)
     while len(composites) < count:
         composites.append(composites[len(composites) % max(1, len(composites))].copy())
 
-    # Platform-specific shuffle so YT Short uses DIFFERENT composite order than Long/TT/FB
-    import random as _rng
-    _rng.seed(f"yt_short_{produk_id}")
-    _rng.shuffle(composites)
+    # TRUE random shuffle (no static seed — different order every run)
+    random.shuffle(composites)
 
     return composites
 
@@ -125,10 +104,11 @@ def _generate_fallback_composites(produk_id, category, count=5):
     img_scaled = product_img.resize((new_w, new_h), Image.LANCZOS)
 
     vy_shifts = [0.0, -0.02, 0.02, -0.03, 0.03]
+    variant_offset = random.randint(0, 100)  # Different gradient each run
     for i in range(count):
         vy = vy_shifts[i % len(vy_shifts)]
-        # Premium gradient background with glow + vignette
-        canvas = create_premium_background(W, H, category=category, variant=i)
+        # Premium gradient background with glow + vignette (varied each run)
+        canvas = create_premium_background(W, H, category=category, variant=i + variant_offset)
         paste_x = (W - new_w) // 2
         paste_y = (H - new_h) // 2 + int(H * vy)
         paste_y = max(0, min(paste_y, H - new_h))

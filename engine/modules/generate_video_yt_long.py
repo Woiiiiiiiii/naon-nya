@@ -74,41 +74,19 @@ TEMPLATES = {
 
 
 def _load_composites(produk_id, category='home', count=7):
-    """Load pre-made composite images for this product."""
-    composites = []
+    """Generate FRESH composite images every run.
+    Always regenerates with varied backgrounds — never uses stale cached files."""
 
-    # Check product-specific directory
-    prod_dir = os.path.join(COMPOSITES_DIR, produk_id)
-    if os.path.isdir(prod_dir):
-        files = sorted([f for f in os.listdir(prod_dir)
-                       if f.endswith(('.png', '.jpg')) and 'composite' in f.lower()])
-        for f in files[:count]:
-            img = Image.open(os.path.join(prod_dir, f)).convert('RGB')
-            img = img.resize((W, H), Image.LANCZOS)
-            composites.append(np.array(img))
-
-    # Check flat naming
-    if not composites:
-        for i in range(count):
-            p = os.path.join(COMPOSITES_DIR, f"{produk_id}_composite_{i:03d}.png")
-            if os.path.exists(p):
-                img = Image.open(p).convert('RGB')
-                img = img.resize((W, H), Image.LANCZOS)
-                composites.append(np.array(img))
-
-    # Fallback: generate composites
-    if not composites:
-        composites = _generate_fallback_composites(produk_id, category, count)
+    # ALWAYS generate fresh composites (varied backgrounds each run)
+    composites = _generate_fallback_composites(produk_id, category, count)
 
     # Ensure enough composites
     while len(composites) < count:
         idx = len(composites) % max(1, len(composites))
         composites.append(composites[idx].copy())
 
-    # Platform-specific shuffle so YT Long uses DIFFERENT composite order than TT/FB
-    import random as _rng
-    _rng.seed(f"yt_long_{produk_id}")
-    _rng.shuffle(composites)
+    # TRUE random shuffle (different order every run)
+    random.shuffle(composites)
 
     return composites
 
@@ -143,8 +121,9 @@ def _generate_fallback_composites(produk_id, category, count=7):
 
     if product_img is None:
         print(f"    [WARN] No valid image for {produk_id}")
+        variant_offset = random.randint(0, 100)
         for i in range(count):
-            bg = create_premium_background(W, H, category=category, variant=i)
+            bg = create_premium_background(W, H, category=category, variant=i + variant_offset)
             composites.append(np.array(bg))
         return composites
 
@@ -154,9 +133,10 @@ def _generate_fallback_composites(produk_id, category, count=7):
     img_scaled = product_img.resize((new_w, new_h), Image.LANCZOS)
 
     vy_shifts = [0.0, -0.02, 0.02, -0.03, 0.03, -0.01, 0.01]
+    variant_offset = random.randint(0, 100)
     for i in range(count):
         vy = vy_shifts[i % len(vy_shifts)]
-        canvas = create_premium_background(W, H, category=category, variant=i)
+        canvas = create_premium_background(W, H, category=category, variant=i + variant_offset)
         paste_x = (W - new_w) // 2
         paste_y = (H - new_h) // 2 + int(H * vy)
         paste_y = max(0, min(paste_y, H - new_h))
