@@ -36,7 +36,7 @@ from engine.modules.video_effects import (
     create_count_up_text, create_blinking_label, create_simple_price
 )
 from engine.modules.sound_manager import get_sfx_path, init_sounds
-from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params
+from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params, find_music_file
 
 W, H = 1080, 1920
 COMPOSITES_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'composites')
@@ -471,9 +471,10 @@ def generate_long(queue_file, output_dir):
 
             # === AUDIO (normalized) ===
             audio_clips = []
-            music_file = os.path.join(output_dir, "yt", f"MUSIC_{produk_id}_{acct_id}.mp3")
-            if os.path.exists(music_file):
-                music = prepare_music(AudioFileClip(music_file), total_dur)
+            music_dir = os.path.join(output_dir, "yt")
+            music_path, music_tier = find_music_file(music_dir, produk_id, acct_id, category)
+            if music_path:
+                music = prepare_music(AudioFileClip(music_path), total_dur)
                 audio_clips.append(music)
 
             # SFX at scene transitions

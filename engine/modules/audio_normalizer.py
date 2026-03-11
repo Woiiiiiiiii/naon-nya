@@ -160,3 +160,68 @@ def get_ffmpeg_audio_params():
         'audio_bitrate': '192k',
     }
 
+
+def find_music_file(platform_dir, produk_id, acct_id, category='home'):
+    """Find music file with multi-tier fallback. NEVER returns None silently.
+    
+    Tiers:
+      1. Exact match: MUSIC_{produk_id}_{acct_id}.mp3
+      2. Same product: any MUSIC_{produk_id}_*.mp3
+      3. Same platform: any MUSIC_*.mp3 in platform dir
+      4. Category library: random track from assets/music/{category}/
+    
+    Returns: (path, tier) or (None, 0) if absolutely nothing found.
+    """
+    import glob
+    import random
+
+    # Tier 1: Exact match
+    exact = os.path.join(platform_dir, f"MUSIC_{produk_id}_{acct_id}.mp3")
+    if os.path.exists(exact):
+        return exact, 1
+
+    # Tier 2: Same product, different account
+    pattern2 = os.path.join(platform_dir, f"MUSIC_{produk_id}_*.mp3")
+    matches2 = glob.glob(pattern2)
+    if matches2:
+        pick = random.choice(matches2)
+        print(f"    [MUSIC FALLBACK T2] {acct_id}: using {os.path.basename(pick)} (same product)")
+        return pick, 2
+
+    # Tier 3: Any music in this platform dir
+    pattern3 = os.path.join(platform_dir, "MUSIC_*.mp3")
+    matches3 = glob.glob(pattern3)
+    if matches3:
+        pick = random.choice(matches3)
+        print(f"    [MUSIC FALLBACK T3] {acct_id}: using {os.path.basename(pick)} (same platform)")
+        return pick, 3
+
+    # Tier 4: Category music library (raw source files)
+    music_lib = os.path.join(os.path.dirname(__file__), '..', 'assets', 'music')
+    # Map category to music folder
+    cat_map = {
+        'fashion': 'pop', 'gadget': 'electronic', 'beauty': 'pop',
+        'home': 'ambient', 'wellness': 'ambient', 'food': 'pop',
+    }
+    mapped = cat_map.get(category, category)
+    lib_dir = os.path.join(music_lib, mapped)
+    if os.path.isdir(lib_dir):
+        tracks = [f for f in os.listdir(lib_dir)
+                   if f.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a'))]
+        if tracks:
+            pick = os.path.join(lib_dir, random.choice(tracks))
+            print(f"    [MUSIC FALLBACK T4] {acct_id}: using library {os.path.basename(pick)}")
+            return pick, 4
+
+    # Also check general music folder
+    gen_dir = os.path.join(music_lib, 'general')
+    if os.path.isdir(gen_dir):
+        tracks = [f for f in os.listdir(gen_dir)
+                   if f.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a'))]
+        if tracks:
+            pick = os.path.join(gen_dir, random.choice(tracks))
+            print(f"    [MUSIC FALLBACK T4-gen] {acct_id}: using general {os.path.basename(pick)}")
+            return pick, 4
+
+    print(f"    [MUSIC WARNING] No music found for {produk_id}/{acct_id} — video will have no BGM!")
+    return None, 0
