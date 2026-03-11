@@ -217,6 +217,59 @@ def add_product_shadow(canvas, product_img, paste_x, paste_y):
     canvas.paste(canvas_rgba.convert('RGB'))
 
 
+def add_product_reflection(canvas, product_img, paste_x, paste_y, is_transparent=False):
+    """Add mirror reflection below product for glass surface effect.
+    
+    Creates a vertically flipped, fading copy of the product below it.
+    Call AFTER pasting the product image.
+    
+    Args:
+        canvas: PIL Image (RGB) background canvas
+        product_img: PIL Image of the product
+        paste_x, paste_y: where the product was pasted
+        is_transparent: whether product has alpha channel
+    """
+    pw, ph = product_img.size
+    
+    # Reflection height: 35% of product (don't need full height)
+    refl_h = int(ph * 0.35)
+    if refl_h < 10:
+        return
+    
+    # Flip product vertically
+    if is_transparent and product_img.mode == 'RGBA':
+        flipped = product_img.transpose(Image.FLIP_TOP_BOTTOM).convert('RGBA')
+    else:
+        flipped = product_img.transpose(Image.FLIP_TOP_BOTTOM).convert('RGBA')
+    
+    # Crop to only keep top portion of flipped image (= bottom of original)
+    flipped = flipped.crop((0, 0, pw, refl_h))
+    
+    # Apply gradient alpha fade: top=visible (40% opacity) → bottom=transparent
+    refl_arr = np.array(flipped).astype(np.float32)
+    for row in range(refl_h):
+        fade = max(0.0, 1.0 - (row / max(refl_h - 1, 1)))  # 1.0 at top → 0.0 at bottom
+        refl_arr[row, :, 3] = refl_arr[row, :, 3] * fade * 0.40  # Max 40% opacity
+    
+    reflection = Image.fromarray(refl_arr.astype(np.uint8)).convert('RGBA')
+    
+    # Slight blur for realism
+    reflection = reflection.filter(ImageFilter.GaussianBlur(radius=2))
+    
+    # Paste reflection just below product
+    refl_y = paste_y + ph + 2  # 2px gap
+    if refl_y + refl_h > canvas.size[1]:
+        # Crop if it goes off screen
+        refl_h = canvas.size[1] - refl_y
+        if refl_h <= 0:
+            return
+        reflection = reflection.crop((0, 0, pw, refl_h))
+    
+    canvas_rgba = canvas.convert('RGBA')
+    canvas_rgba.paste(reflection, (paste_x, refl_y), reflection)
+    canvas.paste(canvas_rgba.convert('RGB'))
+
+
 if __name__ == '__main__':
     # Test: generate sample backgrounds
     for cat in ['fashion', 'gadget', 'beauty', 'home', 'wellness']:

@@ -115,7 +115,7 @@ def _load_composites(produk_id, category='home', count=7):
 
 def _generate_fallback_composites(produk_id, category, count=7):
     """Product on PREMIUM gradient background (glow + vignette + shadow)."""
-    from engine.modules.premium_background import create_premium_background, add_product_shadow
+    from engine.modules.premium_background import create_premium_background, add_product_shadow, add_product_reflection
 
     composites = []
 
@@ -165,6 +165,8 @@ def _generate_fallback_composites(produk_id, category, count=7):
             canvas.paste(img_scaled, (paste_x, paste_y), img_scaled.split()[3])
         else:
             canvas.paste(img_scaled, (paste_x, paste_y))
+        # Mirror reflection below product
+        add_product_reflection(canvas, img_scaled, paste_x, paste_y, is_transparent)
         composites.append(np.array(canvas))
 
     return composites
