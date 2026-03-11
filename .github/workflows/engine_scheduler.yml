@@ -148,6 +148,16 @@ jobs:
             echo "  $cat: $count valid products"
           done
 
+      # Cache music library so API downloads persist between runs
+      - name: Cache music library
+        uses: actions/cache@v4
+        with:
+          path: engine/assets/music
+          key: music-library-${{ hashFiles('engine/modules/music_downloader.py') }}-week-${{ github.run_number }}
+          restore-keys: |
+            music-library-${{ hashFiles('engine/modules/music_downloader.py') }}-
+            music-library-
+
       - name: Run full pipeline
         env:
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
