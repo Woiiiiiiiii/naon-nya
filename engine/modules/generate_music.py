@@ -155,13 +155,18 @@ def _process_music_file(source_path, output_path, target_duration, produk_id, ac
 
             if source_duration >= target_duration + actual_offset:
                 # Source long enough: trim from entry point
+                # loudnorm (EBU R128) ensures ALL music at same perceived loudness
+                af_filter = (
+                    'loudnorm=I=-18:TP=-1:LRA=11,'
+                    'equalizer=f=100:width_type=o:width=2:g=5,'
+                    'equalizer=f=8000:width_type=o:width=2:g=-4,'
+                    f'afade=t=in:st=0:d=0.5,afade=t=out:st={target_duration - 1}:d=1'
+                )
                 cmd = [
                     'ffmpeg', '-y', '-ss', str(actual_offset),
                     '-i', source_path, '-t', str(target_duration),
                     '-b:a', '192k', '-ar', '44100',
-                    '-af', 'equalizer=f=100:width_type=o:width=2:g=5,equalizer=f=8000:width_type=o:width=2:g=-4,'
-                           'afade=t=in:st=0:d=0.5,afade=t=out:st=' +
-                           str(target_duration - 1) + ':d=1',
+                    '-af', af_filter,
                     output_path
                 ]
             else:
@@ -170,6 +175,7 @@ def _process_music_file(source_path, output_path, target_duration, produk_id, ac
                 filter_str = (
                     f"aloop=loop={loops}:size={int(source_duration * 44100)},"
                     f"atrim=start={actual_offset}:end={actual_offset + target_duration},"
+                    f"loudnorm=I=-18:TP=-1:LRA=11,"
                     f"equalizer=f=100:width_type=o:width=2:g=5,"
                     f"equalizer=f=8000:width_type=o:width=2:g=-4,"
                     f"afade=t=in:st=0:d=0.5,"

@@ -315,14 +315,15 @@ def generate_voiceover_script(product_info, platform='yt_short', account_id='yt_
     harga = product_info.get('harga', '')
     desc = product_info.get('deskripsi_singkat', '')
     
-    # Determine category from account
-    cat = 'home'  # default
-    cat_map = {
-        'yt_1': 'fashion', 'yt_2': 'gadget', 'yt_3': 'beauty',
-        'yt_4': 'home', 'yt_5': 'wellness',
-        'tt_1': 'beauty', 'fb_1': 'home',
-    }
-    cat = cat_map.get(account_id, 'home')
+    # Determine category DYNAMICALLY from category_router
+    # (handles TT/FB day-of-month alternation correctly)
+    try:
+        from engine.modules.category_router import get_category
+        cat = get_category(account_id)
+    except ImportError:
+        cat = product_info.get('category', 'home')
+    if not cat:
+        cat = product_info.get('category', 'home')
     
     # Seed RNG per product+account so same product gets different script per account
     seed_str = f"{nama}_{account_id}_{platform}"
@@ -385,12 +386,15 @@ def generate_voiceover_script(product_info, platform='yt_short', account_id='yt_
             'cta': cta_text,
         }
     elif platform == 'yt_long':
+        # Scene IDs MUST match TEMPLATES in generate_video_yt_long.py:
+        # hook, overview, detail1, detail2, comparison, verdict, cta
         return {
             'hook': hook_text,
-            'hero': hero_text,
+            'overview': hero_text,
             'detail1': feat_text,
             'detail2': proof_text,
-            'detail3': extra_proof,
+            'comparison': extra_proof,
+            'verdict': _pick_unique(proofs, used, rng),
             'cta': cta_text,
         }
     elif platform == 'tt':
