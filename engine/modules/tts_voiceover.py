@@ -445,6 +445,8 @@ async def _generate_tts_async(text, output_path, rate='-10%', pitch='+0Hz', voic
 def generate_tts(text, output_path, scene_id='feature', account_id='yt_1'):
     """Generate one TTS MP3 file with per-account voice.
     
+    Post-processes with ffmpeg loudnorm so male (ArdiNeural) and female
+    (GadisNeural) voices have the SAME perceived loudness.
     Returns True if generated successfully, False if failed.
     """
     try:
@@ -464,6 +466,9 @@ def generate_tts(text, output_path, scene_id='feature', account_id='yt_1'):
         asyncio.run(_generate_tts_async(text, output_path, rate, final_pitch, voice_id=voice_id))
 
         if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
+            # POST-PROCESS: normalize loudness with ffmpeg (EBU R128)
+            # -14 LUFS = louder than music (-18 LUFS) so VO is always dominant
+            _normalize_vo_loudness(output_path)
             print(f"    [TTS] OK: {os.path.basename(output_path)} ({scene_id}, {voice_id})")
             return True
         else:
@@ -472,6 +477,32 @@ def generate_tts(text, output_path, scene_id='feature', account_id='yt_1'):
     except Exception as e:
         print(f"    [TTS] Failed ({scene_id}): {e}")
         return False
+
+
+def _normalize_vo_loudness(mp3_path):
+    """Normalize VO loudness using ffmpeg loudnorm (EBU R128).
+    Ensures male (ArdiNeural) and female (GadisNeural) at same LUFS."""
+    import subprocess
+    tmp_path = mp3_path + '.tmp.mp3'
+    try:
+        result = subprocess.run([
+            'ffmpeg', '-y', '-i', mp3_path,
+            '-af', 'loudnorm=I=-14:TP=-1:LRA=7',
+            '-b:a', '192k', '-ar', '44100',
+            tmp_path
+        ], capture_output=True, text=True, timeout=30)
+        if result.returncode == 0 and os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 500:
+            os.replace(tmp_path, mp3_path)
+        else:
+            # Loudnorm failed, keep original
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
 
 def generate_voiceover_for_product(product_info, produk_id, platform='yt_short', output_dir=None, account_id='yt_1'):
