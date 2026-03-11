@@ -33,7 +33,7 @@ from engine.modules.video_effects import (
     render_text_image, paste_overlay_on_frame,
     text_slide_up, ease_out_back, ease_out_cubic,
     create_rating_stars, create_price_display, create_chat_bubble,
-    create_count_up_text, create_blinking_label
+    create_count_up_text, create_blinking_label, create_simple_price
 )
 from engine.modules.sound_manager import get_sfx_path, init_sounds
 from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params
@@ -368,80 +368,101 @@ def generate_long(queue_file, output_dir):
                 else:
                     frame = _ken_burns(composite, scene_t, scene_dur, kb_dir)
 
-                # === TEXT OVERLAYS (dynamic Y positioning) ===
+                # ═══════════════════════════════════════════
+                # ZONE LAYOUT:
+                #   TOP    Y=60-200:  Product name + price (persistent, blink)
+                #   CENTER Y=250-1420: Product image (untouched)
+                #   BOTTOM Y=1460+:   Scene-specific text
+                # ═══════════════════════════════════════════
+
+                # === TOP ZONE: Product name + price (PERSISTENT) ===
+                title_label = create_blinking_label(
+                    f" {nama} ", font_bold or font_path or "arial.ttf",
+                    accent, t, 1.2, font_size=44
+                )
+                title_y = 70
+                frame = paste_overlay_on_frame(frame, title_label,
+                                               ((W - title_label.width) // 2, title_y))
+
+                if harga:
+                    price_label = create_simple_price(f"Rp {harga}", font_bold or font_path or "arial.ttf",
+                                                      50, accent)
+                    price_y = title_y + title_label.height + 10
+                    frame = paste_overlay_on_frame(frame, price_label,
+                                                   ((W - price_label.width) // 2, price_y))
+
+                # === BOTTOM ZONE: Scene-specific text (Y=1460+) ===
+                BOTTOM_Y = 1460
+
                 if scene_id == 'hook' and scene_t > 0.3:
-                    ty = text_slide_up(hook_img, H, 1380, scene_t - 0.3, 0.4)
+                    ty = text_slide_up(hook_img, H, BOTTOM_Y, scene_t - 0.3, 0.4)
                     frame = paste_overlay_on_frame(frame, hook_img,
-                                                  ((W - hook_img.width) // 2, ty))
+                                                   ((W - hook_img.width) // 2, ty))
 
                 elif scene_id == 'overview' and scene_t > 0.8:
-                    ty = text_slide_up(overview_img, H, 1370, scene_t - 0.8, 0.4)
+                    ty = text_slide_up(overview_img, H, BOTTOM_Y, scene_t - 0.8, 0.4)
                     frame = paste_overlay_on_frame(frame, overview_img,
-                                                  ((W - overview_img.width) // 2, ty))
+                                                   ((W - overview_img.width) // 2, ty))
 
                 elif scene_id == 'detail1':
-                    # Dynamic stack: feat → stars → terjual
-                    base_y = 1280
+                    base_y = BOTTOM_Y
                     if scene_t > 0.5:
                         ty = text_slide_up(feat_img, H, base_y, scene_t - 0.5, 0.35)
                         frame = paste_overlay_on_frame(frame, feat_img,
-                                                      ((W - feat_img.width) // 2, ty))
+                                                       ((W - feat_img.width) // 2, ty))
                     if scene_t > 5.0:
                         stars = create_rating_stars(rating_val, font_path or "arial.ttf",
-                                                  40, animated_t=scene_t - 5.0, total_dur=1.5)
+                                                   40, animated_t=scene_t - 5.0, total_dur=1.5)
                         stars_y = base_y + feat_img.height + 12
                         frame = paste_overlay_on_frame(frame, stars,
-                                                      ((W - stars.width) // 2, stars_y))
+                                                       ((W - stars.width) // 2, stars_y))
                     if scene_t > 10.0:
                         cnt_t = scene_t - 10.0
                         current = int(min(cnt_t / 2.5, 1.0) * sold_count)
                         cnt_img = create_count_up_text(current, "Terjual",
-                                                      font_path or "arial.ttf", accent)
+                                                       font_path or "arial.ttf", accent)
                         cnt_y = base_y + feat_img.height + 12
                         if scene_t > 5.0:
                             cnt_y += cached_stars_h + 10
                         frame = paste_overlay_on_frame(frame, cnt_img,
-                                                      ((W - cnt_img.width) // 2, cnt_y))
+                                                       ((W - cnt_img.width) // 2, cnt_y))
 
                 elif scene_id == 'detail2' and scene_t > 0.5:
-                    ty = text_slide_up(detail2_img, H, 1380, scene_t - 0.5, 0.35)
+                    ty = text_slide_up(detail2_img, H, BOTTOM_Y, scene_t - 0.5, 0.35)
                     frame = paste_overlay_on_frame(frame, detail2_img,
-                                                  ((W - detail2_img.width) // 2, ty))
+                                                   ((W - detail2_img.width) // 2, ty))
 
                 elif scene_id == 'comparison' and scene_t > 0.8:
-                    ty = text_slide_up(comparison_img, H, 1380, scene_t - 0.8, 0.4)
+                    ty = text_slide_up(comparison_img, H, BOTTOM_Y, scene_t - 0.8, 0.4)
                     frame = paste_overlay_on_frame(frame, comparison_img,
-                                                  ((W - comparison_img.width) // 2, ty))
+                                                   ((W - comparison_img.width) // 2, ty))
 
                 elif scene_id == 'verdict':
-                    # Dynamic stack: bubble → verdict text
                     if scene_t > 0.5:
                         review_text = "Bagus banget, sesuai deskripsi! Recommended "
                         bubble = create_chat_bubble(review_text, font_path or "arial.ttf",
-                                                   side='left', accent_color=accent)
+                                                    side='left', accent_color=accent)
                         slide_t = min((scene_t - 0.5) / 0.4, 1.0)
                         bx = int(-bubble.width + (80 + bubble.width) * ease_out_cubic(slide_t))
-                        bubble_y = 1260
-                        frame = paste_overlay_on_frame(frame, bubble, (bx, bubble_y))
+                        frame = paste_overlay_on_frame(frame, bubble, (bx, BOTTOM_Y))
                     if scene_t > 3.0:
-                        verdict_y = 1260 + cached_bubble_h + 15
+                        verdict_y = BOTTOM_Y + cached_bubble_h + 15
                         ty = text_slide_up(verdict_img, H, verdict_y, scene_t - 3.0, 0.4)
                         frame = paste_overlay_on_frame(frame, verdict_img,
-                                                      ((W - verdict_img.width) // 2, ty))
+                                                       ((W - verdict_img.width) // 2, ty))
 
                 elif scene_id == 'cta':
-                    # Dynamic stack: CTA → STOK TERBATAS
                     if scene_t > 0.5:
-                        ty = text_slide_up(cta_img, H, 1200, scene_t - 0.5, 0.35)
+                        ty = text_slide_up(cta_img, H, BOTTOM_Y, scene_t - 0.5, 0.35)
                         frame = paste_overlay_on_frame(frame, cta_img,
-                                                      ((W - cta_img.width) // 2, ty))
+                                                       ((W - cta_img.width) // 2, ty))
                     if scene_t > 3.0:
-                        stok_y = 1200 + cta_img.height + 15
+                        stok_y = BOTTOM_Y + cta_img.height + 15
                         blink = create_blinking_label(" STOK TERBATAS!",
-                                                     font_bold or font_path or "arial.ttf",
-                                                     (220, 53, 69), scene_t, 0.6)
+                                                      font_bold or font_path or "arial.ttf",
+                                                      (220, 53, 69), scene_t, 0.6)
                         frame = paste_overlay_on_frame(frame, blink,
-                                                      ((W - blink.width) // 2, stok_y))
+                                                       ((W - blink.width) // 2, stok_y))
 
                 return frame
 

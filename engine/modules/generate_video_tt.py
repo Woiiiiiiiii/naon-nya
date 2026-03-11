@@ -28,7 +28,8 @@ from engine.modules.category_router import (
 from engine.modules.video_effects import (
     render_text_image, paste_overlay_on_frame,
     text_slide_up, ease_out_cubic, ease_out_back,
-    create_rating_stars, create_blinking_label, create_count_up_text
+    create_rating_stars, create_blinking_label, create_count_up_text,
+    create_simple_price
 )
 from engine.modules.sound_manager import get_sfx_path, init_sounds
 from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params
@@ -298,52 +299,70 @@ def generate_video_tt(queue_file, output_dir):
                 else:
                     frame = _ken_burns(composite, scene_t, scene_dur, kb_dir)
 
-                # Text overlays
+                # ═══ ZONE LAYOUT: TOP title, CENTER product, BOTTOM scene text ═══
+
+                # === TOP ZONE: Product name + price (PERSISTENT) ===
+                title_label = create_blinking_label(
+                    f" {nama} ", font_bold or font_path or "arial.ttf",
+                    TT_ACCENT, t, 1.0, font_size=48
+                )
+                title_y = 70
+                frame = paste_overlay_on_frame(frame, title_label,
+                                               ((W - title_label.width) // 2, title_y))
+
+                if harga:
+                    price_label = create_simple_price(f"Rp {harga}", font_bold or font_path or "arial.ttf",
+                                                      52, TT_ACCENT)
+                    price_y = title_y + title_label.height + 10
+                    frame = paste_overlay_on_frame(frame, price_label,
+                                                   ((W - price_label.width) // 2, price_y))
+
+                # === BOTTOM ZONE ===
+                BOTTOM_Y = 1460
+
                 if scene_id == 'hook' and scene_t > 0.2:
-                    ty = text_slide_up(hook_img, H, 1380, scene_t - 0.2, 0.25)
+                    ty = text_slide_up(hook_img, H, BOTTOM_Y, scene_t - 0.2, 0.25)
                     frame = paste_overlay_on_frame(frame, hook_img,
-                                                  ((W - hook_img.width) // 2, ty))
+                                                   ((W - hook_img.width) // 2, ty))
 
                 elif scene_id == 'product' and scene_t > 0.3:
-                    ty = text_slide_up(product_img, H, 1370, scene_t - 0.3, 0.3)
+                    ty = text_slide_up(product_img, H, BOTTOM_Y, scene_t - 0.3, 0.3)
                     frame = paste_overlay_on_frame(frame, product_img,
-                                                  ((W - product_img.width) // 2, ty))
+                                                   ((W - product_img.width) // 2, ty))
 
                 elif scene_id == 'feature':
-                    # Dynamic stack: feat → stars → terjual
-                    base_y = 1280
+                    base_y = BOTTOM_Y
                     if scene_t > 0.3:
                         ty = text_slide_up(feat_img, H, base_y, scene_t - 0.3, 0.3)
                         frame = paste_overlay_on_frame(frame, feat_img,
-                                                      ((W - feat_img.width) // 2, ty))
+                                                       ((W - feat_img.width) // 2, ty))
                     if scene_t > 4.0:
                         stars = create_rating_stars(rating_val, font_path or "arial.ttf",
-                                                  40, animated_t=scene_t - 4.0, total_dur=1.0)
+                                                   40, animated_t=scene_t - 4.0, total_dur=1.0)
                         stars_y = base_y + feat_img.height + 12
                         frame = paste_overlay_on_frame(frame, stars,
-                                                      ((W - stars.width) // 2, stars_y))
+                                                       ((W - stars.width) // 2, stars_y))
                     if scene_t > 7.0:
                         cnt_t = scene_t - 7.0
                         current = int(min(cnt_t / 2.0, 1.0) * sold_count)
                         cnt_img = create_count_up_text(current, "Terjual",
-                                                      font_path or "arial.ttf", accent)
+                                                       font_path or "arial.ttf", accent)
                         cnt_y = base_y + feat_img.height + 12 + cached_stars_h + 10
                         frame = paste_overlay_on_frame(frame, cnt_img,
-                                                      ((W - cnt_img.width) // 2, cnt_y))
+                                                       ((W - cnt_img.width) // 2, cnt_y))
 
                 elif scene_id == 'cta':
-                    # Dynamic stack: CTA → STOK TERBATAS
                     if scene_t > 0.3:
-                        ty = text_slide_up(cta_img, H, 1200, scene_t - 0.3, 0.3)
+                        ty = text_slide_up(cta_img, H, BOTTOM_Y, scene_t - 0.3, 0.3)
                         frame = paste_overlay_on_frame(frame, cta_img,
-                                                      ((W - cta_img.width) // 2, ty))
+                                                       ((W - cta_img.width) // 2, ty))
                     if scene_t > 2.0:
-                        stok_y = 1200 + cta_img.height + 15
+                        stok_y = BOTTOM_Y + cta_img.height + 15
                         blink = create_blinking_label(" STOK TERBATAS!",
-                                                     font_bold or font_path or "arial.ttf",
-                                                     TT_ACCENT, scene_t, 0.5)
+                                                      font_bold or font_path or "arial.ttf",
+                                                      TT_ACCENT, scene_t, 0.5)
                         frame = paste_overlay_on_frame(frame, blink,
-                                                      ((W - blink.width) // 2, stok_y))
+                                                       ((W - blink.width) // 2, stok_y))
 
                 return frame
 

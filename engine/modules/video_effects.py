@@ -1,4 +1,4 @@
-﻿"""
+"""
 video_effects.py
 Animation engine for CapCut-style dynamic videos.
 
@@ -527,11 +527,18 @@ def create_count_up_text(current_val, label, font_path, accent_color, font_size=
                             (*accent_color, 210), max_width=800, padding=16)
 
 
-def create_blinking_label(text, font_path, accent_color, t, blink_speed=0.5):
+def create_blinking_label(text, font_path, accent_color, t, blink_speed=0.5,
+                          font_size=40, max_width=800):
     """Create text that blinks (opacity pulses)."""
     opacity = int(128 + 127 * math.sin(2 * math.pi * t / blink_speed))
-    return render_text_image(text, font_path, 40, (255, 255, 255),
-                            (*accent_color, opacity), max_width=800, padding=14)
+    return render_text_image(text, font_path, font_size, (255, 255, 255),
+                            (*accent_color, opacity), max_width=max_width, padding=14)
+
+
+def create_simple_price(price_text, font_path, font_size=48, accent_color=(255, 64, 129)):
+    """Create a simple price label (single price, no strikethrough)."""
+    return render_text_image(price_text, font_path, font_size, (255, 255, 255),
+                            (*accent_color, 220), max_width=800, padding=16)
 
 
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
