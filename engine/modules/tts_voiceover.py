@@ -36,12 +36,12 @@ OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers')
 # Per-account voice: each channel gets a DISTINCT voice
 ACCOUNT_VOICES = {
     'yt_1': {'voice': 'id-ID-GadisNeural', 'pitch_offset': '+2Hz'},   # fashion: female high
-    'yt_2': {'voice': 'id-ID-ArdiNeural',  'pitch_offset': '+0Hz'},   # gadget: male neutral
+    'yt_2': {'voice': 'id-ID-ArdiNeural',  'pitch_offset': '+2Hz'},   # gadget: male (boosted pitch for clarity)
     'yt_3': {'voice': 'id-ID-GadisNeural', 'pitch_offset': '+0Hz'},   # beauty: female warm
-    'yt_4': {'voice': 'id-ID-ArdiNeural',  'pitch_offset': '-1Hz'},   # home: male low
+    'yt_4': {'voice': 'id-ID-ArdiNeural',  'pitch_offset': '+1Hz'},   # home: male (boosted pitch for clarity)
     'yt_5': {'voice': 'id-ID-GadisNeural', 'pitch_offset': '-1Hz'},   # wellness: female calm
     'tt_1': {'voice': 'id-ID-GadisNeural', 'pitch_offset': '+1Hz'},   # tiktok
-    'fb_1': {'voice': 'id-ID-ArdiNeural',  'pitch_offset': '+0Hz'},   # facebook
+    'fb_1': {'voice': 'id-ID-ArdiNeural',  'pitch_offset': '+2Hz'},   # facebook: male (boosted)
 }
 
 # Per-scene speaking style (rate + pitch via edge-tts native params)
@@ -186,11 +186,11 @@ CATEGORY_HOOKS = {
 
 CATEGORY_FEATURES = {
     'fashion': [
-        "Bahannya adem dan nyaman dipakai seharian.",
-        "Kualitas jahitan rapi, tahan lama dipakai.",
-        "Modelnya kekinian, bisa dipadupadankan.",
+        "Kualitasnya bagus dan tahan lama.",
+        "Desainnya kekinian, bisa dipadupadankan.",
         "Tersedia banyak pilihan warna dan ukuran.",
-        "Ringan dan pas di badan, tidak gerah.",
+        "Praktis digunakan untuk berbagai kesempatan.",
+        "Tampilannya elegan dan tetap nyaman.",
     ],
     'gadget': [
         "Performanya stabil dan baterainya tahan lama.",
@@ -335,36 +335,53 @@ def generate_voiceover_script(product_info, platform='yt_short', account_id='yt_
     # Convert price to Indonesian words
     harga_kata = harga_ke_kata(harga)
     
-    # HOOK (category-themed)
-    hooks = CATEGORY_HOOKS.get(cat, CATEGORY_HOOKS['home'])
-    hook_text = _pick_unique(hooks, used, rng)
+    # ALL scripts MUST mention product name — no generic category text
+    nama_pendek = nama[:40].strip() if nama else 'produk ini'
     
-    # HERO: mention product name
+    # HOOK: always mention product name
+    if nama:
+        hook_templates = [
+            f"Hai, kali ini kita bahas {nama_pendek}.",
+            f"Mau tahu tentang {nama_pendek}? Simak sampai habis.",
+            f"Ini dia {nama_pendek}, yang lagi banyak dicari.",
+            f"Buat kamu yang cari {nama_pendek}, wajib lihat ini.",
+            f"Ada rekomendasi menarik, yaitu {nama_pendek}.",
+        ]
+        hook_text = rng.choice(hook_templates)
+    else:
+        hooks = CATEGORY_HOOKS.get(cat, CATEGORY_HOOKS['home'])
+        hook_text = _pick_unique(hooks, used, rng)
+    
+    # HERO: product name + intro
     if nama:
         hero_templates = [
-            f"Ini dia {nama}, yang lagi diminati banyak orang.",
-            f"{nama}, produk yang sudah terbukti bagus.",
-            f"Kenalkan, {nama}, pas untuk kebutuhan kamu.",
+            f"Ini dia {nama_pendek}, yang lagi diminati banyak orang.",
+            f"{nama_pendek}, produk yang sudah terbukti bagus.",
+            f"Kenalkan, {nama_pendek}, pas untuk kebutuhan kamu.",
         ]
         hero_text = rng.choice(hero_templates)
     else:
         hero_text = "Produk yang satu ini, memang lagi diminati banyak orang."
     
-    # FEATURE: category-themed + product description
-    features = CATEGORY_FEATURES.get(cat, CATEGORY_FEATURES['home'])
+    # FEATURE: product name + description (NEVER generic category text)
     if desc:
         short_desc = desc[:60].rstrip('.')
-        feat_text = f"{short_desc}, pas untuk kebutuhan sehari-hari."
+        feat_text = f"{nama_pendek}, {short_desc}."
+    elif nama:
+        features = CATEGORY_FEATURES.get(cat, CATEGORY_FEATURES['home'])
+        generic_feat = _pick_unique(features, used, rng)
+        feat_text = f"{nama_pendek}, {generic_feat.lower()}"
     else:
+        features = CATEGORY_FEATURES.get(cat, CATEGORY_FEATURES['home'])
         feat_text = _pick_unique(features, used, rng)
     
-    # PROOF: mention price in Indonesian words
+    # PROOF: product name + price (NEVER generic)
     proofs = CATEGORY_PROOF.get(cat, CATEGORY_PROOF['home'])
     if harga_kata:
         price_templates = [
-            f"Dengan harga hanya {harga_kata}, kualitasnya tidak mengecewakan.",
-            f"Harganya cuma {harga_kata}, dan sudah banyak yang puas.",
-            f"Cuma {harga_kata} saja, tapi kualitasnya sangat baik.",
+            f"{nama_pendek} dengan harga hanya {harga_kata}, kualitasnya terjamin.",
+            f"Harga {nama_pendek} cuma {harga_kata}, dan sudah banyak yang puas.",
+            f"Cuma {harga_kata} untuk {nama_pendek}, tapi kualitasnya sangat baik.",
         ]
         proof_text = rng.choice(price_templates)
     else:

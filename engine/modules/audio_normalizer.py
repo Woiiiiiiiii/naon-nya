@@ -18,9 +18,9 @@ from io import BytesIO
 # ═══════════════════════════════════════════════════════════════════
 #  STANDARD VOLUME LEVELS (consistent across ALL platforms)
 # ═══════════════════════════════════════════════════════════════════
-MUSIC_VOLUME = 0.40      # Background music (audible atmosphere)
-SFX_VOLUME = 0.30        # Sound effects
-VOICEOVER_VOLUME = 0.75  # Voiceover (clear, balanced with music)
+MUSIC_VOLUME = 0.35      # Background music (supports, doesn't compete with VO)
+SFX_VOLUME = 0.25        # Sound effects (subtle)
+VOICEOVER_VOLUME = 0.85  # Voiceover (clear, dominant — compensates quieter male voice)
 
 # Target RMS loudness (linear scale, ~-18 dBFS)
 TARGET_RMS = 0.12

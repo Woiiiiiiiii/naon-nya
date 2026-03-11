@@ -98,6 +98,8 @@ def main():
         "python engine/modules/body_retention_evaluator.py",
         # Generate per-video music (unique track per video)
         "python engine/modules/generate_music.py",
+        # CLEANUP: wipe ALL old voiceover files to prevent stale theme/scene bleed
+        "python -c \"import os, glob; [os.remove(f) for f in glob.glob('engine/data/voiceovers/**/vo_*.mp3', recursive=True)]\"",
         # AI TTS: generate voiceover per PLATFORM queue (each has correct account_id)
         # YT queue → yt_short + yt_long VOs (account_id = yt_1..yt_5)
         "python engine/modules/tts_voiceover.py --queue engine/queue/yt_queue.jsonl --platform yt",
