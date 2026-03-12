@@ -488,17 +488,8 @@ def export_bank_to_csv(output_file='engine/data/produk.csv'):
     Skips garbage data (Rp0 prices, Pexels/Pixabay images)."""
     import csv
 
-    # Load fallback prices for price recovery
-    try:
-        from scrape_produk import FALLBACK_PRODUCTS
-        fallback_prices = {}
-        for cat, products in FALLBACK_PRODUCTS.items():
-            for p in products:
-                # Match by name (lowercase, stripped)
-                key = p['nama'].lower().strip()
-                fallback_prices[key] = p['price']
-    except Exception:
-        fallback_prices = {}
+    # No price recovery from hardcoded data — products with Rp0 are skipped
+    fallback_prices = {}
 
     all_products = []
     skipped = {'no_price': 0, 'pexels': 0, 'no_image': 0}
