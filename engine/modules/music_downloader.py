@@ -309,86 +309,104 @@ def _envelope(i, n, attack=0.05, release=0.2):
 
 
 def generate_procedural_track(filepath, category, seed_val=0, duration=30):
-    """Generate a procedural music track using pure wave synthesis (Tier 3)."""
+    """Generate a procedural music track using numpy-accelerated wave synthesis.
+    FAST: uses numpy vectorized ops instead of per-sample Python loops.
+    Generates 30s stereo WAV in <1 second."""
+    import numpy as np
+
     rng = random.Random(seed_val)
     mood = CATEGORY_MOODS.get(category, CATEGORY_MOODS['fashion'])
 
     bpm = mood['bpm'] + rng.randint(-10, 10)
     beat_dur = 60.0 / bpm
-    scale = SCALES.get(mood['scale'], SCALES['major'])
+    sc = SCALES.get(mood['scale'], SCALES['major'])
     root = mood['root'] + rng.choice([-2, 0, 2])
 
-    n_samples = int(SAMPLE_RATE * duration)
-    left = [0.0] * n_samples
-    right = [0.0] * n_samples
+    n = int(SAMPLE_RATE * duration)
+    t_arr = np.arange(n, dtype=np.float64) / SAMPLE_RATE
+    left = np.zeros(n, dtype=np.float64)
+    right = np.zeros(n, dtype=np.float64)
+
+    def add_tone(target_l, target_r, freq, start_s, dur_s, vol_l, vol_r, attack=0.05, release=0.2):
+        """Add a tone to L/R arrays using vectorized numpy."""
+        si = int(start_s * SAMPLE_RATE)
+        ns = int(dur_s * SAMPLE_RATE)
+        if si >= n or ns <= 0:
+            return
+        ns = min(ns, n - si)
+        t = np.arange(ns, dtype=np.float64) / SAMPLE_RATE
+        # Envelope
+        ai = max(int(ns * attack), 1)
+        ri = max(int(ns * release), 1)
+        env = np.ones(ns)
+        env[:ai] = np.linspace(0, 1, ai)
+        env[-ri:] = np.linspace(1, 0, ri)
+        # Oscillator (warm = fundamental + harmonics)
+        sig = np.sin(2 * np.pi * freq * t) * 0.7
+        sig += np.sin(4 * np.pi * freq * t) * 0.15
+        sig += np.sin(6 * np.pi * freq * t) * 0.08
+        sig *= env
+        target_l[si:si+ns] += sig * vol_l
+        target_r[si:si+ns] += sig * vol_r
 
     # Bass line
-    bass_notes = [root - 12 + scale[i % len(scale)] for i in range(4)]
-    t, ni = 0.0, 0
-    while t < duration:
+    bass_notes = [root - 12 + sc[i % len(sc)] for i in range(4)]
+    t_pos, ni = 0.0, 0
+    while t_pos < duration:
         note = bass_notes[ni % len(bass_notes)]
-        nd = beat_dur
-        ns = int(SAMPLE_RATE * min(nd, duration - t))
-        si = int(SAMPLE_RATE * t)
-        for j in range(min(ns, n_samples - si)):
-            env = _envelope(j, ns, 0.02, 0.15)
-            v = _osc(_midi_to_freq(note), j / SAMPLE_RATE, 'warm') * 0.25 * env
-            left[si + j] += v
-            right[si + j] += v
-        t += nd
+        freq = _midi_to_freq(note)
+        nd = min(beat_dur, duration - t_pos)
+        add_tone(left, right, freq, t_pos, nd, 0.25, 0.25, attack=0.02, release=0.15)
+        t_pos += beat_dur
         ni += 1
 
     # Pad chords
     chord_dur = duration / 4
     for ci in range(4):
-        cr = root + scale[(ci * 2) % len(scale)]
+        cr = root + sc[(ci * 2) % len(sc)]
         nd = min(chord_dur, duration - ci * chord_dur)
-        ns = int(SAMPLE_RATE * nd)
-        si = int(SAMPLE_RATE * ci * chord_dur)
-        for iv in [0, scale[2 % len(scale)], scale[4 % len(scale)]]:
+        for iv in [0, sc[2 % len(sc)], sc[4 % len(sc)]]:
             freq = _midi_to_freq(cr + iv)
-            vol = 0.12 if iv == 0 else 0.08
-            for j in range(min(ns, n_samples - si)):
-                env = _envelope(j, ns, 0.15, 0.2)
-                v = _osc(freq, j / SAMPLE_RATE, 'sine') * vol * env * mood['energy']
-                left[si + j] += v * 0.8
-                right[si + j] += v * 0.6
+            vol = 0.12 * mood['energy'] if iv == 0 else 0.08 * mood['energy']
+            add_tone(left, right, freq, ci * chord_dur, nd, vol * 0.8, vol * 0.6,
+                     attack=0.15, release=0.2)
 
     # Melody
-    pool = [root + s for s in scale] + [root + 12 + s for s in scale]
-    t, prev = 0.0, root
-    while t < duration:
+    pool = [root + s for s in sc] + [root + 12 + s for s in sc]
+    t_pos, prev = 0.0, root
+    while t_pos < duration:
         if rng.random() < mood['energy'] * 0.7:
             cands = [nn for nn in pool if abs(nn - prev) <= 5]
             note = rng.choice(cands or pool)
             prev = note
             nd = beat_dur * rng.choice([0.5, 1.0])
-            ns = int(SAMPLE_RATE * min(nd, duration - t))
-            si = int(SAMPLE_RATE * t)
-            for j in range(min(ns, n_samples - si)):
-                env = _envelope(j, ns)
-                v = _osc(_midi_to_freq(note), j / SAMPLE_RATE, mood['wave']) * 0.08 * env
-                left[si + j] += v * 0.5
-                right[si + j] += v * 0.9
-        t += beat_dur * rng.choice([0.5, 1.0])
+            nd = min(nd, duration - t_pos)
+            freq = _midi_to_freq(note)
+            add_tone(left, right, freq, t_pos, nd, 0.04, 0.07)
+        t_pos += beat_dur * rng.choice([0.5, 1.0])
 
     # Normalize
-    peak = max(max(abs(s) for s in left), max(abs(s) for s in right), 0.01)
+    peak = max(np.max(np.abs(left)), np.max(np.abs(right)), 0.01)
     if peak > 0.75:
         scale_f = 0.72 / peak
-        left = [s * scale_f for s in left]
-        right = [s * scale_f for s in right]
+        left *= scale_f
+        right *= scale_f
 
-    # Write WAV
+    # Clip
+    left = np.clip(left, -1.0, 1.0)
+    right = np.clip(right, -1.0, 1.0)
+
+    # Write WAV (numpy → int16 → bytes, fast)
+    l_int = (left * 32767).astype(np.int16)
+    r_int = (right * 32767).astype(np.int16)
+    stereo = np.column_stack((l_int, r_int))
+
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with wave.open(filepath, 'w') as wf:
         wf.setnchannels(2)
         wf.setsampwidth(2)
         wf.setframerate(SAMPLE_RATE)
-        for i in range(n_samples):
-            l = max(-1.0, min(1.0, left[i]))
-            r = max(-1.0, min(1.0, right[i]))
-            wf.writeframes(struct.pack('<h', int(l * 32767)))
-            wf.writeframes(struct.pack('<h', int(r * 32767)))
+        wf.writeframes(stereo.tobytes())
 
     return True
 

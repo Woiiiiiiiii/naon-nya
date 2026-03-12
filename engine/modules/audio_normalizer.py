@@ -16,15 +16,16 @@ import numpy as np
 from io import BytesIO
 
 # ═══════════════════════════════════════════════════════════════════
-#  STANDARD VOLUME LEVELS (consistent across ALL platforms)
+#  STANDARD VOLUME LEVELS — SINGLE consistent level for ALL channels
+#  Female VO naturally louder → VO turun 1, Music naik 1 for female
 # ═══════════════════════════════════════════════════════════════════
 MUSIC_VOLUME = 0.30      # Background music (default / male VO)
 SFX_VOLUME = 0.25        # Sound effects (subtle)
 VOICEOVER_VOLUME = 0.90  # Voiceover default (male = clearly dominant)
 
-# Female VO: slightly softer VO + louder music (GadisNeural is naturally louder)
-FEMALE_VO_VOLUME = 0.80      # Female VO (turun 1 tingkat dari 0.90)
-FEMALE_MUSIC_VOLUME = 0.38   # Music for female VO (naik 1 tingkat dari 0.30)
+# Female VO: slightly softer VO + louder music
+FEMALE_VO_VOLUME = 0.80      # Female VO (turun 1 tingkat)
+FEMALE_MUSIC_VOLUME = 0.38   # Music for female VO (naik 1 tingkat)
 
 # Which accounts use female voice (GadisNeural)
 FEMALE_ACCOUNTS = {'yt_1', 'yt_3', 'yt_5', 'tt_1'}
@@ -78,8 +79,9 @@ def normalize_audio_clip(audio_clip, target_rms=TARGET_RMS):
         # Calculate gain to reach target RMS
         gain = target_rms / rms
         
-        # Limit gain — allow higher amplification for quiet tracks (was 3.0, too low)
-        gain = max(0.3, min(gain, 5.0))
+        # Limit gain range TIGHTLY for consistent volume
+        # max 2.5x amplification, min 0.5x reduction
+        gain = max(0.5, min(gain, 2.5))
         
         return audio_clip.with_effects([afx.MultiplyVolume(gain)])
     except Exception as e:
@@ -98,8 +100,8 @@ def apply_eq_balance(audio_clip, bass_boost=1.0, treble_cut=0.0):
     
     Args:
         audio_clip: moviepy AudioFileClip
-        bass_boost: multiplier for bass (1.0 = neutral)
-        treble_cut: dB to cut high frequencies (0 = neutral)
+        bass_boost: multiplier for low frequencies (1.0 = neutral)
+        treble_cut: reduction for high frequencies (0.0 = none)
     
     Returns:
         audio_clip (unchanged if no FFmpeg EQ available)
@@ -182,7 +184,7 @@ def get_ffmpeg_audio_params():
 
 
 def find_music_file(platform_dir, produk_id, acct_id, category='home'):
-    """Find music file with multi-tier fallback. NEVER returns None silently.
+    """Find music file with multi-tier fallback.
     
     Tiers:
       1. Exact match: MUSIC_{produk_id}_{acct_id}.mp3
@@ -190,7 +192,7 @@ def find_music_file(platform_dir, produk_id, acct_id, category='home'):
       3. Same platform: any MUSIC_*.mp3 in platform dir
       4. Category library: random track from assets/music/{category}/
     
-    Returns: (path, tier) or (None, 0) if absolutely nothing found.
+    Returns: (path, tier) or (None, 0) if nothing found.
     """
     import glob
     import random
@@ -205,7 +207,7 @@ def find_music_file(platform_dir, produk_id, acct_id, category='home'):
     matches2 = glob.glob(pattern2)
     if matches2:
         pick = random.choice(matches2)
-        print(f"    [MUSIC FALLBACK T2] {acct_id}: using {os.path.basename(pick)} (same product)")
+        print(f"    [MUSIC T2] {acct_id}: using {os.path.basename(pick)} (same product)")
         return pick, 2
 
     # Tier 3: Any music in this platform dir
@@ -213,13 +215,12 @@ def find_music_file(platform_dir, produk_id, acct_id, category='home'):
     matches3 = glob.glob(pattern3)
     if matches3:
         pick = random.choice(matches3)
-        print(f"    [MUSIC FALLBACK T3] {acct_id}: using {os.path.basename(pick)} (same platform)")
+        print(f"    [MUSIC T3] {acct_id}: using {os.path.basename(pick)} (same platform)")
         return pick, 3
 
     # Tier 4: Category music library (raw source files)
     music_lib = os.path.join(os.path.dirname(__file__), '..', 'assets', 'music')
     # Map category to ACTUAL music library folder names
-    # Folders: assets/music/beauty/, fashion/, gadget/, home/, wellness/
     cat_map = {
         'fashion': 'fashion', 'gadget': 'gadget', 'beauty': 'beauty',
         'home': 'home', 'wellness': 'wellness', 'food': 'home',
@@ -233,7 +234,7 @@ def find_music_file(platform_dir, produk_id, acct_id, category='home'):
                    if f.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a'))]
         if tracks:
             pick = os.path.join(lib_dir, random.choice(tracks))
-            print(f"    [MUSIC FALLBACK T4] {acct_id}: using library {os.path.basename(pick)}")
+            print(f"    [MUSIC T4] {acct_id}: using library {os.path.basename(pick)}")
             return pick, 4
 
     # Also check general music folder
@@ -243,7 +244,7 @@ def find_music_file(platform_dir, produk_id, acct_id, category='home'):
                    if f.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a'))]
         if tracks:
             pick = os.path.join(gen_dir, random.choice(tracks))
-            print(f"    [MUSIC FALLBACK T4-gen] {acct_id}: using general {os.path.basename(pick)}")
+            print(f"    [MUSIC T4-gen] {acct_id}: using general {os.path.basename(pick)}")
             return pick, 4
 
     print(f"    [MUSIC WARNING] No music found for {produk_id}/{acct_id} — video will have no BGM!")

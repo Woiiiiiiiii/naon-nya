@@ -96,7 +96,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: engine/assets/music
-          key: music-library-${{ hashFiles('engine/modules/music_downloader.py') }}
+          key: music-library-v2
           restore-keys: music-library-
 
       # Cache CF SD generated backgrounds
@@ -123,8 +123,16 @@ jobs:
             fi
           done
           echo "Deleted $CORRUPT corrupt files"
-          echo "Removing old procedural synth tracks..."
-          find engine/assets/music/ -name "*_synth_*" -delete 2>/dev/null || true
+          # Only remove synth tracks if API-downloaded tracks exist for that category
+          for cat in fashion gadget beauty home wellness; do
+            API_COUNT=$(find "engine/assets/music/$cat" -name "*.mp3" -o -name "*.ogg" 2>/dev/null | grep -v "_synth_" | wc -l)
+            if [ "$API_COUNT" -gt 0 ]; then
+              echo "  $cat: has $API_COUNT API tracks, removing old synth..."
+              find "engine/assets/music/$cat" -name "*_synth_*" -delete 2>/dev/null || true
+            else
+              echo "  $cat: no API tracks, KEEPING synth as fallback"
+            fi
+          done
           echo "Music cleanup done."
 
       # Purge garbage bank data (Pexels/Pixabay images, Rp0 prices)
@@ -153,9 +161,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: engine/assets/music
-          key: music-library-${{ hashFiles('engine/modules/music_downloader.py') }}-week-${{ github.run_number }}
+          key: music-library-v2
           restore-keys: |
-            music-library-${{ hashFiles('engine/modules/music_downloader.py') }}-
             music-library-
 
       - name: Run full pipeline
