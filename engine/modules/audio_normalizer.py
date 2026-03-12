@@ -18,12 +18,28 @@ from io import BytesIO
 # ═══════════════════════════════════════════════════════════════════
 #  STANDARD VOLUME LEVELS (consistent across ALL platforms)
 # ═══════════════════════════════════════════════════════════════════
-MUSIC_VOLUME = 0.30      # Background music (well behind VO)
+MUSIC_VOLUME = 0.30      # Background music (default / male VO)
 SFX_VOLUME = 0.25        # Sound effects (subtle)
-VOICEOVER_VOLUME = 0.90  # Voiceover (clearly dominant over music)
+VOICEOVER_VOLUME = 0.90  # Voiceover default (male = clearly dominant)
+
+# Female VO: slightly softer VO + louder music (GadisNeural is naturally louder)
+FEMALE_VO_VOLUME = 0.80      # Female VO (turun 1 tingkat dari 0.90)
+FEMALE_MUSIC_VOLUME = 0.38   # Music for female VO (naik 1 tingkat dari 0.30)
+
+# Which accounts use female voice (GadisNeural)
+FEMALE_ACCOUNTS = {'yt_1', 'yt_3', 'yt_5', 'tt_1'}
 
 # Target RMS loudness (linear scale, ~-18 dBFS)
 TARGET_RMS = 0.12
+
+
+def get_voice_volumes(acct_id):
+    """Get VO and music volume levels based on account voice gender.
+    Female accounts get softer VO + louder music.
+    Returns: (vo_volume, music_volume)"""
+    if acct_id in FEMALE_ACCOUNTS:
+        return FEMALE_VO_VOLUME, FEMALE_MUSIC_VOLUME
+    return VOICEOVER_VOLUME, MUSIC_VOLUME
 
 
 def normalize_audio_clip(audio_clip, target_rms=TARGET_RMS):
@@ -93,17 +109,21 @@ def apply_eq_balance(audio_clip, bass_boost=1.0, treble_cut=0.0):
     return audio_clip
 
 
-def prepare_music(audio_clip, total_duration):
-    """Prepare music track: loop if needed, trim, normalize, set standard volume.
+def prepare_music(audio_clip, total_duration, music_vol=None):
+    """Prepare music track: loop if needed, trim, normalize, set volume.
     
     Args:
         audio_clip: raw AudioFileClip of the music
         total_duration: target video duration
+        music_vol: optional volume override (default: MUSIC_VOLUME)
     
     Returns:
         processed AudioFileClip ready for mixing
     """
     from moviepy import afx, concatenate_audioclips
+    
+    if music_vol is None:
+        music_vol = MUSIC_VOLUME
     
     # Loop if music is shorter than video
     if audio_clip.duration < total_duration:
@@ -116,8 +136,8 @@ def prepare_music(audio_clip, total_duration):
     # Normalize loudness
     audio_clip = normalize_audio_clip(audio_clip, TARGET_RMS)
     
-    # Apply standard music volume
-    audio_clip = audio_clip.with_effects([afx.MultiplyVolume(MUSIC_VOLUME)])
+    # Apply music volume (per-gender or default)
+    audio_clip = audio_clip.with_effects([afx.MultiplyVolume(music_vol)])
     
     return audio_clip
 

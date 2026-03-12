@@ -36,7 +36,7 @@ from engine.modules.video_effects import (
     create_count_up_text, create_blinking_label, create_simple_price
 )
 from engine.modules.sound_manager import get_sfx_path, init_sounds
-from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params, find_music_file
+from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params, find_music_file, get_voice_volumes
 
 W, H = 1080, 1920
 COMPOSITES_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'composites')
@@ -464,10 +464,13 @@ def generate_long(queue_file, output_dir):
 
             # === AUDIO (normalized) ===
             audio_clips = []
+            # Get per-gender volume levels
+            vo_vol, music_vol = get_voice_volumes(acct_id)
+
             music_dir = os.path.join(output_dir, "yt")
             music_path, music_tier = find_music_file(music_dir, produk_id, acct_id, category)
             if music_path:
-                music = prepare_music(AudioFileClip(music_path), total_dur)
+                music = prepare_music(AudioFileClip(music_path), total_dur, music_vol=music_vol)
                 audio_clips.append(music)
 
             # SFX at scene transitions
@@ -523,9 +526,9 @@ def generate_long(queue_file, output_dir):
                             max_dur = total_dur - start_time - 0.2
                         if max_dur > 0.5 and vo.duration > max_dur:
                             vo = vo.subclipped(0, max_dur)
-                        from engine.modules.audio_normalizer import normalize_audio_clip, VOICEOVER_VOLUME
+                        from engine.modules.audio_normalizer import normalize_audio_clip
                         vo = normalize_audio_clip(vo)
-                        vo = vo.with_effects([afx.MultiplyVolume(VOICEOVER_VOLUME)])
+                        vo = vo.with_effects([afx.MultiplyVolume(vo_vol)])
                         vo = vo.with_start(start_time)
                         audio_clips.append(vo)
                         vo_found = True
