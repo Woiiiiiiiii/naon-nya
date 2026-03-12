@@ -370,16 +370,16 @@ def scrape_products(output_file, config):
             # Fresh scrape succeeded — use fresh Shopee products
             all_products.extend(cat_products)
             stats['fresh'] += len(cat_products)
-            print(f"    \u2713 Using {len(cat_products)} FRESH products from Shopee API")
+            print(f"    [OK] Using {len(cat_products)} FRESH products from Shopee API")
         elif bank_products:
             # Scrape failed but bank has VALID Shopee data
             all_products.extend(bank_products)
             stats['bank'] += len(bank_products)
-            print(f"    \u2192 Using {len(bank_products)} BANK products (valid Shopee data)")
+            print(f"    [BANK] Using {len(bank_products)} BANK products (valid Shopee data)")
         else:
             # No products at all — skip this category
             stats['skipped'] += 1
-            print(f"    \u2716 SKIPPED {category} — no Shopee products available")
+            print(f"    [SKIP] SKIPPED {category} -- no Shopee products available")
             print(f"      Fix: ensure CF_PROXY_URL + SHOPEE_COOKIES are set in CI secrets")
 
     # Save merged result
