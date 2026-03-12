@@ -174,6 +174,15 @@ jobs:
           restore-keys: |
             music-library-
 
+      # DIAGNOSTIC: test CF Worker + Shopee API connectivity
+      - name: Test Shopee proxy connectivity
+        continue-on-error: true
+        env:
+          CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
+          CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
+          SHOPEE_COOKIES: ${{ secrets.SHOPEE_COOKIES }}
+        run: python engine/modules/test_shopee_proxy.py
+
       - name: Run full pipeline
         env:
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
