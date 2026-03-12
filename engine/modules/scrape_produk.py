@@ -533,24 +533,40 @@ def scrape_products(output_file, config):
         # Try scraping fresh from Shopee
         cat_products = scrape_category(category, affiliate_id, products_per_category)
 
-        # Check if scrape returned real products (not fallback)
-        has_real_images = any(p.get('image_url', '') for p in cat_products)
+        # Check if scrape returned products with Shopee CDN images (real or fallback)
+        has_real_images = any(
+            p.get('image_url', '') and 'pexels.com' not in p.get('image_url', '')
+            and 'pixabay.com' not in p.get('image_url', '')
+            for p in cat_products
+        )
+
+        # VALIDATE bank products — reject Pexels/Pixabay/Rp0 garbage
+        valid_bank = [
+            p for p in bank_products
+            if not any(x in str(p.get('image_url', '')) for x in ['pexels.com', 'pixabay.com', 'unsplash.com'])
+            and str(p.get('harga', '')) not in ('Rp0', 'Rp0.0', '', '0')
+        ]
+        if len(valid_bank) < len(bank_products):
+            garbage = len(bank_products) - len(valid_bank)
+            print(f"    [CLEAN] Filtered out {garbage} Pexels/Rp0 garbage from bank")
+            bank_products = valid_bank
 
         if has_real_images:
-            # Fresh scrape succeeded — use scraped products
+            # Fresh scrape or valid fallback — use these
             all_products.extend(cat_products)
             stats['fresh'] += len(cat_products)
-            print(f"    ✓ Using {len(cat_products)} FRESH scraped products")
+            print(f"    \u2713 Using {len(cat_products)} FRESH products (Shopee)")
         elif bank_products:
-            # Scrape failed but we have bank data — KEEP bank products
+            # Valid bank only (no Pexels garbage)
             all_products.extend(bank_products)
             stats['bank'] += len(bank_products)
-            print(f"    → Using {len(bank_products)} BANK products (Shopee blocked)")
+            print(f"    \u2192 Using {len(bank_products)} BANK products (Shopee blocked)")
         else:
-            # No bank, no fresh — use fallback (last resort)
+            # No valid bank, use whatever we got
             all_products.extend(cat_products)
             stats['fallback'] += len(cat_products)
-            print(f"    ⚠ Using {len(cat_products)} FALLBACK products (no bank, no Shopee)")
+            print(f"    \u26a0 Using {len(cat_products)} FALLBACK products (no valid bank)")
+
 
     # Save merged result
     os.makedirs(os.path.dirname(output_file), exist_ok=True)

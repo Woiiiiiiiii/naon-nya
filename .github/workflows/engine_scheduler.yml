@@ -99,6 +99,15 @@ jobs:
           key: music-library-v2
           restore-keys: music-library-
 
+      # Cache product bank so purged Pexels data stays gone + fresh Shopee products persist
+      - name: Restore product bank cache
+        uses: actions/cache@v4
+        with:
+          path: engine/data/product_bank
+          key: product-bank-v2
+          restore-keys: product-bank-
+
+
       # Cache CF SD generated backgrounds
       - name: Restore backgrounds cache
         uses: actions/cache@v4

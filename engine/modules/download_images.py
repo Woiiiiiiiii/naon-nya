@@ -644,14 +644,19 @@ def download_images(produk_file, output_dir):
         
         print(f"  [{pid}] {name[:40]}...")
         
-        # TIER 1: Shopee Cookies (authenticated search)
-        if _try_shopee_cookies(name, img_path):
-            stats['cookies'] += 1
-            continue
+        # REJECT: Never use Pexels/Pixabay/Unsplash URLs
+        if any(x in image_url for x in ['pexels.com', 'pixabay.com', 'unsplash.com']):
+            print(f"    [REJECT] Non-Shopee image URL: {image_url[:50]}")
+            image_url = ''  # Force search by name instead
         
-        # TIER 2: Shopee CDN (direct URL from scraper data)
+        # TIER 1: Shopee CDN (direct URL from scraper data — fastest, no proxy needed)
         if _try_shopee_cdn(image_url, img_path):
             stats['shopee_cdn'] += 1
+            continue
+        
+        # TIER 2: Shopee Cookies (authenticated search)
+        if _try_shopee_cookies(name, img_path):
+            stats['cookies'] += 1
             continue
         
         # TIER 3: Shopee page scrape
@@ -664,7 +669,7 @@ def download_images(produk_file, output_dir):
             stats['shopee_scrape'] += 1
             continue
         
-        # TIER 5: Product Collector bank (previously downloaded from Shopee)
+        # TIER 5: Product Collector bank (previously downloaded from Shopee ONLY)
         if _try_product_bank(pid, category, img_path):
             stats['bank'] += 1
             continue
