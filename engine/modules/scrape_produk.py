@@ -111,6 +111,7 @@ def search_shopee_cookies(keyword, limit=5):
     """Try Shopee search with authenticated cookies via CF proxy."""
     session = _build_shopee_session()
     if not session:
+        print(f"    [DIAG] No Shopee session (SHOPEE_COOKIES not set or invalid)")
         return None
 
     url = "https://shopee.co.id/api/v4/search/search_items"
@@ -143,22 +144,35 @@ def search_shopee_cookies(keyword, limit=5):
                 if status == 200 and data:
                     items = data.get("items", [])
                     if items:
-                        print(f"    [Cookies+Proxy] '{keyword}' \u2192 {len(items)} products")
+                        print(f"    [Cookies+Proxy] '{keyword}' -> {len(items)} products")
                         return items
+                    else:
+                        error = data.get('error', data.get('error_msg', ''))
+                        print(f"    [DIAG] Cookies+Proxy: HTTP {status} but 0 items. error={error}")
+                else:
+                    snippet = str(data)[:100] if data else 'None'
+                    print(f"    [DIAG] Cookies+Proxy: HTTP {status}. Response: {snippet}")
                 return None
+            else:
+                print(f"    [DIAG] CF proxy not available (check CF_PROXY_URL + CF_PROXY_KEY)")
         except ImportError:
-            pass
+            print(f"    [DIAG] shopee_proxy module not found")
 
-        # Direct fallback
+        # Direct fallback (will likely be blocked)
         resp = session.get(url, params=params, timeout=15)
         if resp.status_code == 200:
             data = resp.json()
             items = data.get("items", [])
             if items:
-                print(f"    [Cookies] '{keyword}' \u2192 {len(items)} products")
+                print(f"    [Cookies] '{keyword}' -> {len(items)} products")
                 return items
+            else:
+                print(f"    [DIAG] Cookies direct: HTTP 200 but 0 items")
+        else:
+            print(f"    [DIAG] Cookies direct: HTTP {resp.status_code}")
         return None
-    except Exception:
+    except Exception as e:
+        print(f"    [DIAG] Cookies exception: {e}")
         return None
 
 
@@ -192,23 +206,36 @@ def search_shopee(keyword, limit=5):
                 if status == 200 and data:
                     items = data.get("items", [])
                     if items:
-                        print(f"    [PublicAPI+Proxy] '{keyword}' \u2192 {len(items)} products")
+                        print(f"    [PublicAPI+Proxy] '{keyword}' -> {len(items)} products")
                         return items
-                if status == 403:
+                    else:
+                        error = data.get('error', data.get('error_msg', ''))
+                        print(f"    [DIAG] PublicAPI+Proxy: HTTP {status} but 0 items. error={error}")
+                elif status == 403:
+                    print(f"    [DIAG] PublicAPI+Proxy: HTTP 403 (Shopee blocked)")
                     return None
-                return data.get("items", []) if data else None
+                else:
+                    snippet = str(data)[:100] if data else 'None'
+                    print(f"    [DIAG] PublicAPI+Proxy: HTTP {status}. Response: {snippet}")
+                return None
         except ImportError:
-            pass
+            print(f"    [DIAG] shopee_proxy module not found")
 
-        # Direct fallback
+        # Direct fallback (will likely be blocked)
         resp = requests.get(url, params=params, headers=headers, timeout=15)
         if resp.status_code == 403:
+            print(f"    [DIAG] PublicAPI direct: HTTP 403 (blocked, need CF proxy)")
             return None
         resp.raise_for_status()
         data = resp.json()
-        return data.get("items", [])
+        items = data.get("items", [])
+        if items:
+            print(f"    [PublicAPI] '{keyword}' -> {len(items)} products")
+        else:
+            print(f"    [DIAG] PublicAPI direct: HTTP 200 but 0 items")
+        return items
     except Exception as e:
-        print(f"    [WARN] Search failed for '{keyword}': {e}")
+        print(f"    [DIAG] PublicAPI exception: {e}")
         return None
 
 
@@ -326,6 +353,20 @@ def scrape_products(output_file, config):
     print(f"Categories: {', '.join(CATEGORIES)}")
     print(f"Products per category: {products_per_category}")
     print(f"Affiliate ID: {affiliate_id}")
+
+    # ── DIAGNOSTIC: check all required env vars ──
+    proxy_url = os.environ.get('CF_PROXY_URL', '')
+    proxy_key = os.environ.get('CF_PROXY_KEY', '')
+    cookies = os.environ.get('SHOPEE_COOKIES', '')
+    print(f"\n  [ENV DIAGNOSTIC]")
+    print(f"  CF_PROXY_URL:   {'SET (' + proxy_url[:30] + '...)' if proxy_url else 'NOT SET'}")
+    print(f"  CF_PROXY_KEY:   {'SET (' + str(len(proxy_key)) + ' chars)' if proxy_key else 'NOT SET'}")
+    print(f"  SHOPEE_COOKIES: {'SET (' + str(len(cookies)) + ' chars)' if cookies else 'NOT SET'}")
+    if not proxy_url:
+        print(f"  WARNING: CF_PROXY_URL not set -- Shopee API will be blocked (403)!")
+    if not cookies:
+        print(f"  WARNING: SHOPEE_COOKIES not set -- cookies search disabled!")
+
 
     # Step 1: Load existing bank data (from product_collector --export)
     existing_by_cat = {}
