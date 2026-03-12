@@ -198,10 +198,13 @@ def find_music_file(platform_dir, produk_id, acct_id, category='home'):
 
     # Tier 4: Category music library (raw source files)
     music_lib = os.path.join(os.path.dirname(__file__), '..', 'assets', 'music')
-    # Map category to music folder
+    # Map category to ACTUAL music library folder names
+    # Folders: assets/music/beauty/, fashion/, gadget/, home/, wellness/
     cat_map = {
-        'fashion': 'pop', 'gadget': 'electronic', 'beauty': 'pop',
-        'home': 'ambient', 'wellness': 'ambient', 'food': 'pop',
+        'fashion': 'fashion', 'gadget': 'gadget', 'beauty': 'beauty',
+        'home': 'home', 'wellness': 'wellness', 'food': 'home',
+        'elektronik': 'gadget', 'kosmetik': 'beauty',
+        'alat_rumah_tangga': 'home', 'kesehatan': 'wellness',
     }
     mapped = cat_map.get(category, category)
     lib_dir = os.path.join(music_lib, mapped)
