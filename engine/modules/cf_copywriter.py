@@ -21,15 +21,33 @@ import requests
 # ═══════════════════════════════════════════════════════════════════
 CF_MODEL = '@cf/meta/llama-3-8b-instruct'
 
-# Use shared CF key (copywriting doesn't need per-channel keys)
-def _get_cf_credentials():
-    """Get CF credentials for LLM — tries any available key."""
+# Dedicated CF key per channel — NO sharing
+ACCOUNT_CF_MAP = {
+    'yt_1': 1, 'yt_2': 2, 'yt_3': 3, 'yt_4': 4, 'yt_5': 5,
+    'tt_1': 6, 'fb_1': 7,
+    'fashion': 1, 'gadget': 2, 'beauty': 3, 'home': 4, 'wellness': 5,
+    'tt': 6, 'fb': 7,
+}
+
+def _get_cf_credentials(account_index=None):
+    """Get CF credentials for a DEDICATED account index.
+    Each channel uses ONLY its own key — no borrowing."""
+    if account_index is not None:
+        acc_id = os.environ.get(f'CF_ACCOUNT_ID_{account_index}', '')
+        api_key = os.environ.get(f'CF_API_KEY_{account_index}', '')
+        if acc_id and api_key:
+            return acc_id, api_key
+        # Try shared account ID with per-account key
+        acc_id = os.environ.get('CF_ACCOUNT_ID', '')
+        if acc_id and api_key:
+            return acc_id, api_key
+
+    # Last resort: first available (only when index not provided)
     for i in range(1, 8):
         acc_id = os.environ.get(f'CF_ACCOUNT_ID_{i}', '')
         api_key = os.environ.get(f'CF_API_KEY_{i}', '')
         if acc_id and api_key:
             return acc_id, api_key
-    # Fallback
     acc_id = os.environ.get('CF_ACCOUNT_ID', '')
     api_key = os.environ.get('CF_API_KEY', '')
     if acc_id and api_key:
@@ -55,12 +73,13 @@ FALLBACK_CTAS = [
 ]
 
 
-def generate_copy(product_info, platform='yt_short'):
+def generate_copy(product_info, platform='yt_short', account_id=None):
     """Generate unique copy for a product using CF Workers AI Llama 3.
     
     Args:
         product_info: dict with nama, harga, category, deskripsi_singkat
         platform: yt_short, yt_long, tt, fb
+        account_id: channel ID (yt_1..yt_5, tt_1, fb_1) for dedicated CF key
     
     Returns:
         dict with keys: hook, cta, description, voiceover_hook, voiceover_cta
@@ -70,9 +89,16 @@ def generate_copy(product_info, platform='yt_short'):
     category = product_info.get('category', 'home')
     desc = product_info.get('deskripsi_singkat', '')
     
-    account_id, api_key = _get_cf_credentials()
+    # Resolve to dedicated CF key index
+    cf_index = None
+    if account_id:
+        cf_index = ACCOUNT_CF_MAP.get(account_id)
+    if cf_index is None:
+        cf_index = ACCOUNT_CF_MAP.get(category)
     
-    if not api_key or not account_id:
+    account_id_resolved, api_key = _get_cf_credentials(cf_index)
+    
+    if not api_key or not account_id_resolved:
         return _fallback_copy(nama, harga, category, platform)
     
     platform_context = {
@@ -106,7 +132,7 @@ Rules:
 - Sesuaikan tone dengan platform"""
 
     try:
-        url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{CF_MODEL}"
+        url = f"https://api.cloudflare.com/client/v4/accounts/{account_id_resolved}/ai/run/{CF_MODEL}"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -200,7 +226,8 @@ def enrich_storyboard(queue_file, output_file=None, platform='yt_short'):
     
     enriched = []
     for job in jobs:
-        copy = generate_copy(job, platform)
+        job_account_id = job.get('account_id', None)
+        copy = generate_copy(job, platform, account_id=job_account_id)
         
         # Override with AI-generated copy
         job['hook'] = copy.get('hook', job.get('hook', ''))

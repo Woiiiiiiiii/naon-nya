@@ -1,6 +1,7 @@
 """
 metadata_generator.py
-Central Gemini-powered text generator with round-robin API key rotation.
+Central Gemini-powered text generator with DEDICATED per-channel API keys.
+Each channel (yt_1..yt_5, tt_1, fb_1) uses its OWN Gemini API key.
 Generates titles, descriptions, hooks, CTAs, hashtags per platform.
 """
 import os
@@ -11,56 +12,91 @@ import requests
 CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', 'config')
 STATE_DIR = os.path.join(os.path.dirname(__file__), '..', 'state')
 
-# Round-robin state
-_current_key_index = 0
-_api_keys = []
+# Dedicated Gemini key per channel — NO sharing, NO round-robin
+ACCOUNT_GEMINI_MAP = {
+    'yt_1': 1,  'yt_2': 2,  'yt_3': 3,  'yt_4': 4,  'yt_5': 5,
+    'tt_1': 6,  'fb_1': 7,
+    # Aliases for category-based lookup
+    'fashion': 1, 'gadget': 2, 'beauty': 3, 'home': 4, 'wellness': 5,
+    'tt': 6, 'fb': 7,
+}
+
+# Cache: per-channel config loaded from gemini_config.json
+_channel_key_map = None
 
 
-def _load_gemini_keys():
-    """Load Gemini API keys from config with env var resolution."""
-    global _api_keys
-    if _api_keys:
-        return _api_keys
+def _load_channel_key_map():
+    """Load per-channel Gemini API keys from config with env var resolution."""
+    global _channel_key_map
+    if _channel_key_map is not None:
+        return _channel_key_map
 
+    _channel_key_map = {}
     config_path = os.path.join(CONFIG_DIR, 'gemini_config.json')
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:
             config = json.load(f)
-        _api_keys = [os.environ.get(k, k) for k in config.get('api_keys', [])]
-    else:
-        # Fallback: try env vars directly
-        for i in range(1, 6):
+        # Config format: {"yt_1": "GEMINI_API_KEY_1", ...}
+        for channel, env_var in config.items():
+            resolved = os.environ.get(env_var, '')
+            if resolved and not resolved.startswith('GEMINI_'):
+                _channel_key_map[channel] = resolved
+
+    # Fallback: try env vars directly (GEMINI_API_KEY_1..7)
+    if not _channel_key_map:
+        index_to_channel = {v: k for k, v in ACCOUNT_GEMINI_MAP.items()
+                           if k.startswith(('yt_', 'tt_', 'fb_'))}
+        for i in range(1, 8):
             key = os.environ.get(f'GEMINI_API_KEY_{i}', '')
             if key:
-                _api_keys.append(key)
+                channel = index_to_channel.get(i, f'idx_{i}')
+                _channel_key_map[channel] = key
 
-    _api_keys = [k for k in _api_keys if k and not k.startswith('GEMINI_')]
-    return _api_keys
+    return _channel_key_map
 
 
-def _get_next_key():
-    """Round-robin key selection with fallback on error."""
-    global _current_key_index
-    keys = _load_gemini_keys()
-    if not keys:
+def _get_key_for_account(account_id=None):
+    """Get the DEDICATED Gemini API key for a specific account.
+    Each channel uses ONLY its own key — no borrowing.
+    """
+    key_map = _load_channel_key_map()
+
+    if account_id:
+        # Direct match (yt_1, tt_1, fb_1)
+        if account_id in key_map:
+            return key_map[account_id]
+
+        # Resolve via ACCOUNT_GEMINI_MAP (category name → index → channel)
+        key_index = ACCOUNT_GEMINI_MAP.get(account_id)
+        if key_index:
+            # Find channel name for this index
+            for ch, idx in ACCOUNT_GEMINI_MAP.items():
+                if idx == key_index and ch in key_map:
+                    return key_map[ch]
+
+    # Last resort: first available key (only when account_id not provided)
+    if key_map:
+        return next(iter(key_map.values()))
+    return None
+
+
+def call_gemini(prompt, account_id=None, max_retries=3):
+    """Call Gemini API with DEDICATED per-channel key.
+    Each channel uses ONLY its own key — no round-robin, no borrowing.
+
+    Args:
+        prompt: Text prompt for Gemini
+        account_id: Channel ID (yt_1..yt_5, tt_1, fb_1) or category name
+        max_retries: Number of retries on transient errors
+    """
+    api_key = _get_key_for_account(account_id)
+    if not api_key:
+        print(f"  [WARN] No Gemini API key for account={account_id}")
         return None
-    key = keys[_current_key_index % len(keys)]
-    _current_key_index = (_current_key_index + 1) % len(keys)
-    return key
 
-
-def call_gemini(prompt, max_retries=3):
-    """Call Gemini API with round-robin key rotation and fallback."""
-    keys = _load_gemini_keys()
-    if not keys:
-        print("  [WARN] No Gemini API keys available")
-        return None
+    key_index = ACCOUNT_GEMINI_MAP.get(account_id, '?')
 
     for attempt in range(max_retries):
-        api_key = _get_next_key()
-        if not api_key:
-            continue
-
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
             payload = {
@@ -77,7 +113,7 @@ def call_gemini(prompt, max_retries=3):
                 text = data['candidates'][0]['content']['parts'][0]['text']
                 return text.strip()
             elif resp.status_code == 429:
-                print(f"  [WARN] Gemini rate limited, rotating key...")
+                print(f"  [WARN] Gemini rate limited (key #{key_index}), retrying...")
                 time.sleep(2)
                 continue
             else:
@@ -90,7 +126,7 @@ def call_gemini(prompt, max_retries=3):
     return None
 
 
-def generate_title(product_name, category, platform, price='', rating=''):
+def generate_title(product_name, category, platform, price='', rating='', account_id=None):
     """Generate catchy title for a video."""
     style_map = {
         'youtube': 'SEO-friendly, informatif, 60 karakter max',
@@ -109,7 +145,7 @@ Style: {style}
 
 Berikan HANYA judul saja, tanpa penjelasan. Judul harus clickable dan menarik."""
 
-    result = call_gemini(prompt)
+    result = call_gemini(prompt, account_id=account_id or category)
     if result:
         # Clean up: remove quotes, newlines
         return result.strip('"\'').split('\n')[0]
@@ -117,7 +153,7 @@ Berikan HANYA judul saja, tanpa penjelasan. Judul harus clickable dan menarik.""
 
 
 def generate_description(product_name, category, platform, price='',
-                         features='', affiliate_link=''):
+                         features='', affiliate_link='', account_id=None):
     """Generate video description with CTA and affiliate link."""
     prompt = f"""Buat deskripsi video produk affiliate dalam Bahasa Indonesia.
 Produk: {product_name}
@@ -135,36 +171,36 @@ Deskripsi harus:
 
 Berikan HANYA deskripsi, tanpa penjelasan."""
 
-    return call_gemini(prompt)
+    return call_gemini(prompt, account_id=account_id or category)
 
 
-def generate_hashtags(category, platform, count=10):
+def generate_hashtags(category, platform, count=10, account_id=None):
     """Generate relevant hashtags for the category and platform."""
     prompt = f"""Buat {count} hashtag trending untuk konten produk {category} di {platform}.
 Bahasa Indonesia dan mix English.
 Format: #hashtag1 #hashtag2 ...
 Berikan HANYA hashtag, tanpa penjelasan."""
 
-    result = call_gemini(prompt)
+    result = call_gemini(prompt, account_id=account_id or category)
     if result:
         return result.strip()
     return f"#{category.replace(' ', '')} #review #affiliate #shopee"
 
 
-def generate_hooks(category, count=5):
+def generate_hooks(category, count=5, account_id=None):
     """Generate hook text variations for video overlay."""
     prompt = f"""Buat {count} hook teks pendek untuk video review produk kategori {category}.
 Bahasa Indonesia, catchy, bikin penasaran, max 8 kata per hook.
 Format: satu hook per baris, tanpa nomor.
 Berikan HANYA hook, tanpa penjelasan."""
 
-    result = call_gemini(prompt)
+    result = call_gemini(prompt, account_id=account_id or category)
     if result:
         return [h.strip() for h in result.strip().split('\n') if h.strip()]
     return [f"Produk {category} viral!", f"Wajib punya {category} ini!"]
 
 
-def generate_cta_text(category, count=3):
+def generate_cta_text(category, count=3, account_id=None):
     """Generate CTA text variations."""
     prompt = f"""Buat {count} CTA (call-to-action) untuk video produk {category}.
 Bahasa Indonesia, urgent, bikin orang klik link.
@@ -172,7 +208,7 @@ Max 10 kata per CTA.
 Format: satu CTA per baris, tanpa nomor.
 Berikan HANYA CTA, tanpa penjelasan."""
 
-    result = call_gemini(prompt)
+    result = call_gemini(prompt, account_id=account_id or category)
     if result:
         return [c.strip() for c in result.strip().split('\n') if c.strip()]
     return ["Cek link di deskripsi!", "Beli sekarang sebelum kehabisan!"]
@@ -206,11 +242,22 @@ def generate_all_metadata(queue_dir, output_dir):
             harga = job.get('harga', '')
             link = job.get('affiliate_link', '')
 
+            # Determine account_id from job for dedicated Gemini key
+            account_id = job.get('account_id')
+            if not account_id:
+                # Infer from platform
+                if plat_code == 'tt':
+                    account_id = 'tt_1'
+                elif plat_code == 'fb':
+                    account_id = 'fb_1'
+                else:
+                    account_id = category  # category → key index via map
+
             meta = {
                 'produk_id': produk_id,
                 'platform': platform,
-                'title': generate_title(nama, category, platform, harga),
-                'hashtags': generate_hashtags(category, platform),
+                'title': generate_title(nama, category, platform, harga, account_id=account_id),
+                'hashtags': generate_hashtags(category, platform, account_id=account_id),
             }
 
             meta_dir = os.path.join(output_dir, plat_code)

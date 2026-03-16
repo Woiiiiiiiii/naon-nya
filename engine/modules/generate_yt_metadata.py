@@ -27,7 +27,7 @@ except ImportError:
     HAS_GEMINI = False
 
 
-def _gemini_title(nama, category, harga, video_type, platform='youtube'):
+def _gemini_title(nama, category, harga, video_type, platform='youtube', account_id=None):
     """Generate title via Gemini API with fallback to templates."""
     if not HAS_GEMINI:
         return None
@@ -39,7 +39,7 @@ def _gemini_title(nama, category, harga, video_type, platform='youtube'):
             f"Bahasa Indonesia, max {'100' if video_type == 'long' else '50'} karakter.\n"
             f"Jangan pakai emoji berlebihan. Output hanya judul saja tanpa penjelasan."
         )
-        result = call_gemini(prompt)
+        result = call_gemini(prompt, account_id=account_id)
         if result and len(result.strip()) > 5:
             return result.strip().strip('"')
     except Exception:
@@ -47,7 +47,7 @@ def _gemini_title(nama, category, harga, video_type, platform='youtube'):
     return None
 
 
-def _gemini_description(nama, category, harga, desc, shopee_url, video_type):
+def _gemini_description(nama, category, harga, desc, shopee_url, video_type, account_id=None):
     """Generate description via Gemini API with fallback."""
     if not HAS_GEMINI:
         return None
@@ -60,7 +60,7 @@ def _gemini_description(nama, category, harga, desc, shopee_url, video_type):
             f"Format: Link produk di baris pertama, lalu deskripsi engaging.\n"
             f"Bahasa Indonesia natural, tidak repetitif. Output deskripsi saja."
         )
-        result = call_gemini(prompt)
+        result = call_gemini(prompt, account_id=account_id)
         if result and len(result.strip()) > 20:
             return result.strip()
     except Exception:
@@ -112,7 +112,7 @@ def generate_metadata(yt_queue, produk_csv, output_dir):
 
         if video_type == 'long':
             # ── LONG-FORM TITLE (try Gemini first, fallback to templates) ──
-            gemini_title = _gemini_title(nama, category, harga, 'long')
+            gemini_title = _gemini_title(nama, category, harga, 'long', account_id=acct_id)
             if gemini_title and len(gemini_title) <= 100:
                 title = gemini_title
             else:
@@ -130,7 +130,7 @@ def generate_metadata(yt_queue, produk_csv, output_dir):
             # ── LONG-FORM DESCRIPTION (try Gemini first) ──
             rating = round(random.uniform(4.5, 4.9), 1)
             cta = random.choice(cta_variants)
-            gemini_desc = _gemini_description(nama, category, harga, desc, shopee_url, 'long')
+            gemini_desc = _gemini_description(nama, category, harga, desc, shopee_url, 'long', account_id=acct_id)
             if gemini_desc:
                 description = gemini_desc
                 if shopee_url not in description:
@@ -159,7 +159,7 @@ Subscribe @{channel} untuk review produk {cat_label} lainnya!
         else:
             # -- SHORTS TITLE (try Gemini first, fallback) --
             nama_short = nama[:25] if len(nama) > 25 else nama
-            gemini_short_title = _gemini_title(nama, category, harga, 'short')
+            gemini_short_title = _gemini_title(nama, category, harga, 'short', account_id=acct_id)
             if gemini_short_title and len(gemini_short_title) <= 50:
                 title = gemini_short_title
             else:

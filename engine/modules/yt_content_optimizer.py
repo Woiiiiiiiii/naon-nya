@@ -28,7 +28,7 @@ def _get_yt_service(account_id):
     return build('youtube', 'v3', credentials=creds)
 
 
-def _optimize_title(yt, video_id, old_title, metrics, category):
+def _optimize_title(yt, video_id, old_title, metrics, category, account_id=None):
     """Generate and update improved title via Gemini + YouTube API."""
     from metadata_generator import call_gemini
 
@@ -53,7 +53,7 @@ Kategori: {category}
 Buat 1 judul baru yang lebih menarik, max 60 karakter.
 Berikan HANYA judul, tanpa penjelasan."""
 
-    new_title = call_gemini(prompt)
+    new_title = call_gemini(prompt, account_id=account_id)
     if not new_title:
         return False
 
@@ -78,7 +78,7 @@ Berikan HANYA judul, tanpa penjelasan."""
         return False
 
 
-def _optimize_description(yt, video_id, metrics, category):
+def _optimize_description(yt, video_id, metrics, category, account_id=None):
     """Generate and update improved description."""
     from metadata_generator import call_gemini
 
@@ -95,7 +95,7 @@ Buat deskripsi baru yang:
 
 Berikan HANYA deskripsi, tanpa penjelasan."""
 
-    new_desc = call_gemini(prompt)
+    new_desc = call_gemini(prompt, account_id=account_id)
     if not new_desc:
         return False
 
@@ -117,7 +117,7 @@ Berikan HANYA deskripsi, tanpa penjelasan."""
         return False
 
 
-def _optimize_tags(yt, video_id, category, expand=False):
+def _optimize_tags(yt, video_id, category, expand=False, account_id=None):
     """Generate and update improved tags."""
     from metadata_generator import call_gemini
 
@@ -128,7 +128,7 @@ Include long-tail keyword.
 Format: tag1, tag2, tag3, ...
 Berikan HANYA tags, tanpa penjelasan."""
 
-    result = call_gemini(prompt)
+    result = call_gemini(prompt, account_id=account_id)
     if not result:
         return False
 
@@ -199,16 +199,16 @@ def execute_optimizations():
         success = False
         for action in actions:
             if action == 'optimize_title':
-                success |= _optimize_title(yt, video_id, title, metrics, category)
+                success |= _optimize_title(yt, video_id, title, metrics, category, account_id=account)
             elif action == 'optimize_description' or action == 'strengthen_cta':
-                success |= _optimize_description(yt, video_id, metrics, category)
+                success |= _optimize_description(yt, video_id, metrics, category, account_id=account)
             elif action in ('optimize_tags', 'expand_tags'):
                 success |= _optimize_tags(yt, video_id, category,
-                                          expand=(action == 'expand_tags'))
+                                          expand=(action == 'expand_tags'), account_id=account)
             elif action == 'full_refresh':
-                _optimize_title(yt, video_id, title, metrics, category)
-                _optimize_description(yt, video_id, metrics, category)
-                _optimize_tags(yt, video_id, category)
+                _optimize_title(yt, video_id, title, metrics, category, account_id=account)
+                _optimize_description(yt, video_id, metrics, category, account_id=account)
+                _optimize_tags(yt, video_id, category, account_id=account)
                 success = True
 
         if success:

@@ -195,12 +195,14 @@ jobs:
           NOTION_DB_FB: ${{ secrets.NOTION_DB_FB }}
           FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}  # For music only (not images)
-          # Gemini API keys (round-robin)
+          # Gemini API keys (dedicated per channel)
           GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
           GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
           GEMINI_API_KEY_4: ${{ secrets.GEMINI_API_KEY_4 }}
           GEMINI_API_KEY_5: ${{ secrets.GEMINI_API_KEY_5 }}
+          GEMINI_API_KEY_6: ${{ secrets.GEMINI_API_KEY_6 }}
+          GEMINI_API_KEY_7: ${{ secrets.GEMINI_API_KEY_7 }}
           # HuggingFace API keys (dedicated per account)
           HF_API_KEY_1: ${{ secrets.HF_API_KEY_1 }}
           HF_API_KEY_2: ${{ secrets.HF_API_KEY_2 }}

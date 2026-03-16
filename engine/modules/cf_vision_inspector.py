@@ -24,9 +24,28 @@ from io import BytesIO
 # ═══════════════════════════════════════════════════════════════════
 CF_MODEL = '@cf/llava-hf/llava-1.5-7b-hf'
 
+# Dedicated CF key per channel — NO sharing
+ACCOUNT_CF_MAP = {
+    'yt_1': 1, 'yt_2': 2, 'yt_3': 3, 'yt_4': 4, 'yt_5': 5,
+    'tt_1': 6, 'fb_1': 7,
+    'fashion': 1, 'gadget': 2, 'beauty': 3, 'home': 4, 'wellness': 5,
+    'tt': 6, 'fb': 7,
+}
 
-def _get_cf_credentials():
-    """Get CF credentials — tries any available key."""
+
+def _get_cf_credentials(account_index=None):
+    """Get CF credentials for a DEDICATED account index.
+    Each channel uses ONLY its own key — no borrowing."""
+    if account_index is not None:
+        acc_id = os.environ.get(f'CF_ACCOUNT_ID_{account_index}', '')
+        api_key = os.environ.get(f'CF_API_KEY_{account_index}', '')
+        if acc_id and api_key:
+            return acc_id, api_key
+        acc_id = os.environ.get('CF_ACCOUNT_ID', '')
+        if acc_id and api_key:
+            return acc_id, api_key
+
+    # Last resort: first available (only when index not provided)
     for i in range(1, 8):
         acc_id = os.environ.get(f'CF_ACCOUNT_ID_{i}', '')
         api_key = os.environ.get(f'CF_API_KEY_{i}', '')
@@ -39,12 +58,13 @@ def _get_cf_credentials():
     return None, None
 
 
-def inspect_image(img_path, category='home'):
+def inspect_image(img_path, category='home', account_id=None):
     """Inspect a product image using AI vision model.
     
     Args:
         img_path: path to image file
         category: product category for context
+        account_id: channel ID (yt_1..yt_5, tt_1, fb_1) for dedicated CF key
     
     Returns:
         dict with:
@@ -52,9 +72,16 @@ def inspect_image(img_path, category='home'):
           - issues: list of detected problems
           - recommendation: 'use', 'enhance', or 'skip'
     """
-    account_id, api_key = _get_cf_credentials()
+    # Resolve to dedicated CF key index
+    cf_index = None
+    if account_id:
+        cf_index = ACCOUNT_CF_MAP.get(account_id)
+    if cf_index is None:
+        cf_index = ACCOUNT_CF_MAP.get(category)
     
-    if not api_key or not account_id:
+    account_id_cf, api_key = _get_cf_credentials(cf_index)
+    
+    if not api_key or not account_id_cf:
         print(f"    [VISION] No CF credentials, using pixel analysis")
         return _fallback_inspect(img_path)
     
@@ -78,7 +105,7 @@ def inspect_image(img_path, category='home'):
 Respond ONLY in this JSON format:
 {"product_visible": 8, "no_clutter": 7, "clean_bg": 6, "composition": 7, "issues": ["brief issue 1"], "overall": 70}"""
 
-        url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{CF_MODEL}"
+        url = f"https://api.cloudflare.com/client/v4/accounts/{account_id_cf}/ai/run/{CF_MODEL}"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -210,12 +237,13 @@ def _fallback_inspect(img_path):
         return {'score': 50, 'issues': [], 'recommendation': 'enhance', 'details': {}}
 
 
-def inspect_and_select_best(image_paths, category='home'):
+def inspect_and_select_best(image_paths, category='home', account_id=None):
     """Inspect multiple images and return the best one.
     
     Args:
         image_paths: list of image file paths
         category: product category
+        account_id: channel ID for dedicated CF key
     
     Returns:
         (best_path, inspection_result) or (None, None)
@@ -231,7 +259,7 @@ def inspect_and_select_best(image_paths, category='home'):
         if not os.path.exists(path):
             continue
         
-        result = inspect_image(path, category)
+        result = inspect_image(path, category, account_id=account_id)
         if result['score'] > best_score:
             best_score = result['score']
             best_path = path

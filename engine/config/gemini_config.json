@@ -1,11 +1,9 @@
 {
-    "api_keys": [
-        "GEMINI_API_KEY_1",
-        "GEMINI_API_KEY_2",
-        "GEMINI_API_KEY_3",
-        "GEMINI_API_KEY_4",
-        "GEMINI_API_KEY_5"
-    ],
-    "rotation_strategy": "round_robin",
-    "fallback_on_error": true
+    "yt_1": "GEMINI_API_KEY_1",
+    "yt_2": "GEMINI_API_KEY_2",
+    "yt_3": "GEMINI_API_KEY_3",
+    "yt_4": "GEMINI_API_KEY_4",
+    "yt_5": "GEMINI_API_KEY_5",
+    "tt_1": "GEMINI_API_KEY_6",
+    "fb_1": "GEMINI_API_KEY_7"
 }
