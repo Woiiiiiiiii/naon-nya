@@ -35,7 +35,7 @@ except ImportError:
 try:
     from dedup_tracker import is_product_used
 except ImportError:
-    def is_product_used(product_id, account_id): return False
+    def is_product_used(product_id, account_id=None): return False
 
 # All 5 categories to scrape
 CATEGORIES = ['fashion', 'gadget', 'beauty', 'home', 'wellness']
@@ -108,10 +108,9 @@ user_agents = [
 
 
 def search_shopee_cookies(keyword, limit=5):
-    """Try Shopee search with authenticated cookies via CF proxy."""
+    """Tier 3: Shopee search with authenticated cookies (direct or via proxy)."""
     session = _build_shopee_session()
     if not session:
-        print(f"    [DIAG] No Shopee session (SHOPEE_COOKIES not set or invalid)")
         return None
 
     url = "https://shopee.co.id/api/v4/search/search_items"
@@ -121,7 +120,6 @@ def search_shopee_cookies(keyword, limit=5):
         "scenario": "PAGE_GLOBAL_SEARCH", "version": 2,
     }
 
-    # Build cookie string for proxy
     cookies_str = '; '.join([f"{c.name}={c.value}" for c in session.cookies])
     headers = {
         "User-Agent": random.choice(user_agents),
@@ -134,7 +132,16 @@ def search_shopee_cookies(keyword, limit=5):
         import time as _t
         _t.sleep(random.uniform(0.3, 1.0))
 
-        # Use CF proxy if available
+        # Try direct first with cookies
+        resp = session.get(url, params=params, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data.get("items", [])
+            if items:
+                print(f"    [Tier3-Cookies] '{keyword}' -> {len(items)} products")
+                return items
+
+        # Fallback: cookies via CF proxy
         try:
             from shopee_proxy import proxy_get_json, is_proxy_available
             if is_proxy_available():
@@ -144,40 +151,71 @@ def search_shopee_cookies(keyword, limit=5):
                 if status == 200 and data:
                     items = data.get("items", [])
                     if items:
-                        print(f"    [Cookies+Proxy] '{keyword}' -> {len(items)} products")
+                        print(f"    [Tier3-Cookies+Proxy] '{keyword}' -> {len(items)} products")
                         return items
-                    else:
-                        error = data.get('error', data.get('error_msg', ''))
-                        print(f"    [DIAG] Cookies+Proxy: HTTP {status} but 0 items. error={error}")
-                else:
-                    snippet = str(data)[:100] if data else 'None'
-                    print(f"    [DIAG] Cookies+Proxy: HTTP {status}. Response: {snippet}")
-                return None
-            else:
-                print(f"    [DIAG] CF proxy not available (check CF_PROXY_URL + CF_PROXY_KEY)")
         except ImportError:
-            print(f"    [DIAG] shopee_proxy module not found")
+            pass
 
-        # Direct fallback (will likely be blocked)
-        resp = session.get(url, params=params, timeout=15)
-        if resp.status_code == 200:
-            data = resp.json()
-            items = data.get("items", [])
-            if items:
-                print(f"    [Cookies] '{keyword}' -> {len(items)} products")
-                return items
-            else:
-                print(f"    [DIAG] Cookies direct: HTTP 200 but 0 items")
-        else:
-            print(f"    [DIAG] Cookies direct: HTTP {resp.status_code}")
         return None
     except Exception as e:
-        print(f"    [DIAG] Cookies exception: {e}")
+        print(f"    [Tier3] Cookies exception: {e}")
+        return None
+
+
+def search_shopee_proxy(keyword, limit=5):
+    """Tier 1: Shopee search API via CF Worker proxy (no cookies)."""
+    try:
+        from shopee_proxy import proxy_get_json, is_proxy_available
+        if not is_proxy_available():
+            print(f"    [Tier1] CF proxy not available (CF_PROXY_URL/CF_PROXY_KEY missing)")
+            return None
+    except ImportError:
+        print(f"    [Tier1] shopee_proxy module not found")
+        return None
+
+    url = "https://shopee.co.id/api/v4/search/search_items"
+    params = {
+        "by": "relevancy", "keyword": keyword, "limit": limit,
+        "newest": random.randint(0, 50),
+        "order": "desc", "page_type": "search",
+        "scenario": "PAGE_GLOBAL_SEARCH", "version": 2,
+    }
+    headers = {
+        "User-Agent": random.choice(user_agents),
+        "Accept": "application/json",
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8",
+        "Referer": f"https://shopee.co.id/search?keyword={keyword.replace(' ', '+')}",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Shopee-Language": "id",
+    }
+
+    try:
+        import time as _t
+        _t.sleep(random.uniform(0.5, 1.5))
+        status, data = proxy_get_json(url, params=params, headers=headers)
+        if status == 200 and data:
+            items = data.get("items", [])
+            if items:
+                print(f"    [Tier1-CFProxy] '{keyword}' -> {len(items)} products")
+                return items
+            else:
+                error = data.get('error', data.get('error_msg', ''))
+                print(f"    [Tier1] HTTP {status} but 0 items. error={error}")
+        elif status == 403:
+            print(f"    [Tier1] Shopee 403 via CF proxy (Worker IP blocked)")
+        elif status == 401:
+            print(f"    [Tier1] CF proxy 401 (key mismatch!)")
+        else:
+            snippet = str(data)[:100] if data else 'None'
+            print(f"    [Tier1] HTTP {status}. Response: {snippet}")
+        return None
+    except Exception as e:
+        print(f"    [Tier1] Exception: {e}")
         return None
 
 
 def search_shopee(keyword, limit=5):
-    """Try Shopee search API via CF proxy (public, no cookies)."""
+    """Tier 2: Direct Shopee public search API (no proxy, no cookies)."""
     url = "https://shopee.co.id/api/v4/search/search_items"
     params = {
         "by": "relevancy", "keyword": keyword, "limit": limit,
@@ -197,45 +235,23 @@ def search_shopee(keyword, limit=5):
     try:
         import time as _t
         _t.sleep(random.uniform(0.5, 2.0))
-
-        # Use CF proxy if available
-        try:
-            from shopee_proxy import proxy_get_json, is_proxy_available
-            if is_proxy_available():
-                status, data = proxy_get_json(url, params=params, headers=headers)
-                if status == 200 and data:
-                    items = data.get("items", [])
-                    if items:
-                        print(f"    [PublicAPI+Proxy] '{keyword}' -> {len(items)} products")
-                        return items
-                    else:
-                        error = data.get('error', data.get('error_msg', ''))
-                        print(f"    [DIAG] PublicAPI+Proxy: HTTP {status} but 0 items. error={error}")
-                elif status == 403:
-                    print(f"    [DIAG] PublicAPI+Proxy: HTTP 403 (Shopee blocked)")
-                    return None
-                else:
-                    snippet = str(data)[:100] if data else 'None'
-                    print(f"    [DIAG] PublicAPI+Proxy: HTTP {status}. Response: {snippet}")
-                return None
-        except ImportError:
-            print(f"    [DIAG] shopee_proxy module not found")
-
-        # Direct fallback (will likely be blocked)
         resp = requests.get(url, params=params, headers=headers, timeout=15)
         if resp.status_code == 403:
-            print(f"    [DIAG] PublicAPI direct: HTTP 403 (blocked, need CF proxy)")
+            print(f"    [Tier2] Direct API: HTTP 403 (IP blocked by Shopee)")
             return None
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("items", [])
-        if items:
-            print(f"    [PublicAPI] '{keyword}' -> {len(items)} products")
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data.get("items", [])
+            if items:
+                print(f"    [Tier2-DirectAPI] '{keyword}' -> {len(items)} products")
+                return items
+            else:
+                print(f"    [Tier2] HTTP 200 but 0 items")
         else:
-            print(f"    [DIAG] PublicAPI direct: HTTP 200 but 0 items")
-        return items
+            print(f"    [Tier2] HTTP {resp.status_code}")
+        return None
     except Exception as e:
-        print(f"    [DIAG] PublicAPI exception: {e}")
+        print(f"    [Tier2] Exception: {e}")
         return None
 
 
@@ -272,15 +288,17 @@ def extract_product_info(item, affiliate_id, category):
 
 
 def scrape_category(category, affiliate_id, target_count=3):
-    """Scrape products for a single category from LIVE Shopee API only.
+    """Scrape products for a single category using 3 INDEPENDENT tiers.
 
-    Returns list of product dicts. If Shopee API is blocked, returns empty list.
-    NO fake/hardcoded fallback data — only real, purchasable products.
+    Tier 1: CF Proxy → Shopee API (no cookies)
+    Tier 2: Direct → Shopee API (may be blocked on CI)
+    Tier 3: Shopee Cookies (authenticated, direct or via proxy)
+
+    NO product bank fallback. Only live Shopee data accepted.
     """
     products = []
     seen_ids = set()
 
-    # Get keywords from category_router
     cat_keywords = CATEGORY_KEYWORDS.get(category, {}).get('scrape', [])
     if not cat_keywords:
         cat_keywords = [category]
@@ -288,27 +306,24 @@ def scrape_category(category, affiliate_id, target_count=3):
     keywords = cat_keywords[:]
     random.shuffle(keywords)
 
-    blocked_count = 0
-
-    # Try Shopee API — Cookies first, then public
     for keyword in keywords[:8]:
         if len(products) >= target_count:
             break
 
-        # Priority 1: Shopee with cookies + CF proxy
-        items = search_shopee_cookies(keyword, limit=5)
+        # ── Tier 1: CF Proxy ──
+        items = search_shopee_proxy(keyword, limit=5)
 
-        # Priority 2: Shopee public API + CF proxy
+        # ── Tier 2: Direct Shopee API ──
         if items is None:
             items = search_shopee(keyword, limit=5)
 
+        # ── Tier 3: Shopee Cookies ──
         if items is None:
-            blocked_count += 1
-            print(f"    [BLOCKED] Shopee API blocked for '{keyword}'")
-            if blocked_count >= 2:
-                print(f"    [STOP] Multiple blocks — Shopee API unavailable for {category}")
-                break
-            continue  # Try next keyword before giving up
+            items = search_shopee_cookies(keyword, limit=5)
+
+        if items is None:
+            print(f"    [ALL TIERS FAILED] No results for '{keyword}'")
+            continue
 
         for item in items:
             if len(products) >= target_count:
@@ -317,7 +332,15 @@ def scrape_category(category, affiliate_id, target_count=3):
                 product = extract_product_info(item, affiliate_id, category)
                 if product["produk_id"] in seen_ids or not product["image_url"]:
                     continue
+                # DEDUP: skip products already used in ANY previous video
+                if is_product_used(product["produk_id"]):
+                    print(f"      [DEDUP] Already used: {product['nama'][:40]}")
+                    continue
                 if product["terjual"] < 10:
+                    continue
+                # REJECT non-Shopee images
+                if 'susercontent.com' not in product["image_url"]:
+                    print(f"      [REJECT] Non-Shopee image: {product['image_url'][:50]}")
                     continue
                 seen_ids.add(product["produk_id"])
                 products.append(product)
@@ -326,8 +349,8 @@ def scrape_category(category, affiliate_id, target_count=3):
                 continue
 
     if not products:
-        print(f"    [EMPTY] No products from Shopee API for {category}")
-        print(f"    Check: CF_PROXY_URL set? SHOPEE_COOKIES valid?")
+        print(f"    [EMPTY] No products for {category} — all 3 tiers failed")
+        print(f"    Checklist: CF_PROXY_URL? CF_PROXY_KEY? SHOPEE_COOKIES? Cookies expired?")
 
     return products
 

@@ -2,6 +2,7 @@ import subprocess
 import sys
 import os
 import time
+import glob
 
 STEP_TIMEOUT = 3600  # 60 minutes max per step (4 video generators + data prep need time)
 
@@ -47,6 +48,13 @@ def main():
         "python engine/modules/extract_masalah.py",
         "python engine/modules/generate_storyboard.py"
     ]
+
+    # DATA CHECKPOINT: halt if V1 produced no products
+    v1_checkpoint = {
+        'file': 'engine/data/produk.csv',
+        'min_lines': 2,  # header + at least 1 product
+        'msg': 'V1 menghasilkan 0 produk — semua tier Shopee gagal. Cek: CF_PROXY_URL, SHOPEE_COOKIES'
+    }
     
     # V2: Batch Manager (select products → assign to accounts → random schedule)
     v2_steps = [
@@ -159,6 +167,7 @@ def main():
         print("[QC MODE] YT upload DILEWATI — video disimpan di artifacts untuk review")
 
     pipeline = []
+    checkpoints = {}  # step_index -> checkpoint config
     if mode == "v1": pipeline = v1_steps
     elif mode == "v2": pipeline = v2_steps
     elif mode == "v3": pipeline = v3_steps
@@ -166,6 +175,8 @@ def main():
     elif mode == "v5": pipeline = v5_steps
     elif mode == "full":
         pipeline = v1_steps + v2_steps + v3_steps + v4_steps + v5_steps
+        # Data checkpoint after V1 (product scraping)
+        checkpoints[len(v1_steps)] = v1_checkpoint
     else:
         print(f"Unknown mode: {mode}")
         sys.exit(1)
@@ -184,6 +195,24 @@ def main():
     start_time = time.time()
 
     for i, step in enumerate(pipeline, 1):
+        # CHECK: data checkpoint before this step?
+        if (i - 1) in checkpoints:
+            cp = checkpoints[i - 1]
+            cp_file = cp['file']
+            if os.path.exists(cp_file):
+                with open(cp_file, 'r') as f:
+                    line_count = sum(1 for _ in f)
+                if line_count < cp['min_lines']:
+                    print(f"\n{'='*60}")
+                    print(f"[HALT] {cp['msg']}")
+                    print(f"  File: {cp_file} has {line_count} lines (need >= {cp['min_lines']})")
+                    sys.exit(1)
+            else:
+                print(f"\n{'='*60}")
+                print(f"[HALT] Data file missing: {cp_file}")
+                print(f"  {cp['msg']}")
+                sys.exit(1)
+
         elapsed = time.time() - start_time
         print(f"\n{'='*60}")
         print(f"Step {i}/{len(pipeline)} (elapsed: {int(elapsed)}s)")
@@ -200,12 +229,29 @@ def main():
                 print("[HALT] Critical step failed, aborting pipeline")
                 break
     
+    # POST-PIPELINE: cleanup used product images to save storage
+    try:
+        sys.path.insert(0, 'engine/modules')
+        from dedup_tracker import cleanup_used_images
+        cleanup_used_images()
+    except Exception as e:
+        print(f"[WARN] Dedup cleanup failed: {e}")
+
+    # COUNT OUTPUT: exit(1) if pipeline ran fully but produced 0 videos
+    video_count = len(glob.glob('engine/output/**/*.mp4', recursive=True))
+    
     elapsed = time.time() - start_time
     print(f"\n{'='*60}")
     print(f"=== Pipeline {mode.upper()} complete ===")
     print(f"  Passed: {passed}/{passed+failed}")
     print(f"  Failed: {failed} {failed_steps if failed_steps else ''}")
+    print(f"  Videos: {video_count}")
     print(f"  Duration: {int(elapsed)}s ({int(elapsed/60)}m)")
+    
+    if video_count == 0 and mode == 'full':
+        print(f"\n[FAIL] Pipeline completed but produced 0 videos!")
+        print(f"  Check scraper logs above for tier failure details.")
+        sys.exit(1)
     
     if failed > 0:
         print(f"\n[WARN] {failed} step(s) failed but pipeline continued")

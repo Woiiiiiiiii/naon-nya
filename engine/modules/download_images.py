@@ -603,8 +603,9 @@ def _create_placeholder(img_path, pid, name):
 
 
 def download_images(produk_file, output_dir):
-    """Download product images with multi-tier fallback.
-    Shopee Cookies -> CDN -> Page Scrape -> Recommend API -> Product Bank -> Placeholder."""
+    """Download product images — Shopee sources ONLY.
+    Tier 1: Shopee CDN (direct URL) → Tier 2: Shopee Cookies → Tier 3: Page scrape → Tier 4: Recommend API.
+    NO product bank. NO placeholder cards. Only real Shopee product images."""
     print("=== Downloading Product Images (Shopee Only) ===")
     
     if not os.path.exists(produk_file):
@@ -614,18 +615,16 @@ def download_images(produk_file, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     df = pd.read_csv(produk_file)
     
-    stats = {'cookies': 0, 'shopee_cdn': 0, 'shopee_scrape': 0, 'bank': 0, 'placeholder': 0, 'cached': 0}
+    stats = {'shopee_cdn': 0, 'cookies': 0, 'shopee_scrape': 0, 'skipped': 0, 'cached': 0}
     
     for _, row in df.iterrows():
         pid = row['produk_id']
         name = str(row.get('nama', pid))
         img_path = os.path.join(output_dir, f"{pid}.jpg")
         image_url = str(row.get('image_url', '')).strip()
-        category = str(row.get('category', '')).strip()
         
-        # Skip if already downloaded with good quality AND not a placeholder
-        marker = img_path + '.placeholder'
-        if os.path.exists(img_path) and not os.path.exists(marker):
+        # Skip if already downloaded with good quality
+        if os.path.exists(img_path):
             try:
                 existing = Image.open(img_path)
                 w, h = existing.size
@@ -634,11 +633,14 @@ def download_images(produk_file, output_dir):
                     continue
             except Exception:
                 pass
-        # Remove old placeholder so fresh download is attempted
+        
+        # Remove old placeholder markers
+        marker = img_path + '.placeholder'
         if os.path.exists(marker):
             try:
                 os.remove(marker)
-                os.remove(img_path)
+                if os.path.exists(img_path):
+                    os.remove(img_path)
             except Exception:
                 pass
         
@@ -647,19 +649,19 @@ def download_images(produk_file, output_dir):
         # REJECT: Never use Pexels/Pixabay/Unsplash URLs
         if any(x in image_url for x in ['pexels.com', 'pixabay.com', 'unsplash.com']):
             print(f"    [REJECT] Non-Shopee image URL: {image_url[:50]}")
-            image_url = ''  # Force search by name instead
+            image_url = ''
         
-        # TIER 1: Shopee CDN (direct URL from scraper data — fastest, no proxy needed)
+        # TIER 1: Shopee CDN (direct URL from scraper — fastest)
         if _try_shopee_cdn(image_url, img_path):
             stats['shopee_cdn'] += 1
             continue
         
-        # TIER 2: Shopee Cookies (authenticated search)
+        # TIER 2: Shopee Cookies (authenticated search, pick simplest image)
         if _try_shopee_cookies(name, img_path):
             stats['cookies'] += 1
             continue
         
-        # TIER 3: Shopee page scrape
+        # TIER 3: Shopee page scrape (HTML regex for image hashes)
         if _try_shopee_page_scrape(name, img_path):
             stats['shopee_scrape'] += 1
             continue
@@ -669,28 +671,21 @@ def download_images(produk_file, output_dir):
             stats['shopee_scrape'] += 1
             continue
         
-        # TIER 5: Product Collector bank (previously downloaded from Shopee ONLY)
-        if _try_product_bank(pid, category, img_path):
-            stats['bank'] += 1
-            continue
-        
-        # TIER 6: Placeholder (last resort)
-        _create_placeholder(img_path, pid, name)
-        marker = img_path + '.placeholder'
-        with open(marker, 'w') as mf:
-            mf.write(name)
-        stats['placeholder'] += 1
+        # ALL TIERS FAILED — skip this product (no fake images)
+        print(f"    [SKIP] All Shopee tiers failed for {pid}")
+        stats['skipped'] += 1
     
     print(f"\n  === Image Download Summary ===")
     print(f"  Cached:           {stats['cached']}")
-    print(f"  Shopee Cookies:   {stats['cookies']}")
     print(f"  Shopee CDN:       {stats['shopee_cdn']}")
+    print(f"  Shopee Cookies:   {stats['cookies']}")
     print(f"  Shopee Scrape:    {stats['shopee_scrape']}")
-    print(f"  Product Bank:     {stats['bank']}")
-    print(f"  Placeholder:      {stats['placeholder']}")
+    print(f"  Skipped (failed): {stats['skipped']}")
     print(f"  Total:            {sum(stats.values())}")
+
 if __name__ == "__main__":
     download_images(
         "engine/data/produk_valid.csv",
         "engine/data/images"
     )
+

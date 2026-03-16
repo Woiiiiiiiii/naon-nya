@@ -48,6 +48,7 @@ def proxy_get(url, headers=None, cookies_str='', timeout=15):
 
     Returns: requests.Response-like object with .status_code, .text, .content, .json()
     Falls back to direct request if proxy unavailable.
+    Retries up to 2 times on transient failures.
     """
     _init()
 
@@ -58,7 +59,7 @@ def proxy_get(url, headers=None, cookies_str='', timeout=15):
             req_headers['Cookie'] = cookies_str
         return requests.get(url, headers=req_headers, timeout=timeout)
 
-    # Route through CF Worker
+    # Route through CF Worker — with retry
     payload = {
         'url': url,
         'method': 'GET',
@@ -66,23 +67,42 @@ def proxy_get(url, headers=None, cookies_str='', timeout=15):
         'cookies': cookies_str,
     }
 
-    try:
-        resp = requests.post(
-            f"{_PROXY_URL}/proxy",
-            json=payload,
-            headers={
-                'X-Proxy-Key': _PROXY_KEY,
-                'Content-Type': 'application/json',
-            },
-            timeout=timeout + 5,  # Extra buffer for proxy overhead
-        )
-        return resp
-    except Exception as e:
-        print(f"    [Proxy] Error: {e}, falling back to direct")
-        req_headers = headers or {}
-        if cookies_str:
-            req_headers['Cookie'] = cookies_str
-        return requests.get(url, headers=req_headers, timeout=timeout)
+    import time as _time
+    last_error = None
+    for attempt in range(3):  # max 3 attempts (1 + 2 retries)
+        try:
+            resp = requests.post(
+                f"{_PROXY_URL}/proxy",
+                json=payload,
+                headers={
+                    'X-Proxy-Key': _PROXY_KEY,
+                    'Content-Type': 'application/json',
+                },
+                timeout=timeout + 5,
+            )
+            # 401 = auth mismatch — no point retrying
+            if resp.status_code == 401:
+                print(f"    [Proxy] 401 Unauthorized — CF_PROXY_KEY mismatch!")
+                return resp
+            # 5xx or connection issue = retry
+            if resp.status_code >= 500 and attempt < 2:
+                print(f"    [Proxy] HTTP {resp.status_code}, retry {attempt+1}/2...")
+                _time.sleep(1.5 * (attempt + 1))
+                continue
+            return resp
+        except Exception as e:
+            last_error = e
+            if attempt < 2:
+                print(f"    [Proxy] Error: {e}, retry {attempt+1}/2...")
+                _time.sleep(1.5 * (attempt + 1))
+            else:
+                print(f"    [Proxy] Error after 3 attempts: {e}, falling back to direct")
+
+    # All retries exhausted — direct fallback
+    req_headers = headers or {}
+    if cookies_str:
+        req_headers['Cookie'] = cookies_str
+    return requests.get(url, headers=req_headers, timeout=timeout)
 
 
 def proxy_get_json(url, params=None, headers=None, cookies_str='', timeout=15):

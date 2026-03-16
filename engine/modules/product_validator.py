@@ -1,4 +1,4 @@
-﻿"""
+"""
 product_validator.py
 Validates products AND their images before video rendering.
 
@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 try:
     from dedup_tracker import is_product_used
 except ImportError:
-    def is_product_used(product_id, account_id): return False
+    def is_product_used(product_id, account_id=None): return False
 
 
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
