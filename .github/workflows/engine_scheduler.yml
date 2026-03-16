@@ -203,7 +203,7 @@ jobs:
           GEMINI_API_KEY_5: ${{ secrets.GEMINI_API_KEY_5 }}
           GEMINI_API_KEY_6: ${{ secrets.GEMINI_API_KEY_6 }}
           GEMINI_API_KEY_7: ${{ secrets.GEMINI_API_KEY_7 }}
-          # HuggingFace API keys (dedicated per account)
+          # HuggingFace API keys (dual per channel: _1+_8, _2+_9, ..., _7+_14)
           HF_API_KEY_1: ${{ secrets.HF_API_KEY_1 }}
           HF_API_KEY_2: ${{ secrets.HF_API_KEY_2 }}
           HF_API_KEY_3: ${{ secrets.HF_API_KEY_3 }}
@@ -211,6 +211,13 @@ jobs:
           HF_API_KEY_5: ${{ secrets.HF_API_KEY_5 }}
           HF_API_KEY_6: ${{ secrets.HF_API_KEY_6 }}
           HF_API_KEY_7: ${{ secrets.HF_API_KEY_7 }}
+          HF_API_KEY_8: ${{ secrets.HF_API_KEY_8 }}
+          HF_API_KEY_9: ${{ secrets.HF_API_KEY_9 }}
+          HF_API_KEY_10: ${{ secrets.HF_API_KEY_10 }}
+          HF_API_KEY_11: ${{ secrets.HF_API_KEY_11 }}
+          HF_API_KEY_12: ${{ secrets.HF_API_KEY_12 }}
+          HF_API_KEY_13: ${{ secrets.HF_API_KEY_13 }}
+          HF_API_KEY_14: ${{ secrets.HF_API_KEY_14 }}
           # Shopee Cookies
           SHOPEE_COOKIES: ${{ secrets.SHOPEE_COOKIES }}
           # CF Workers Proxy (bypass Shopee IP block)

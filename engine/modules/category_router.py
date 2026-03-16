@@ -381,8 +381,12 @@ def get_color_grading(account_id):
     return fallback.get(cat, 'clean_bright')
 
 
+_hf_router_counter = 0
+
 def get_hf_api_key(account_id):
-    """Get dedicated Hugging Face API key for an account."""
+    """Get DEDICATED Hugging Face API key for an account (dual keys, alternating).
+    Each channel has 2 keys — no borrowing from other channels."""
+    global _hf_router_counter
     import os, json
     hf_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'hf_config.json')
     if os.path.exists(hf_path):
@@ -394,8 +398,12 @@ def get_hf_api_key(account_id):
             'yt_5': 'youtube_akun_5', 'tt_1': 'tiktok', 'fb_1': 'facebook',
         }
         key = acct_map.get(account_id, 'youtube_akun_1')
-        env_var = mapping.get(key, 'HF_API_KEY_1')
-        return os.environ.get(env_var, '')
+        env_vars = mapping.get(key, ['HF_API_KEY_1'])
+        if isinstance(env_vars, str):
+            env_vars = [env_vars]
+        idx = _hf_router_counter % len(env_vars)
+        _hf_router_counter += 1
+        return os.environ.get(env_vars[idx], '')
     return os.environ.get('HF_API_KEY_1', '')
 
 

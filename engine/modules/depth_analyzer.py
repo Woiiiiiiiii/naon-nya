@@ -2,6 +2,7 @@
 depth_analyzer.py
 Analyze background depth using MiDaS via Hugging Face Inference API.
 Generates depth maps for natural product placement and parallax effects.
+Uses DUAL dedicated HF API keys per account.
 Falls back to simple brightness-based estimation if API unavailable.
 """
 import os
@@ -17,9 +18,14 @@ CACHE_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'depth_maps'
 HF_MODEL = "Intel/dpt-large"
 HF_API_URL = f"https://router.huggingface.co/models/{HF_MODEL}"
 
+# Counter for alternating between dual keys
+_hf_key_counter = 0
+
 
 def _get_hf_key(account_id):
-    """Get HF API key dedicated to this account."""
+    """Get DEDICATED HF API key for this account (dual keys, alternating).
+    Each channel has 2 keys — no borrowing from other channels."""
+    global _hf_key_counter
     hf_path = os.path.join(CONFIG_DIR, 'hf_config.json')
     if not os.path.exists(hf_path):
         return os.environ.get('HF_API_KEY_1', '')
@@ -33,8 +39,12 @@ def _get_hf_key(account_id):
         'yt_5': 'youtube_akun_5', 'tt_1': 'tiktok', 'fb_1': 'facebook',
     }
     config_key = acct_map.get(account_id, 'youtube_akun_1')
-    env_var = mapping.get(config_key, 'HF_API_KEY_1')
-    return os.environ.get(env_var, '')
+    env_vars = mapping.get(config_key, ['HF_API_KEY_1'])
+    if isinstance(env_vars, str):
+        env_vars = [env_vars]
+    idx = _hf_key_counter % len(env_vars)
+    _hf_key_counter += 1
+    return os.environ.get(env_vars[idx], '')
 
 
 def analyze_depth_hf(image_path, account_id='yt_1'):

@@ -1,7 +1,7 @@
-﻿"""
+"""
 object_isolator.py
 Professional background removal via REMBG on Hugging Face Inference API.
-Uses dedicated HF API key per account. Falls back to local rembg library.
+Uses DUAL dedicated HF API keys per account. Falls back to local rembg library.
 Includes edge feathering and alpha cleanup for natural compositing.
 """
 import os
@@ -16,9 +16,14 @@ CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', 'config')
 HF_MODEL = "briaai/RMBG-1.4"
 HF_API_URL = f"https://router.huggingface.co/models/{HF_MODEL}"
 
+# Counter for alternating between dual keys
+_hf_key_counter = 0
+
 
 def _get_hf_key(account_id):
-    """Get HF API key dedicated to this account."""
+    """Get DEDICATED HF API key for this account (dual keys, alternating).
+    Each channel has 2 keys — no borrowing from other channels."""
+    global _hf_key_counter
     hf_path = os.path.join(CONFIG_DIR, 'hf_config.json')
     if not os.path.exists(hf_path):
         return os.environ.get('HF_API_KEY_1', '')
@@ -30,8 +35,14 @@ def _get_hf_key(account_id):
         'yt_5': 'youtube_akun_5', 'tt_1': 'tiktok', 'fb_1': 'facebook',
     }
     config_key = acct_map.get(account_id, 'youtube_akun_1')
-    env_var = mapping.get(config_key, 'HF_API_KEY_1')
-    return os.environ.get(env_var, '')
+    env_vars = mapping.get(config_key, ['HF_API_KEY_1'])
+    # Support both old (string) and new (array) format
+    if isinstance(env_vars, str):
+        env_vars = [env_vars]
+    # Alternate between dual keys
+    idx = _hf_key_counter % len(env_vars)
+    _hf_key_counter += 1
+    return os.environ.get(env_vars[idx], '')
 
 
 def isolate_via_hf(image_path, account_id='yt_1'):
