@@ -49,11 +49,12 @@ def main():
         "python engine/modules/generate_storyboard.py"
     ]
 
-    # DATA CHECKPOINT: halt if V1 produced no products
+    # DATA CHECKPOINT: warn if V1 produced no products (but don't hard-fail)
     v1_checkpoint = {
         'file': 'engine/data/produk.csv',
         'min_lines': 2,  # header + at least 1 product
-        'msg': 'V1 menghasilkan 0 produk — semua tier Shopee gagal. Cek: CF_PROXY_URL, SHOPEE_COOKIES'
+        'msg': 'V1 menghasilkan 0 produk — semua tier Shopee gagal. Cek: CF_PROXY_URL, SHOPEE_COOKIES',
+        'fatal': False,  # WARNING only — pipeline will catch 0-video at end
     }
     
     # V2: Batch Manager (select products → assign to accounts → random schedule)
@@ -199,19 +200,26 @@ def main():
         if (i - 1) in checkpoints:
             cp = checkpoints[i - 1]
             cp_file = cp['file']
+            is_fatal = cp.get('fatal', True)
             if os.path.exists(cp_file):
                 with open(cp_file, 'r') as f:
                     line_count = sum(1 for _ in f)
                 if line_count < cp['min_lines']:
                     print(f"\n{'='*60}")
-                    print(f"[HALT] {cp['msg']}")
+                    print(f"[{'HALT' if is_fatal else 'WARN'}] {cp['msg']}")
                     print(f"  File: {cp_file} has {line_count} lines (need >= {cp['min_lines']})")
-                    sys.exit(1)
+                    if is_fatal:
+                        sys.exit(1)
+                    else:
+                        print(f"  Continuing anyway — will catch at end if 0 videos produced")
             else:
                 print(f"\n{'='*60}")
-                print(f"[HALT] Data file missing: {cp_file}")
+                print(f"[{'HALT' if is_fatal else 'WARN'}] Data file missing: {cp_file}")
                 print(f"  {cp['msg']}")
-                sys.exit(1)
+                if is_fatal:
+                    sys.exit(1)
+                else:
+                    print(f"  Continuing anyway — will catch at end if 0 videos produced")
 
         elapsed = time.time() - start_time
         print(f"\n{'='*60}")

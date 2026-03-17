@@ -3,12 +3,11 @@ download_images.py
 Download product images with MULTI-TIER fallback (Shopee only).
 
 Priority:
-  Tier 1:   Shopee Cookies (authenticated API search by product name)
-  Tier 2:   Shopee CDN direct (image_url from scraper)
+  Tier 0:   Product Bank (local copy — zero network cost, from product_collector)
+  Tier 1:   Shopee CDN direct (image_url from scraper)
+  Tier 2:   Shopee Cookies (authenticated API search by product name)
   Tier 3:   Shopee search page scrape (find image hashes from HTML)
   Tier 4:   Shopee recommend API (alternative endpoint)
-  Tier 5:   Product Collector bank (previously downloaded from Shopee)
-  Tier 6:   Professional placeholder card (last resort)
 
 No Pexels/Pixabay — all product images MUST come from Shopee.
 """
@@ -615,11 +614,12 @@ def download_images(produk_file, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     df = pd.read_csv(produk_file)
     
-    stats = {'shopee_cdn': 0, 'cookies': 0, 'shopee_scrape': 0, 'skipped': 0, 'cached': 0}
+    stats = {'bank': 0, 'shopee_cdn': 0, 'cookies': 0, 'shopee_scrape': 0, 'skipped': 0, 'cached': 0}
     
     for _, row in df.iterrows():
         pid = row['produk_id']
         name = str(row.get('nama', pid))
+        category = str(row.get('category', '')).strip()
         img_path = os.path.join(output_dir, f"{pid}.jpg")
         image_url = str(row.get('image_url', '')).strip()
         
@@ -651,6 +651,23 @@ def download_images(produk_file, output_dir):
             print(f"    [REJECT] Non-Shopee image URL: {image_url[:50]}")
             image_url = ''
         
+        # TIER 0: Product Bank (local copy — zero network cost)
+        # Product Collector already downloaded this image, just copy it
+        if category:
+            bank_img = os.path.join(BANK_DIR, category, pid, 'image.jpg')
+            if os.path.exists(bank_img):
+                try:
+                    import shutil
+                    shutil.copy2(bank_img, img_path)
+                    check = Image.open(img_path)
+                    w, h = check.size
+                    if w >= 200 and h >= 200:
+                        print(f"    [Tier0-Bank] Copied from product bank")
+                        stats['bank'] += 1
+                        continue
+                except Exception:
+                    pass
+        
         # TIER 1: Shopee CDN (direct URL from scraper — fastest)
         if _try_shopee_cdn(image_url, img_path):
             stats['shopee_cdn'] += 1
@@ -672,11 +689,12 @@ def download_images(produk_file, output_dir):
             continue
         
         # ALL TIERS FAILED — skip this product (no fake images)
-        print(f"    [SKIP] All Shopee tiers failed for {pid}")
+        print(f"    [SKIP] All tiers failed for {pid}")
         stats['skipped'] += 1
     
     print(f"\n  === Image Download Summary ===")
     print(f"  Cached:           {stats['cached']}")
+    print(f"  Product Bank:     {stats['bank']}")
     print(f"  Shopee CDN:       {stats['shopee_cdn']}")
     print(f"  Shopee Cookies:   {stats['cookies']}")
     print(f"  Shopee Scrape:    {stats['shopee_scrape']}")

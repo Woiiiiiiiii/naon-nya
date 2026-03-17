@@ -3,9 +3,12 @@ engine/output/
 
 # Music library (cached in CI via GitHub Actions cache, not in repo)
 engine/assets/music/
+
 # State files (runtime data, not config)
 engine/state/*.csv
 engine/state/*.json
+# EXCEPTION: used_products.json MUST be tracked for permanent product dedup
+!engine/state/used_products.json
 
 # Queue files (regenerated every run)
 engine/queue/*.jsonl
