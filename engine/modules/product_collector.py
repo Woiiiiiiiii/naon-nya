@@ -616,9 +616,17 @@ def count_bank(category):
 
 
 def collect_products(categories=None, target=None):
-    """Main collection function. Tries all layers per category."""
+    """Main collection function. Tries all layers per category.
+    
+    Priority order:
+      Layer 0: Shopee Affiliate API (affiliate.shopee.co.id) — PRIMARY
+      Layer 1: Shopee search with cookies (search API — often blocked)
+      Layer 2: Shopee public search (search API — often blocked)
+      Layer 3: Shopee recommend API (fallback alternate endpoint)
+      Layer 4: Shopee category browse (fallback alternate endpoint)
+    """
     print("=" * 60)
-    print("  PRODUCT COLLECTOR — Multi-Layer")
+    print("  PRODUCT COLLECTOR — Multi-Layer (Affiliate-First)")
     print("=" * 60)
 
     if categories is None:
@@ -626,7 +634,7 @@ def collect_products(categories=None, target=None):
     if target is None:
         target = TARGET_PER_CATEGORY
 
-    # Build Shopee session (Layer 1)
+    # Build Shopee session for Layer 1 (will be used as fallback only)
     shopee_session = _build_shopee_session()
 
     stats = {cat: {'existing': 0, 'new': 0, 'failed': 0} for cat in categories}
@@ -642,10 +650,50 @@ def collect_products(categories=None, target=None):
 
         need = target - existing
         print(f"  Have {existing}, need {need} more...")
-
-        keywords = SEARCH_KEYWORDS.get(category, [])
-        random.shuffle(keywords)  # Randomize to get variety
         collected = 0
+
+        # ══════════════════════════════════════════════════════════
+        #  LAYER 0: Shopee Affiliate API (PRIMARY — not blocked!)
+        # ══════════════════════════════════════════════════════════
+        try:
+            from shopee_affiliate import collect_affiliate_products
+            aff_products = collect_affiliate_products(category, target=need)
+            for prod in aff_products:
+                if collected >= need:
+                    break
+                pid = _generate_product_id(prod['nama'], category)
+                product_dir = os.path.join(BANK_DIR, category, pid)
+                if os.path.exists(os.path.join(product_dir, 'image.jpg')):
+                    continue
+                import tempfile
+                tmp_img = os.path.join(tempfile.gettempdir(), f'{pid}_temp.jpg')
+                if prod.get('image_url') and _download_product_image(prod['image_url'], tmp_img):
+                    pid, ok = _save_product(prod, category, tmp_img)
+                    if ok:
+                        print(f"    ✓ [Affiliate] {prod['nama'][:40]}")
+                        collected += 1
+                        stats[category]['new'] += 1
+                    else:
+                        stats[category]['failed'] += 1
+                    try:
+                        os.remove(tmp_img)
+                    except Exception:
+                        pass
+                else:
+                    stats[category]['failed'] += 1
+            if collected > 0:
+                print(f"  → Layer 0 (Affiliate): +{collected} products")
+        except ImportError:
+            print("  [SKIP] shopee_affiliate module not found")
+        except Exception as e:
+            print(f"  [WARN] Affiliate API error: {e}")
+
+        # ══════════════════════════════════════════════════════════
+        #  LAYER 1+2: Shopee Search API (fallback if affiliate didn't get enough)
+        # ══════════════════════════════════════════════════════════
+        if collected < need:
+            keywords = SEARCH_KEYWORDS.get(category, [])
+            random.shuffle(keywords)
 
         for keyword in keywords:
             if collected >= need:
