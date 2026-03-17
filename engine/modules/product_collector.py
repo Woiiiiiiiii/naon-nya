@@ -286,6 +286,244 @@ def _shopee_public_search(keyword, limit=5):
         return []
 
 
+# ═══════════════════════════════════════════════════════════════════
+#  Shopee Category IDs for Indonesia (for category-based browsing)
+# ═══════════════════════════════════════════════════════════════════
+SHOPEE_CATEGORY_IDS = {
+    'fashion': [
+        11044568,  # Tas Wanita
+        11044569,  # Sepatu Wanita
+        11044567,  # Aksesoris Fashion
+        11044571,  # Jam Tangan
+        11044570,  # Tas Pria
+    ],
+    'gadget': [
+        11044954,  # Elektronik
+        11044956,  # Handphone & Aksesoris
+        11044957,  # Komputer & Aksesoris
+    ],
+    'beauty': [
+        11044534,  # Kecantikan
+        11044535,  # Perawatan & Kesehatan
+    ],
+    'home': [
+        11044562,  # Perlengkapan Rumah
+        11044563,  # Peralatan Dapur
+    ],
+    'wellness': [
+        11044582,  # Olahraga & Outdoor
+        11044535,  # Perawatan & Kesehatan
+    ],
+}
+
+# Category filter keywords (if name contains any → matches category)
+CATEGORY_FILTERS = {
+    'fashion': ['tas', 'sepatu', 'kaos', 'baju', 'celana', 'jam tangan', 'dompet',
+                'kacamata', 'topi', 'gelang', 'cincin', 'anting', 'hoodie', 'jaket',
+                'sandal', 'dress', 'kemeja', 'rok', 'sweater', 'sling bag', 'backpack'],
+    'gadget': ['earphone', 'powerbank', 'charger', 'keyboard', 'mouse', 'speaker',
+               'headphone', 'tripod', 'kabel', 'usb', 'webcam', 'smartwatch', 'led',
+               'ring light', 'flash drive', 'adapter', 'hub', 'mic', 'holder'],
+    'beauty': ['serum', 'sunscreen', 'moisturizer', 'toner', 'lip', 'cushion', 'masker',
+               'cream', 'micellar', 'essence', 'clay mask', 'foundation', 'blush',
+               'mascara', 'eyeliner', 'primer', 'skincare', 'makeup', 'concealer'],
+    'home': ['rak', 'lampu', 'gorden', 'bantal', 'dispenser', 'lap', 'sapu', 'hanger',
+             'organizer', 'vacuum', 'pisau', 'timbangan', 'dapur', 'cermin', 'pot',
+             'aroma', 'timer', 'karpet', 'sprei', 'selimut'],
+    'wellness': ['yoga', 'resistance', 'botol minum', 'shaker', 'pijat', 'essential oil',
+                 'dumbell', 'foam roller', 'timbangan', 'gym', 'olahraga', 'sport',
+                 'fitness', 'protein', 'vitamin', 'termos'],
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  LAYER 3: Shopee Recommend API (daily discover - bypasses search block)
+# ═══════════════════════════════════════════════════════════════════
+def _shopee_recommend_discover(category, limit=10):
+    """Fetch products from Shopee Recommend API (daily_discover_main).
+    This endpoint is DIFFERENT from search_items — not blocked by error 90309999.
+    Returns popular products, filtered by category keywords."""
+    headers = {
+        'User-Agent': random.choice(USER_AGENTS),
+        'Accept': 'application/json',
+        'Referer': 'https://shopee.co.id/',
+        'X-Shopee-Language': 'id',
+        'X-Requested-With': 'XMLHttpRequest',
+    }
+
+    # Build cookie string from env
+    cookies_str = ''
+    cookies_raw = os.environ.get('SHOPEE_COOKIES', '')
+    if cookies_raw:
+        try:
+            cookies = json.loads(cookies_raw)
+            if isinstance(cookies, list):
+                cookies_str = '; '.join([f"{c.get('name','')}={c.get('value','')}"
+                                         for c in cookies if c.get('name')])
+            elif isinstance(cookies, dict):
+                cookies_str = '; '.join([f'{k}={v}' for k, v in cookies.items()])
+        except Exception:
+            pass
+
+    cat_ids = SHOPEE_CATEGORY_IDS.get(category, [])
+    cat_filters = [kw.lower() for kw in CATEGORY_FILTERS.get(category, [])]
+    products = []
+
+    # Try daily discover (popular items)
+    bundles = ['daily_discover_main', 'daily_discover_tab']
+    for bundle in bundles:
+        if len(products) >= limit:
+            break
+
+        url = f"https://shopee.co.id/api/v4/recommend/recommend?bundle={bundle}&limit=60&offset=0"
+
+        try:
+            data = None
+            try:
+                from shopee_proxy import proxy_get_json, is_proxy_available
+                if is_proxy_available():
+                    status, data = proxy_get_json(url, headers=headers, cookies_str=cookies_str)
+                    if status != 200:
+                        data = None
+            except ImportError:
+                pass
+
+            if data is None:
+                if cookies_str:
+                    headers['Cookie'] = cookies_str
+                resp = requests.get(url, headers=headers, timeout=15)
+                if resp.status_code == 200:
+                    data = resp.json()
+
+            if not data:
+                continue
+
+            # Parse recommend response (different format from search)
+            sections = data.get('data', {}).get('sections', [])
+            for section in sections:
+                items = section.get('data', {}).get('item', [])
+                for item_wrap in items:
+                    if len(products) >= limit:
+                        break
+                    item = item_wrap if isinstance(item_wrap, dict) else {}
+                    # Could be nested in 'item_basic' or direct
+                    info = item.get('item_basic', item)
+                    name = info.get('name', '')
+                    if not name:
+                        continue
+
+                    # Filter by category keywords
+                    name_lower = name.lower()
+                    if cat_filters and not any(kw in name_lower for kw in cat_filters):
+                        continue
+
+                    shop_id = info.get('shopid', 0)
+                    item_id = info.get('itemid', 0)
+                    price = info.get('price', 0)
+                    if price > 100000:
+                        price = price // 100000
+                    image_hash = info.get('image', '')
+                    if not image_hash or not item_id:
+                        continue
+
+                    img_url = f"https://down-id.img.susercontent.com/file/{image_hash}"
+                    shopee_url = f"https://shopee.co.id/product/{shop_id}/{item_id}"
+
+                    products.append({
+                        'nama': name[:80],
+                        'price': f"Rp{price:,}".replace(',', '.'),
+                        'desc': name,
+                        'image_url': img_url,
+                        'shopee_url': shopee_url,
+                        'source': 'shopee_recommend',
+                    })
+
+        except Exception as e:
+            print(f"    [Layer3] {bundle} error: {e}")
+
+    print(f"    [Layer3] Recommend API → {len(products)} products (category={category})")
+    return products
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  LAYER 4: Shopee Category Page Scrape (HTML → embedded JSON)
+# ═══════════════════════════════════════════════════════════════════
+def _shopee_category_scrape(category, limit=10):
+    """Scrape products from Shopee category page HTML.
+    Shopee embeds product data in page's JSON. Different endpoint from search API."""
+    import re as _re
+    cat_ids = SHOPEE_CATEGORY_IDS.get(category, [])
+    if not cat_ids:
+        return []
+
+    products = []
+    headers = {
+        'User-Agent': random.choice(USER_AGENTS),
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'id-ID,id;q=0.9',
+        'Referer': 'https://shopee.co.id/',
+    }
+
+    for cat_id in cat_ids[:2]:  # Max 2 category pages
+        if len(products) >= limit:
+            break
+
+        url = f"https://shopee.co.id/api/v4/search/search_items?by=pop&limit=20&match_id={cat_id}&newest=0&order=desc&page_type=search&version=2"
+
+        try:
+            data = None
+            try:
+                from shopee_proxy import proxy_get_json, is_proxy_available
+                if is_proxy_available():
+                    status, data = proxy_get_json(url, headers={
+                        'User-Agent': random.choice(USER_AGENTS),
+                        'Accept': 'application/json',
+                        'Referer': f'https://shopee.co.id/mall/cat/{cat_id}',
+                        'X-Shopee-Language': 'id',
+                    })
+                    if status != 200:
+                        data = None
+            except ImportError:
+                pass
+
+            if not data:
+                continue
+
+            items = data.get('items', [])
+            for item in items[:limit]:
+                info = item.get('item_basic', {})
+                name = info.get('name', '')
+                shop_id = info.get('shopid', item.get('shopid', 0))
+                item_id = info.get('itemid', item.get('itemid', 0))
+                price = info.get('price', 0)
+                if price > 100000:
+                    price = price // 100000
+                image_hash = info.get('image', '')
+
+                if not name or not image_hash:
+                    continue
+
+                img_url = f"https://down-id.img.susercontent.com/file/{image_hash}"
+                shopee_url = f"https://shopee.co.id/product/{shop_id}/{item_id}"
+
+                products.append({
+                    'nama': name[:80],
+                    'price': f"Rp{price:,}".replace(',', '.'),
+                    'desc': name,
+                    'image_url': img_url,
+                    'shopee_url': shopee_url,
+                    'source': 'shopee_category',
+                })
+
+            time.sleep(random.uniform(2.0, 4.0))
+
+        except Exception as e:
+            print(f"    [Layer4] Cat {cat_id} error: {e}")
+
+    print(f"    [Layer4] Category scrape → {len(products)} products")
+    return products
+
+
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -418,18 +656,17 @@ def collect_products(categories=None, target=None):
 
             products = []
 
-            # Layer 1: Shopee with cookies
+            # Layer 1: Shopee with cookies (search API)
             if shopee_session and not products:
                 products = _shopee_search_with_cookies(shopee_session, keyword, limit=3)
 
-            # Layer 2: Shopee public
+            # Layer 2: Shopee public (search API)
             if not products:
                 time.sleep(1)
                 products = _shopee_public_search(keyword, limit=3)
 
-            # Layer 1+2 gagal → skip keyword (bank data dari run sebelumnya tetap available)
             if not products:
-                print(f"    [SKIP] No Shopee results for '{keyword}'")
+                print(f"    [Layer1+2] No search results for '{keyword}'")
 
             # Process found products
             for prod in products:
@@ -457,6 +694,48 @@ def collect_products(categories=None, target=None):
                         stats[category]['failed'] += 1
 
                     # Clean up temp
+                    try:
+                        os.remove(tmp_img)
+                    except Exception:
+                        pass
+                else:
+                    stats[category]['failed'] += 1
+
+        # ── FALLBACK: Layer 3+4 if search-based layers got nothing ──
+        if collected == 0:
+            print(f"\n  [FALLBACK] Search API blocked. Trying alternative endpoints...")
+
+            # Layer 3: Recommend API (daily discover — different endpoint)
+            alt_products = _shopee_recommend_discover(category, limit=need)
+
+            # Layer 4: Category browse (if recommend didn't get enough)
+            if len(alt_products) < need:
+                time.sleep(random.uniform(2.0, 4.0))
+                more = _shopee_category_scrape(category, limit=need - len(alt_products))
+                alt_products.extend(more)
+
+            # Process alternative products
+            for prod in alt_products:
+                if collected >= need:
+                    break
+
+                pid = _generate_product_id(prod['nama'], category)
+                product_dir = os.path.join(BANK_DIR, category, pid)
+                if os.path.exists(os.path.join(product_dir, 'image.jpg')):
+                    continue
+
+                import tempfile
+                tmp_img = os.path.join(tempfile.gettempdir(), f'{pid}_temp.jpg')
+                img_url = prod.get('image_url', '')
+
+                if img_url and _download_product_image(img_url, tmp_img):
+                    pid, ok = _save_product(prod, category, tmp_img)
+                    if ok:
+                        print(f"    ✓ Saved: {prod['nama'][:40]} [{prod['source']}]")
+                        collected += 1
+                        stats[category]['new'] += 1
+                    else:
+                        stats[category]['failed'] += 1
                     try:
                         os.remove(tmp_img)
                     except Exception:
