@@ -315,53 +315,92 @@ def extract_product_info(item, affiliate_id, category):
     }
 
 
+def _get_rotated_keywords(category, max_keywords=2):
+    """Pick keywords using date+slot rotation — different keywords every run.
+
+    Rotation logic:
+      - day_of_year (1-366) × 4 slots + slot_index (0-3) = rotation_index
+      - Primary keyword = keywords[rotation_index % total_keywords]
+      - Backup keyword  = keywords[(rotation_index + 1) % total_keywords]
+
+    With ~30 keywords × 4 slots/day, full cycle = ~7.5 days (no repeats).
+    """
+    cat_keywords = CATEGORY_KEYWORDS.get(category, {}).get('scrape', [])
+    if not cat_keywords:
+        return [category]
+
+    total = len(cat_keywords)
+
+    # Determine rotation index from date + time slot
+    now = datetime.datetime.now()
+    day_of_year = now.timetuple().tm_yday  # 1-366
+    hour = now.hour
+    # Map hour to slot: 0-8=pagi(0), 9-14=siang(1), 15-18=sore(2), 19-23=malam(3)
+    if hour < 9:
+        slot_idx = 0
+    elif hour < 15:
+        slot_idx = 1
+    elif hour < 19:
+        slot_idx = 2
+    else:
+        slot_idx = 3
+
+    rotation_index = (day_of_year * 4 + slot_idx) % total
+
+    # Pick primary + backup keywords (consecutive in the rotated list)
+    selected = []
+    for i in range(max_keywords):
+        idx = (rotation_index + i) % total
+        selected.append(cat_keywords[idx])
+
+    return selected
+
+
 def scrape_category(category, affiliate_id, target_count=3):
-    """Scrape products for a single category using 3 tiers with retry.
+    """Scrape products for one category. Uses keyword ROTATION for efficiency.
 
-    Tier 1: CF Proxy → Shopee API (with retry + backoff on rate limit)
-    Tier 2: Direct → Shopee API (auto-skipped on CI — IP always blocked)
-    Tier 3: Shopee Cookies via proxy (with retry + backoff)
+    Keyword Strategy:
+      - 1 PRIMARY keyword per run (rotated by date+slot — different every run)
+      - 1 BACKUP keyword if primary fails (next in rotation)
+      - Max 2 keywords = max 2 API calls per category (vs 6-8 before)
+      - If keyword 1 fails → immediately tries keyword 2 (no stuck)
 
-    Each tier retries 1x on 200-but-0-items (anti-bot rate limit).
-    Inter-keyword delay: 3-5s to avoid triggering Shopee rate limit.
+    Tier Strategy (per keyword):
+      Tier 1: CF Proxy → Shopee API (retry 1x with backoff)
+      Tier 2: Direct → Shopee API (auto-skip on CI)
+      Tier 3: Cookies via proxy (retry 1x with backoff)
     """
     import time as _t
     products = []
     seen_ids = set()
-    tier_failures = {'tier1': 0, 'tier2': 0, 'tier3': 0}
 
-    cat_keywords = CATEGORY_KEYWORDS.get(category, {}).get('scrape', [])
-    if not cat_keywords:
-        cat_keywords = [category]
+    # Get rotated keywords (1 primary + 1 backup)
+    keywords = _get_rotated_keywords(category, max_keywords=2)
+    print(f"    Keywords (rotated): {keywords}")
 
-    keywords = cat_keywords[:]
-    random.shuffle(keywords)
-
-    for kw_idx, keyword in enumerate(keywords[:6]):  # Max 6 keywords (was 8)
+    for kw_idx, keyword in enumerate(keywords):
         if len(products) >= target_count:
             break
 
-        # Inter-keyword delay (skip first keyword)
+        # Inter-keyword delay (only between keywords, not before first)
         if kw_idx > 0:
-            inter_delay = random.uniform(3.0, 5.0)
-            _t.sleep(inter_delay)
+            _t.sleep(random.uniform(3.0, 5.0))
+
+        print(f"    [KW {kw_idx+1}/{len(keywords)}] Searching: '{keyword}'")
 
         # ── Tier 1: CF Proxy (with retry built into function) ──
         items = search_shopee_proxy(keyword, limit=5)
 
         # ── Tier 2: Direct Shopee API (auto-skips on CI) ──
         if items is None:
-            tier_failures['tier1'] += 1
             items = search_shopee(keyword, limit=5)
 
         # ── Tier 3: Shopee Cookies (with retry built into function) ──
         if items is None:
-            tier_failures['tier2'] += 1
             items = search_shopee_cookies(keyword, limit=5)
 
         if items is None:
-            tier_failures['tier3'] += 1
-            print(f"    [ALL TIERS FAILED] No results for '{keyword}'")
+            print(f"    [FAILED] All tiers failed for '{keyword}' → trying next keyword")
             continue
 
         for item in items:
@@ -388,8 +427,8 @@ def scrape_category(category, affiliate_id, target_count=3):
                 continue
 
     if not products:
-        print(f"    [EMPTY] No products for {category} — all tiers failed")
-        print(f"    Tier stats: T1(proxy)={tier_failures['tier1']}fail T2(direct)={tier_failures['tier2']}fail T3(cookies)={tier_failures['tier3']}fail")
+        print(f"    [EMPTY] No products for {category} — all keywords + tiers failed")
+        print(f"    Tried keywords: {keywords}")
         print(f"    Checklist: CF_PROXY_URL? CF_PROXY_KEY? SHOPEE_COOKIES expired?")
 
     return products
