@@ -3,13 +3,14 @@ music_downloader.py
 Auto-download royalty-free music per kategori.
 
 Per user request: MusicGen DIHAPUS (rawan gagal).
-Sumber musik otomatis:
+Sumber musik otomatis (4 tier):
   Tier 1: Freesound API (proper REST API, search+download, royalty-free)
-  Tier 2: Pixabay Music (web scraping, royalty-free)
-  Tier 3: Procedural wave synthesis (offline fallback)
+  Tier 2: Pixabay Music API (royalty-free)
+  Tier 3: YouTube Audio Library (yt-dlp, curated playlists, royalty-free)
+  Tier 4: Procedural wave synthesis (offline fallback, always works)
 
 Organizes by category in assets/music/[category]/.
-Min 5 tracks per category. Auto-restock when below threshold.
+Min 12 tracks per category. Auto-restock when below threshold.
 """
 import os
 import sys
@@ -280,7 +281,129 @@ def fetch_pixabay_music(category, count=3):
 
 
 # ===============================================
-# TIER 3: Procedural Wave Synthesis (offline fallback)
+# TIER 3: YouTube Audio Library (yt-dlp, royalty-free)
+# ===============================================
+# Downloads audio from YouTube search using royalty-free queries.
+# Uses yt-dlp for reliable audio extraction.
+
+# Category -> YouTube search queries (royalty-free music keywords)
+YT_AUDIO_QUERIES = {
+    'fashion': 'upbeat pop royalty free background music no copyright',
+    'gadget': 'electronic tech royalty free background music no copyright',
+    'beauty': 'soft piano ambient royalty free background music no copyright',
+    'home': 'cheerful acoustic ukulele royalty free background music no copyright',
+    'wellness': 'calm meditation ambient royalty free background music no copyright',
+}
+
+
+def fetch_youtube_audio_library(category, count=3):
+    """Fetch royalty-free music from YouTube via yt-dlp (Tier 3).
+    Downloads audio-only from YouTube search results matching royalty-free queries.
+    Requires: pip install yt-dlp"""
+    try:
+        import subprocess
+        # Check if yt-dlp is available
+        check = subprocess.run(['yt-dlp', '--version'], capture_output=True, text=True, timeout=10)
+        if check.returncode != 0:
+            print(f"    [SKIP] yt-dlp not installed")
+            return 0
+    except FileNotFoundError:
+        print(f"    [SKIP] yt-dlp not found in PATH")
+        return 0
+    except Exception:
+        print(f"    [SKIP] yt-dlp check failed")
+        return 0
+
+    d = get_music_dir(category)
+    query = YT_AUDIO_QUERIES.get(category, 'royalty free background music no copyright')
+    downloaded = 0
+
+    try:
+        import subprocess
+
+        print(f"    [YT AUDIO] Searching: '{query}'...")
+
+        # Use yt-dlp to search and download audio-only
+        # --default-search ytsearch: search YouTube
+        # --max-downloads: limit results
+        # --extract-audio: audio only
+        # --audio-format mp3: convert to mp3
+        # --audio-quality 5: medium quality (smaller files)
+        # --match-filter: only short tracks (30s-300s for background music)
+        # --no-playlist: don't expand playlists
+        # -o: output template
+        track_num_start = count_local(category) + 1
+
+        for i in range(count):
+            if downloaded >= count:
+                break
+
+            track_num = track_num_start + downloaded
+            filename = f"{category}_yt_{track_num:02d}.mp3"
+            filepath = os.path.join(d, filename)
+
+            if os.path.exists(filepath):
+                continue
+
+            # Search with offset to get different results each time
+            search_query = f"ytsearch{i + 1}:{query}"
+
+            cmd = [
+                'yt-dlp',
+                '--no-playlist',
+                '--extract-audio',
+                '--audio-format', 'mp3',
+                '--audio-quality', '5',
+                '--match-filter', 'duration >= 30 & duration <= 300',
+                '--max-downloads', '1',
+                '-o', filepath.replace('.mp3', '.%(ext)s'),
+                '--no-overwrites',
+                '--quiet',
+                '--no-warnings',
+                search_query,
+            ]
+
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+
+                # yt-dlp may save with different extension, find the actual file
+                base = filepath.replace('.mp3', '')
+                actual_file = None
+                for ext in ['.mp3', '.m4a', '.ogg', '.wav', '.opus']:
+                    candidate = base + ext
+                    if os.path.exists(candidate):
+                        actual_file = candidate
+                        break
+
+                if actual_file and os.path.getsize(actual_file) > 10000:
+                    # Rename to standard .mp3 name if different
+                    if actual_file != filepath:
+                        os.rename(actual_file, filepath)
+
+                    size_kb = os.path.getsize(filepath) // 1024
+                    print(f"    [OK] {filename} ({size_kb}KB)")
+                    downloaded += 1
+                    time.sleep(1)  # Rate limit courtesy
+                else:
+                    # Clean up any partial downloads
+                    for ext in ['.mp3', '.m4a', '.ogg', '.wav', '.opus', '.part', '.temp']:
+                        candidate = base + ext
+                        if os.path.exists(candidate):
+                            os.remove(candidate)
+
+            except subprocess.TimeoutExpired:
+                print(f"    [WARN] yt-dlp timeout for track {i+1}")
+            except Exception as e:
+                print(f"    [WARN] yt-dlp download error: {e}")
+
+    except Exception as e:
+        print(f"    [WARN] YouTube audio fetch error: {e}")
+
+    return downloaded
+
+
+# ===============================================
+# TIER 4: Procedural Wave Synthesis (offline fallback)
 # ===============================================
 
 def _midi_to_freq(note):
@@ -412,14 +535,14 @@ def generate_procedural_track(filepath, category, seed_val=0, duration=30):
 
 
 # ===============================================
-# MAIN: AUTO-RESTOCK (Freesound -> Pixabay -> Synth)
+# MAIN: AUTO-RESTOCK (Freesound -> Pixabay -> YT Audio -> Synth)
 # ===============================================
 
 def restock_all():
     """Auto-restock music for all categories WITH rotation.
-    Each run: delete oldest API tracks → download fresh ones → keep it varied.
-    Priority: Freesound API -> Pixabay -> Procedural synth."""
-    print("=== Music Auto-Download (with rotation) ===")
+    Each run: delete oldest API tracks -> download fresh ones -> keep it varied.
+    Priority: Freesound API -> Pixabay -> YouTube Audio Library -> Procedural synth."""
+    print("=== Music Auto-Download (4 tiers with rotation) ===")
     print(f"  Base dir: {os.path.abspath(MUSIC_DIR)}")
     print(f"  Min stock: {MIN_STOCK} per category")
     print(f"  Rotate: {ROTATE_COUNT} tracks per run\n")
@@ -463,7 +586,15 @@ def restock_all():
             if px_got > 0:
                 print(f"    [+] Pixabay: +{px_got} tracks")
 
-        # -- TIER 3: Procedural synth (always works) --
+        # -- TIER 3: YouTube Audio Library --
+        new_local = count_local(category)
+        still_need = MIN_STOCK - new_local
+        if still_need > 0:
+            yt_got = fetch_youtube_audio_library(category, count=still_need)
+            if yt_got > 0:
+                print(f"    [+] YouTube Audio: +{yt_got} tracks")
+
+        # -- TIER 4: Procedural synth (always works) --
         new_local = count_local(category)
         still_need = MIN_STOCK - new_local
         if still_need > 0:
@@ -499,7 +630,7 @@ def restock_all():
 
 def restock_category(category):
     """Restock a single category WITH ROTATION.
-    ALWAYS tries APIs first (Freesound -> Pixabay).
+    ALWAYS tries APIs first (Freesound -> Pixabay -> YouTube Audio).
     Rotates oldest tracks to force variety each run.
     Synth is LAST RESORT only."""
     d = get_music_dir(category)
@@ -538,7 +669,11 @@ def restock_category(category):
     need2 = max(MIN_STOCK - api_count - fs_got, 2)
     px_got = fetch_pixabay_music(category, count=need2)
     
-    api_total = fs_got + px_got
+    # ALWAYS try YouTube Audio Library too
+    need3 = max(MIN_STOCK - api_count - fs_got - px_got, 2)
+    yt_got = fetch_youtube_audio_library(category, count=need3)
+    
+    api_total = fs_got + px_got + yt_got
     
     # If we got API music, DELETE old synth files (they're inferior)
     if api_total > 0 and synth_count > 0:
@@ -550,11 +685,11 @@ def restock_category(category):
                 except Exception:
                     pass
     
-    # Only generate synth if ZERO music available (APIs both failed)
+    # Only generate synth if ZERO music available (ALL tiers failed)
     new_local = count_local(category)
     if new_local < MIN_STOCK and api_total == 0:
         still_need = MIN_STOCK - new_local
-        print(f"    [SYNTH] APIs failed, generating {still_need} procedural tracks...")
+        print(f"    [SYNTH] All 3 tiers failed, generating {still_need} procedural tracks...")
         for i in range(still_need):
             track_num = new_local + i + 1
             filepath = os.path.join(d, f"{category}_synth_{track_num:02d}.wav")
