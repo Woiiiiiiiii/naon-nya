@@ -630,9 +630,9 @@ def restock_all():
 
 def restock_category(category):
     """Restock a single category WITH ROTATION.
-    ALWAYS tries APIs first (Freesound -> Pixabay -> YouTube Audio).
-    Rotates oldest tracks to force variety each run.
-    Synth is LAST RESORT only."""
+    Tries APIs in order: Freesound → Pixabay → YouTube Audio.
+    SHORT-CIRCUIT: if Tier 1 gets enough tracks, skip Tier 2/3.
+    Synth is LAST RESORT only (when ALL API tiers failed)."""
     d = get_music_dir(category)
     local = count_local(category)
     
@@ -661,19 +661,32 @@ def restock_category(category):
                 pass
         api_count -= len(to_delete)
     
-    # ALWAYS try Freesound (even if we have stock)
-    need = max(MIN_STOCK - api_count, ROTATE_COUNT + 2)
-    fs_got = fetch_freesound(category, count=need)
+    # Calculate how many tracks we need
+    need = max(MIN_STOCK - count_local(category), ROTATE_COUNT)
+    api_total = 0
+
+    # -- TIER 1: Freesound API --
+    if need > 0:
+        fs_got = fetch_freesound(category, count=need)
+        api_total += fs_got
+        if fs_got > 0:
+            print(f"    [+] Freesound: +{fs_got} tracks")
+        need -= fs_got
+
+    # -- TIER 2: Pixabay (only if Tier 1 didn't get enough) --
+    if need > 0:
+        px_got = fetch_pixabay_music(category, count=need)
+        api_total += px_got
+        if px_got > 0:
+            print(f"    [+] Pixabay: +{px_got} tracks")
+        need -= px_got
     
-    # ALWAYS try Pixabay too
-    need2 = max(MIN_STOCK - api_count - fs_got, 2)
-    px_got = fetch_pixabay_music(category, count=need2)
-    
-    # ALWAYS try YouTube Audio Library too
-    need3 = max(MIN_STOCK - api_count - fs_got - px_got, 2)
-    yt_got = fetch_youtube_audio_library(category, count=need3)
-    
-    api_total = fs_got + px_got + yt_got
+    # -- TIER 3: YouTube Audio Library (only if Tier 1+2 didn't get enough) --
+    if need > 0:
+        yt_got = fetch_youtube_audio_library(category, count=need)
+        api_total += yt_got
+        if yt_got > 0:
+            print(f"    [+] YouTube Audio: +{yt_got} tracks")
     
     # If we got API music, DELETE old synth files (they're inferior)
     if api_total > 0 and synth_count > 0:

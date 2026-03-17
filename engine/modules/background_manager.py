@@ -181,7 +181,8 @@ def get_random_background(category):
 
 
 def restock_category(category):
-    """Restock backgrounds for a category if below minimum."""
+    """Restock backgrounds for a category if below minimum.
+    SHORT-CIRCUIT: skip Pexels if Unsplash got enough."""
     current = count_local(category)
     keywords = get_background_keywords(category)
 
@@ -193,13 +194,17 @@ def restock_category(category):
     print(f"  [{category}] Low stock: {current}/{MIN_STOCK} — fetching {need}...")
 
     total = 0
-    if keywords and (UNSPLASH_KEY or PEXELS_KEY):
-        # Try API fetch
-        half = max(need // 2, 3)
-        if UNSPLASH_KEY:
-            total += fetch_unsplash(category, keywords, count=half)
-        if PEXELS_KEY:
-            total += fetch_pexels(category, keywords, count=half)
+    if keywords:
+        # -- Tier 1: Unsplash --
+        if UNSPLASH_KEY and need > 0:
+            got = fetch_unsplash(category, keywords, count=need)
+            total += got
+            need -= got
+
+        # -- Tier 2: Pexels (only if Unsplash didn't get enough) --
+        if PEXELS_KEY and need > 0:
+            got = fetch_pexels(category, keywords, count=need)
+            total += got
 
     # If API got nothing, generate placeholders
     new_count = count_local(category)
