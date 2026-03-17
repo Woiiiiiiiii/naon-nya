@@ -689,77 +689,100 @@ def collect_products(categories=None, target=None):
             print(f"  [WARN] Affiliate API error: {e}")
 
         # ══════════════════════════════════════════════════════════
-        #  LAYER 1+2: Shopee Search API (fallback if affiliate didn't get enough)
+        #  LAYER 1+2: Affiliate Product Offer API (replaces blocked search)
+        #  Uses /api/v3/offer/product/list — NOT blocked by error 90309999
         # ══════════════════════════════════════════════════════════
         if collected < need:
-            keywords = SEARCH_KEYWORDS.get(category, [])
-            random.shuffle(keywords)
+            try:
+                from shopee_affiliate import get_affiliate_product_offers, \
+                    _build_affiliate_session, _build_cookie_string, \
+                    build_product_affiliate_link, AFFILIATE_KEYWORDS
+            except ImportError:
+                get_affiliate_product_offers = None
 
-        for keyword in keywords:
-            if collected >= need:
-                break
+            if get_affiliate_product_offers:
+                aff_session = _build_affiliate_session()
+                aff_keywords = AFFILIATE_KEYWORDS.get(category, [category])
+                random.shuffle(aff_keywords)
 
-            print(f"\n  Searching: '{keyword}'...")
-            time.sleep(random.uniform(1.5, 3.0))  # Polite delay
+                for keyword in aff_keywords[:3]:
+                    if collected >= need:
+                        break
 
-            products = []
+                    print(f"\n  [Layer1+2] Product offers: '{keyword}'...")
+                    time.sleep(random.uniform(1.0, 2.0))
 
-            # Layer 1: Shopee with cookies (search API)
-            if shopee_session and not products:
-                products = _shopee_search_with_cookies(shopee_session, keyword, limit=3)
+                    prod_offers = get_affiliate_product_offers(
+                        keyword, session=aff_session, limit=10)
 
-            # Layer 2: Shopee public (search API)
-            if not products:
-                time.sleep(1)
-                products = _shopee_public_search(keyword, limit=3)
+                    for po in prod_offers:
+                        if collected >= need:
+                            break
 
-            if not products:
-                print(f"    [Layer1+2] No search results for '{keyword}'")
+                        product_name = po.get('product_name', po.get('item_name', ''))
+                        product_image = po.get('product_image', po.get('image', ''))
+                        product_link = po.get('long_link', po.get('product_link', ''))
+                        commission = po.get('commission_rate', '0%')
+                        item_price = po.get('price', po.get('product_price', 0))
+                        shop_name = po.get('shop_name', '')
 
-            # Process found products
-            for prod in products:
-                if collected >= need:
-                    break
+                        if not product_name:
+                            continue
 
-                # Check if already in bank
-                pid = _generate_product_id(prod['nama'], category)
-                product_dir = os.path.join(BANK_DIR, category, pid)
-                if os.path.exists(os.path.join(product_dir, 'image.jpg')):
-                    continue
+                        # Build image URL from hash if needed
+                        if product_image and not product_image.startswith('http'):
+                            product_image = f"https://down-id.img.susercontent.com/file/{product_image}"
 
-                # Download image to temp
-                import tempfile
-                tmp_img = os.path.join(tempfile.gettempdir(), f'{pid}_temp.jpg')
-                img_url = prod.get('image_url', '')
+                        prod = {
+                            'nama': product_name[:80],
+                            'price': f"Rp{item_price:,}".replace(',', '.') if isinstance(item_price, (int, float)) and item_price > 0 else 'Lihat harga',
+                            'desc': product_name,
+                            'image_url': product_image,
+                            'shopee_url': product_link,
+                            'source': 'shopee_affiliate_product',
+                            'commission': commission,
+                            'shop_name': shop_name,
+                        }
 
-                if img_url and _download_product_image(img_url, tmp_img):
-                    pid, ok = _save_product(prod, category, tmp_img)
-                    if ok:
-                        print(f"    ✓ Saved: {prod['nama'][:40]} [{prod['source']}]")
-                        collected += 1
-                        stats[category]['new'] += 1
-                    else:
-                        stats[category]['failed'] += 1
+                        # Check if already in bank
+                        pid = _generate_product_id(prod['nama'], category)
+                        product_dir = os.path.join(BANK_DIR, category, pid)
+                        if os.path.exists(os.path.join(product_dir, 'image.jpg')):
+                            continue
 
-                    # Clean up temp
-                    try:
-                        os.remove(tmp_img)
-                    except Exception:
-                        pass
-                else:
-                    stats[category]['failed'] += 1
+                        # Download image
+                        import tempfile
+                        tmp_img = os.path.join(tempfile.gettempdir(), f'{pid}_temp.jpg')
+                        img_url = prod.get('image_url', '')
 
-        # ── FALLBACK: Layer 3+4 if search-based layers got nothing ──
-        if collected == 0:
-            print(f"\n  [FALLBACK] Search API blocked. Trying alternative endpoints...")
+                        if img_url and _download_product_image(img_url, tmp_img):
+                            pid, ok = _save_product(prod, category, tmp_img)
+                            if ok:
+                                print(f"    ✓ Saved: {prod['nama'][:40]} [affiliate_product]")
+                                collected += 1
+                                stats[category]['new'] += 1
+                            else:
+                                stats[category]['failed'] += 1
+
+                            try:
+                                os.remove(tmp_img)
+                            except Exception:
+                                pass
+                        else:
+                            stats[category]['failed'] += 1
+
+        # ── FALLBACK: Layer 3+4 if still need more ──
+        if collected < need:
+            remaining = need - collected
+            print(f"\n  [FALLBACK] Need {remaining} more. Trying recommend + category browse...")
 
             # Layer 3: Recommend API (daily discover — different endpoint)
-            alt_products = _shopee_recommend_discover(category, limit=need)
+            alt_products = _shopee_recommend_discover(category, limit=remaining)
 
             # Layer 4: Category browse (if recommend didn't get enough)
-            if len(alt_products) < need:
+            if len(alt_products) < remaining:
                 time.sleep(random.uniform(2.0, 4.0))
-                more = _shopee_category_scrape(category, limit=need - len(alt_products))
+                more = _shopee_category_scrape(category, limit=remaining - len(alt_products))
                 alt_products.extend(more)
 
             # Process alternative products

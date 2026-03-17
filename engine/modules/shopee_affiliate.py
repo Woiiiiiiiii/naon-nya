@@ -220,6 +220,97 @@ def get_affiliate_shops(keyword, session=None, limit=20):
 
 
 # ═══════════════════════════════════════════════════════════════════
+#  STEP 1B: GET PRODUCT OFFERS (Penawaran Produk tab)
+# ═══════════════════════════════════════════════════════════════════
+def get_affiliate_product_offers(keyword, session=None, limit=20):
+    """Fetch product offers from Shopee Affiliate Dashboard API.
+
+    Endpoint: /api/v3/offer/product/list  (Penawaran Produk tab)
+    Returns individual products with affiliate links, prices, images.
+
+    This is DIFFERENT from shop/list — gives actual products, not shops.
+    Each product has: item_id, shop_id, product_name, image, price,
+    commission_rate, and long_link (affiliate URL).
+    """
+    url = f"{AFFILIATE_BASE}/api/v3/offer/product/list"
+    params = {
+        'sort_type': 1,
+        'page_offset': 0,
+        'page_limit': limit,
+        'keyword': keyword,
+    }
+
+    headers = {
+        'User-Agent': random.choice(USER_AGENTS),
+        'Accept': 'application/json',
+        'Referer': f'{AFFILIATE_BASE}/offer/shopee',
+        'Origin': AFFILIATE_BASE,
+        'X-Requested-With': 'XMLHttpRequest',
+    }
+
+    try:
+        data = None
+        cookies_str = _build_cookie_string()
+
+        # Try via proxy first (GitHub Actions = US IP → needs proxy)
+        try:
+            from shopee_proxy import proxy_get_json, is_proxy_available
+            if is_proxy_available():
+                full_url = f"{url}?{urlencode(params)}"
+                print(f"    [ProductOffer] Proxy → {full_url[:80]}...")
+                status, data = proxy_get_json(full_url, headers=headers,
+                                              cookies_str=cookies_str)
+                print(f"    [ProductOffer] Proxy HTTP {status}")
+                if status != 200:
+                    preview = str(data)[:200] if data else 'empty'
+                    print(f"    [ProductOffer] Preview: {preview}")
+                    data = None
+                elif data and data.get('code') != 0:
+                    print(f"    [ProductOffer] API code={data.get('code')}, msg={data.get('msg','?')}")
+                    data = None
+            else:
+                print("    [ProductOffer] Proxy not available")
+        except ImportError:
+            print("    [ProductOffer] shopee_proxy not found")
+
+        # Direct request fallback
+        if data is None:
+            if session:
+                resp = session.get(url, params=params, timeout=15)
+                print(f"    [ProductOffer] Direct HTTP {resp.status_code}")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get('code') != 0:
+                        print(f"    [ProductOffer] API code={data.get('code')}")
+                        data = None
+            elif cookies_str:
+                full_url = f"{url}?{urlencode(params)}"
+                req_headers = headers.copy()
+                req_headers['Cookie'] = cookies_str
+                resp = requests.get(full_url, headers=req_headers, timeout=15)
+                print(f"    [ProductOffer] Direct+cookies HTTP {resp.status_code}")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get('code') != 0:
+                        data = None
+
+        if not data:
+            print(f"    [ProductOffer] No data for '{keyword}'")
+            return []
+
+        products = data.get('data', {}).get('list', [])
+        total = data.get('data', {}).get('total_count', 0)
+        print(f"    [ProductOffer] '{keyword}' → {len(products)} products (total {total})")
+        return products
+
+    except Exception as e:
+        import traceback
+        print(f"    [ProductOffer] Exception: {e}")
+        traceback.print_exc()
+        return []
+
+
+# ═══════════════════════════════════════════════════════════════════
 #  STEP 2: GET PRODUCTS FROM SHOP
 # ═══════════════════════════════════════════════════════════════════
 def get_shop_products(shop_id, limit=6):
@@ -362,8 +453,8 @@ def collect_affiliate_products(category, target=5):
     """Collect products via Shopee Affiliate Dashboard API.
     
     Flow:
-      1. Search shops in affiliate dashboard by keyword
-      2. For top shops → get their products
+      1. Try product offer API (/api/v3/offer/product/list) → direct products
+      2. Try shop offer API (/api/v3/offer/shop/list) → shops → products
       3. Build affiliate links for each product
       4. Return product list ready for bank storage
       
@@ -373,7 +464,6 @@ def collect_affiliate_products(category, target=5):
     session = _build_affiliate_session()
 
     keywords = AFFILIATE_KEYWORDS.get(category, [category])
-    # Rotate keywords: pick 2 per run
     random.shuffle(keywords)
     selected_keywords = keywords[:3]
 
@@ -383,7 +473,50 @@ def collect_affiliate_products(category, target=5):
         if len(all_products) >= target:
             break
 
-        print(f"\n  Searching affiliate shops: '{keyword}'...")
+        # ───────────────────────────────────────────────────────
+        #  STEP A: Product Offer API (Penawaran Produk — direct)
+        # ───────────────────────────────────────────────────────
+        print(f"\n  [A] Product offers: '{keyword}'...")
+        time.sleep(random.uniform(1.0, 2.0))
+
+        prod_offers = get_affiliate_product_offers(keyword, session=session, limit=10)
+        for po in prod_offers:
+            if len(all_products) >= target:
+                break
+            # Product offer response has different field names
+            product_name = po.get('product_name', po.get('item_name', ''))
+            product_image = po.get('product_image', po.get('image', ''))
+            product_link = po.get('long_link', po.get('product_link', ''))
+            commission = po.get('commission_rate', '0%')
+            item_price = po.get('price', po.get('product_price', 0))
+            shop_name = po.get('shop_name', '')
+
+            if not product_name:
+                continue
+
+            # Build image URL from hash if needed
+            if product_image and not product_image.startswith('http'):
+                product_image = f"https://down-id.img.susercontent.com/file/{product_image}"
+
+            all_products.append({
+                'nama': product_name[:80],
+                'price': f"Rp{item_price:,}".replace(',', '.') if isinstance(item_price, (int, float)) and item_price > 0 else 'Lihat harga',
+                'desc': product_name,
+                'image_url': product_image,
+                'shopee_url': product_link,
+                'source': 'shopee_affiliate_product',
+                'commission': commission,
+                'shop_name': shop_name,
+            })
+            print(f"      ✓ [ProductOffer] {product_name[:40]}")
+
+        if len(all_products) >= target:
+            break
+
+        # ───────────────────────────────────────────────────────
+        #  STEP B: Shop Offer API (Komisi XTRA — shop→products)
+        # ───────────────────────────────────────────────────────
+        print(f"\n  [B] Shop offers: '{keyword}'...")
         time.sleep(random.uniform(1.0, 2.0))
 
         shops = get_affiliate_shops(keyword, session=session, limit=10)
