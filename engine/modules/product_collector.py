@@ -689,87 +689,130 @@ def collect_products(categories=None, target=None):
             print(f"  [WARN] Affiliate API error: {e}")
 
         # ══════════════════════════════════════════════════════════
-        #  LAYER 1+2: Affiliate Product Offer API (replaces blocked search)
-        #  Uses /api/v3/offer/product/list — NOT blocked by error 90309999
+        #  LAYER 1+2: More Affiliate Shop searches (different keywords)
+        #  Uses PROVEN /api/v3/offer/shop/list → get_shop_products
+        #  (product/list endpoint also blocked by 90309999)
         # ══════════════════════════════════════════════════════════
         if collected < need:
             try:
-                from shopee_affiliate import get_affiliate_product_offers, \
-                    _build_affiliate_session, _build_cookie_string, \
+                from shopee_affiliate import get_affiliate_shops, \
+                    get_shop_products, _build_affiliate_session, \
                     build_product_affiliate_link, AFFILIATE_KEYWORDS
             except ImportError:
-                get_affiliate_product_offers = None
+                get_affiliate_shops = None
 
-            if get_affiliate_product_offers:
+            if get_affiliate_shops:
                 aff_session = _build_affiliate_session()
-                aff_keywords = AFFILIATE_KEYWORDS.get(category, [category])
-                random.shuffle(aff_keywords)
+                # Use SEARCH_KEYWORDS (broader terms, different from Layer 0)
+                search_kws = SEARCH_KEYWORDS.get(category, [])
+                random.shuffle(search_kws)
 
-                for keyword in aff_keywords[:3]:
+                for keyword in search_kws[:3]:
                     if collected >= need:
                         break
 
-                    print(f"\n  [Layer1+2] Product offers: '{keyword}'...")
+                    print(f"\n  [Layer1+2] Affiliate shops: '{keyword}'...")
                     time.sleep(random.uniform(1.0, 2.0))
 
-                    prod_offers = get_affiliate_product_offers(
-                        keyword, session=aff_session, limit=10)
+                    shops = get_affiliate_shops(keyword, session=aff_session, limit=10)
+                    if not shops:
+                        continue
 
-                    for po in prod_offers:
+                    # Sort by commission, pick top 3
+                    def _csort(s):
+                        r = s.get('commission_rate', '0%').replace('%', '').replace(',', '.')
+                        try:
+                            return float(r)
+                        except ValueError:
+                            return 0
+                    shops = sorted(shops, key=_csort, reverse=True)[:3]
+
+                    for shop in shops:
                         if collected >= need:
                             break
+                        shop_id = shop.get('shop_id', '')
+                        shop_name = shop.get('shop_name', '')
+                        long_link = shop.get('long_link', '')
+                        commission = shop.get('commission_rate', '0%')
 
-                        product_name = po.get('product_name', po.get('item_name', ''))
-                        product_image = po.get('product_image', po.get('image', ''))
-                        product_link = po.get('long_link', po.get('product_link', ''))
-                        commission = po.get('commission_rate', '0%')
-                        item_price = po.get('price', po.get('product_price', 0))
-                        shop_name = po.get('shop_name', '')
+                        time.sleep(random.uniform(1.0, 2.0))
+                        shop_prods = get_shop_products(shop_id, limit=4)
 
-                        if not product_name:
-                            continue
+                        for sp in shop_prods:
+                            if collected >= need:
+                                break
+                            img_hash = sp.get('image_hash', '')
+                            img_url = f"https://down-id.img.susercontent.com/file/{img_hash}" if img_hash else ''
+                            aff_link = build_product_affiliate_link(
+                                shop_id, sp.get('item_id', 0), long_link)
+                            price_val = sp.get('price', 0)
 
-                        # Build image URL from hash if needed
-                        if product_image and not product_image.startswith('http'):
-                            product_image = f"https://down-id.img.susercontent.com/file/{product_image}"
+                            prod = {
+                                'nama': sp.get('name', '')[:80],
+                                'price': f"Rp{price_val:,}".replace(',', '.') if price_val else 'Lihat harga',
+                                'desc': sp.get('name', ''),
+                                'image_url': img_url,
+                                'shopee_url': aff_link,
+                                'source': 'shopee_affiliate',
+                                'commission': commission,
+                                'shop_name': shop_name,
+                            }
 
-                        prod = {
-                            'nama': product_name[:80],
-                            'price': f"Rp{item_price:,}".replace(',', '.') if isinstance(item_price, (int, float)) and item_price > 0 else 'Lihat harga',
-                            'desc': product_name,
-                            'image_url': product_image,
-                            'shopee_url': product_link,
-                            'source': 'shopee_affiliate_product',
-                            'commission': commission,
-                            'shop_name': shop_name,
-                        }
+                            pid = _generate_product_id(prod['nama'], category)
+                            product_dir = os.path.join(BANK_DIR, category, pid)
+                            if os.path.exists(os.path.join(product_dir, 'image.jpg')):
+                                continue
 
-                        # Check if already in bank
-                        pid = _generate_product_id(prod['nama'], category)
-                        product_dir = os.path.join(BANK_DIR, category, pid)
-                        if os.path.exists(os.path.join(product_dir, 'image.jpg')):
-                            continue
+                            import tempfile
+                            tmp_img = os.path.join(tempfile.gettempdir(), f'{pid}_temp.jpg')
 
-                        # Download image
-                        import tempfile
-                        tmp_img = os.path.join(tempfile.gettempdir(), f'{pid}_temp.jpg')
-                        img_url = prod.get('image_url', '')
-
-                        if img_url and _download_product_image(img_url, tmp_img):
-                            pid, ok = _save_product(prod, category, tmp_img)
-                            if ok:
-                                print(f"    ✓ Saved: {prod['nama'][:40]} [affiliate_product]")
-                                collected += 1
-                                stats[category]['new'] += 1
+                            if img_url and _download_product_image(img_url, tmp_img):
+                                pid, ok = _save_product(prod, category, tmp_img)
+                                if ok:
+                                    print(f"    ✓ Saved: {prod['nama'][:40]} [affiliate_shop]")
+                                    collected += 1
+                                    stats[category]['new'] += 1
+                                else:
+                                    stats[category]['failed'] += 1
+                                try:
+                                    os.remove(tmp_img)
+                                except Exception:
+                                    pass
                             else:
                                 stats[category]['failed'] += 1
 
-                            try:
-                                os.remove(tmp_img)
-                            except Exception:
-                                pass
-                        else:
-                            stats[category]['failed'] += 1
+                        # If no products from shop, use shop as product fallback
+                        if not shop_prods and collected < need:
+                            shop_image = shop.get('shop_image', '')
+                            if shop_image and not shop_image.startswith('http'):
+                                shop_image = f"https://down-id.img.susercontent.com/file/{shop_image}"
+                            prod = {
+                                'nama': shop_name[:80],
+                                'price': f"Komisi {commission}",
+                                'desc': f"Toko {shop_name} - Komisi affiliate {commission}",
+                                'image_url': shop_image,
+                                'shopee_url': long_link,
+                                'source': 'shopee_affiliate_shop',
+                                'commission': commission,
+                                'shop_name': shop_name,
+                            }
+                            pid = _generate_product_id(prod['nama'], category)
+                            product_dir = os.path.join(BANK_DIR, category, pid)
+                            if not os.path.exists(os.path.join(product_dir, 'image.jpg')):
+                                import tempfile
+                                tmp_img = os.path.join(tempfile.gettempdir(), f'{pid}_temp.jpg')
+                                if shop_image and _download_product_image(shop_image, tmp_img):
+                                    pid, ok = _save_product(prod, category, tmp_img)
+                                    if ok:
+                                        print(f"    ✓ Saved: {shop_name[:40]} [shop_fallback]")
+                                        collected += 1
+                                        stats[category]['new'] += 1
+                                    else:
+                                        stats[category]['failed'] += 1
+                                    try:
+                                        os.remove(tmp_img)
+                                    except Exception:
+                                        pass
 
         # ── FALLBACK: Layer 3+4 if still need more ──
         if collected < need:
