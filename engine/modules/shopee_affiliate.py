@@ -141,32 +141,63 @@ def get_affiliate_shops(keyword, session=None, limit=20):
     }
 
     try:
-        # Try via proxy first (in case direct is blocked from GitHub Actions IP)
+        # Try via proxy first (GitHub Actions IP is in US → blocked without proxy)
         data = None
+        cookies_str = _build_cookie_string()
+        print(f"    [Affiliate] Cookies: {len(cookies_str)} chars")
+
         try:
             from shopee_proxy import proxy_get_json, is_proxy_available
             if is_proxy_available():
                 full_url = f"{url}?{urlencode(params)}"
-                cookies_str = _build_cookie_string()
+                print(f"    [Affiliate] Trying proxy → {full_url[:80]}...")
                 status, data = proxy_get_json(full_url, headers=headers,
                                               cookies_str=cookies_str)
+                print(f"    [Affiliate] Proxy response: HTTP {status}")
                 if status != 200:
-                    print(f"    [Affiliate] Proxy returned HTTP {status}")
+                    # Show response preview for debugging
+                    preview = str(data)[:200] if data else 'empty'
+                    print(f"    [Affiliate] Response preview: {preview}")
                     data = None
-        except ImportError:
-            pass
-
-        # Direct request (works if running locally or cookies valid)
-        if data is None and session:
-            resp = session.get(url, params=params, timeout=15)
-            if resp.status_code == 200:
-                data = resp.json()
+                elif data and data.get('code') != 0:
+                    print(f"    [Affiliate] Proxy API code={data.get('code')}, msg={data.get('msg', '?')}")
+                    data = None
             else:
-                print(f"    [Affiliate] HTTP {resp.status_code} for '{keyword}'")
-                return []
+                print("    [Affiliate] Proxy not available")
+        except ImportError:
+            print("    [Affiliate] shopee_proxy module not found")
 
-        if not data or data.get('code') != 0:
-            print(f"    [Affiliate] API error: {data.get('msg', 'unknown') if data else 'no data'}")
+        # Direct request fallback (works if running locally or from Indonesian IP)
+        if data is None:
+            if session:
+                print(f"    [Affiliate] Trying direct request...")
+                resp = session.get(url, params=params, timeout=15)
+                print(f"    [Affiliate] Direct response: HTTP {resp.status_code}")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get('code') != 0:
+                        print(f"    [Affiliate] Direct API code={data.get('code')}, msg={data.get('msg', '?')}")
+                        data = None
+                else:
+                    print(f"    [Affiliate] Direct failed: {resp.text[:200]}")
+            elif cookies_str:
+                # No session but have cookies — try direct with cookie header
+                print(f"    [Affiliate] Trying direct with cookie header...")
+                full_url = f"{url}?{urlencode(params)}"
+                req_headers = headers.copy()
+                req_headers['Cookie'] = cookies_str
+                resp = requests.get(full_url, headers=req_headers, timeout=15)
+                print(f"    [Affiliate] Direct+cookies response: HTTP {resp.status_code}")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get('code') != 0:
+                        print(f"    [Affiliate] API code={data.get('code')}, msg={data.get('msg', '?')}")
+                        data = None
+            else:
+                print("    [Affiliate] No session and no cookies — cannot make request")
+
+        if not data:
+            print(f"    [Affiliate] No valid data for '{keyword}'")
             return []
 
         shops = data.get('data', {}).get('list', [])
@@ -175,7 +206,9 @@ def get_affiliate_shops(keyword, session=None, limit=20):
         return shops
 
     except Exception as e:
-        print(f"    [Affiliate] Error: {e}")
+        import traceback
+        print(f"    [Affiliate] Exception: {e}")
+        traceback.print_exc()
         return []
 
 
