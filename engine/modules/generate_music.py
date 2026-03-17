@@ -88,10 +88,24 @@ def _list_music_files(category):
     return files
 
 
+# SESSION-LEVEL music dedup: tracks used in this pipeline run
+# Prevents same track being assigned to multiple videos (within or across channels)
+_used_tracks = set()
+
+
+def _reset_used_tracks():
+    """Reset music tracking (call at start of new pipeline run)."""
+    global _used_tracks
+    _used_tracks = set()
+
+
 def _select_music_from_library(category, produk_id, account_id):
-    """Select a music file from local library based on category.
+    """Select a UNIQUE music file from local library based on category.
+    DEDUP: each track can only be used ONCE per pipeline run, across ALL channels.
     PREFERS API-downloaded files (.mp3/.ogg) over synth (.wav with _synth_).
     Returns path to selected file or None if no files available."""
+    global _used_tracks
+
     files = _list_music_files(category)
     if not files:
         # Try general/fallback folder
@@ -108,28 +122,44 @@ def _select_music_from_library(category, produk_id, account_id):
     api_files = [f for f in files if '_synth_' not in os.path.basename(f)]
     synth_files = [f for f in files if '_synth_' in os.path.basename(f)]
 
-    # Use TIMESTAMP-based seed so each generation run picks DIFFERENT tracks
-    # Old: date-only seed -> same track all day
-    # New: include microsecond timestamp -> different track every run
+    # Use product+account+timestamp seed for deterministic variety
     import datetime
     now = datetime.datetime.now()
-    # Combine product identity + current time for unique selection each run
     run_id = f"{produk_id}_{account_id}_{now.strftime('%Y%m%d%H%M%S')}_{now.microsecond}"
     seed = int(hashlib.md5(run_id.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
 
-    if api_files:
-        rng.shuffle(api_files)  # Extra shuffle for variety
-        pick = api_files[0]
-        print(f"      [INFO] {len(api_files)} API tracks -> {os.path.basename(pick)}")
+    # DEDUP: filter out tracks already used in this pipeline run
+    available_api = [f for f in api_files if os.path.abspath(f) not in _used_tracks]
+    available_synth = [f for f in synth_files if os.path.abspath(f) not in _used_tracks]
+
+    # If ALL tracks exhausted, reset and reuse (safety valve)
+    if not available_api and not available_synth:
+        print(f"      [WARN] All {len(files)} tracks used, resetting dedup pool")
+        _used_tracks.clear()
+        available_api = api_files
+        available_synth = synth_files
+
+    if available_api:
+        rng.shuffle(available_api)
+        pick = available_api[0]
+        _used_tracks.add(os.path.abspath(pick))
+        remaining = len(available_api) - 1
+        print(f"      [MUSIC] {os.path.basename(pick)} ({remaining} remaining in {category})")
         return pick
-    elif synth_files:
-        rng.shuffle(synth_files)
-        pick = synth_files[0]
-        print(f"      [INFO] No API tracks, using synth -> {os.path.basename(pick)}")
+    elif available_synth:
+        rng.shuffle(available_synth)
+        pick = available_synth[0]
+        _used_tracks.add(os.path.abspath(pick))
+        print(f"      [MUSIC] Synth: {os.path.basename(pick)}")
         return pick
+
+    # Absolute fallback
     rng.shuffle(files)
-    return files[0]
+    pick = files[0]
+    _used_tracks.add(os.path.abspath(pick))
+    return pick
+
 
 
 def _process_music_file(source_path, output_path, target_duration, produk_id, account_id):
@@ -391,8 +421,12 @@ def _generate_procedural_track(output_path, produk_id, account_id, category='hom
 
 def generate_all_music(queue_dir, output_dir):
     """Generate music for every video in the queue.
-    Auto-downloads from Freesound/Pixabay if stock is low. ZERO manual process."""
-    print("=== Music Generator (Auto-Download: Freesound + Pixabay) ===")
+    Auto-downloads from Freesound/Pixabay/YouTube if stock is low.
+    Each track used ONCE per run — no duplicates across channels."""
+    # Reset dedup tracker for fresh pipeline run
+    _reset_used_tracks()
+
+    print("=== Music Generator (4 Tiers + Dedup) ===")
     print(f"  Music library: {os.path.abspath(MUSIC_DIR)}")
     print(f"  Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
 
