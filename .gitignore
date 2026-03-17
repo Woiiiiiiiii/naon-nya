@@ -1,10 +1,8 @@
-# Output files (generated videos, temp files)
-engine/output/yt/*.mp4
-engine/output/tt/*.mp4
-engine/output/fb/*.mp4
-engine/output/yt/_uploaded.json
-engine/output/fb/_uploaded.json
+# Output files (generated videos, music, temp files)
+engine/output/
 
+# Music library (cached in CI via GitHub Actions cache, not in repo)
+engine/assets/music/
 # State files (runtime data, not config)
 engine/state/*.csv
 engine/state/*.json
