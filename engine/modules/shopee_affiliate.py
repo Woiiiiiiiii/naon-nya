@@ -38,18 +38,25 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36",
 ]
 
-# Search keywords per category (same as product_collector.py)
+# Affiliate API searches by SHOP NAME, so use broad terms that match
+# Shopee shop names (e.g., "Toko Tas Wanita", "Skincare Official").
+# Single broad words work better than specific product descriptions.
 AFFILIATE_KEYWORDS = {
-    'fashion': ['tas wanita', 'sepatu sneakers', 'jam tangan', 'dompet kulit',
-                'hoodie', 'kacamata', 'backpack', 'topi'],
-    'gadget': ['earphone TWS', 'powerbank', 'mouse wireless', 'speaker bluetooth',
-               'keyboard', 'charger', 'webcam', 'tripod'],
-    'beauty': ['serum wajah', 'sunscreen', 'lip tint', 'moisturizer',
-               'toner', 'cushion', 'masker wajah', 'skincare'],
-    'home': ['rak organizer', 'lampu LED', 'vacuum cleaner', 'dispenser',
-             'gorden', 'bantal', 'aroma diffuser', 'rak bumbu'],
-    'wellness': ['botol minum', 'matras yoga', 'resistance band', 'shaker',
-                 'timbangan digital', 'foam roller', 'alat pijat', 'termos'],
+    'fashion': ['tas', 'sepatu', 'jam tangan', 'dompet', 'hoodie',
+                'kacamata', 'backpack', 'topi', 'fashion', 'baju',
+                'celana', 'kaos', 'sneakers', 'sling bag'],
+    'gadget': ['earphone', 'powerbank', 'mouse', 'speaker', 'keyboard',
+               'charger', 'webcam', 'tripod', 'gadget', 'elektronik',
+               'headphone', 'smartwatch', 'kabel', 'aksesoris HP'],
+    'beauty': ['skincare', 'serum', 'sunscreen', 'makeup', 'kosmetik',
+               'lip', 'moisturizer', 'cushion', 'masker wajah', 'beauty',
+               'kecantikan', 'perawatan wajah', 'foundation', 'toner'],
+    'home': ['rumah tangga', 'dapur', 'rak', 'lampu', 'organizer',
+             'dekorasi', 'perabot', 'bantal', 'gorden', 'home',
+             'vacuum', 'dispenser', 'tempat', 'alat dapur'],
+    'wellness': ['kesehatan', 'olahraga', 'gym', 'fitness', 'yoga',
+                 'sport', 'botol minum', 'termos', 'pijat', 'vitamin',
+                 'suplemen', 'alat olahraga', 'outdoor', 'tumbler'],
 }
 
 
@@ -368,7 +375,7 @@ def collect_affiliate_products(category, target=5):
     keywords = AFFILIATE_KEYWORDS.get(category, [category])
     # Rotate keywords: pick 2 per run
     random.shuffle(keywords)
-    selected_keywords = keywords[:2]
+    selected_keywords = keywords[:3]
 
     all_products = []
 
