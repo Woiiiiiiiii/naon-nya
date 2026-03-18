@@ -39,9 +39,29 @@ jobs:
         run: |
           pip install requests Pillow
 
+      # ── Auto Cookie Refresh ─────────────────────────────────────
+      # If SHOPEE_USERNAME + SHOPEE_PASSWORD are set, auto-login to
+      # affiliate.shopee.co.id and get fresh cookies every run.
+      # This eliminates manual cookie refresh!
+      - name: Auto-refresh Affiliate Cookies
+        if: env.SHOPEE_USERNAME != ''
+        env:
+          SHOPEE_USERNAME: ${{ secrets.SHOPEE_USERNAME }}
+          SHOPEE_PASSWORD: ${{ secrets.SHOPEE_PASSWORD }}
+        run: |
+          echo "=== Installing Playwright for auto-login ==="
+          pip install playwright
+          playwright install chromium --with-deps
+          echo "=== Auto-login to affiliate.shopee.co.id ==="
+          cd engine/modules
+          python shopee_auto_login.py
+        continue-on-error: true
+
       - name: Collect Products
         env:
-          SHOPEE_AFFILIATE_COOKIES: ${{ secrets.SHOPEE_AFFILIATE_COOKIES }}
+          # Auto-login sets SHOPEE_AFFILIATE_COOKIES via GITHUB_ENV
+          # If auto-login didn't run/failed, fall back to stored secret
+          SHOPEE_AFFILIATE_COOKIES: ${{ env.SHOPEE_AFFILIATE_COOKIES || secrets.SHOPEE_AFFILIATE_COOKIES }}
           SHOPEE_COOKIES: ${{ secrets.SHOPEE_COOKIES }}
           CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
           CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
