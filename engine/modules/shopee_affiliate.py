@@ -121,20 +121,17 @@ def check_cookies_health():
 
     print(f"  [Cookie Source] Using: {source} ({len(cookies_raw)} chars)")
 
-    # ── Step 2: Parse and debug all cookies ──
+    # ── Step 2: Parse and validate cookies ──
     try:
         cookies = json.loads(cookies_raw)
         if isinstance(cookies, list):
             import time as _time
             now = _time.time()
             
-            # Categorize cookies
-            auth_cookies = ['SPC_EC', 'SPC_ST', 'SPC_U', 'SPC_CDS_CHAT_OFFSET_KEY',
-                            'SPC_SC_TK', 'SPC_SC_SA', 'SPC_SC_UD']
-            found_auth = {}
             domains_seen = set()
             total = len(cookies)
             expired_count = 0
+            spc_cookies = []
             
             for c in cookies:
                 name = c.get('name', '')
@@ -146,40 +143,25 @@ def check_cookies_health():
                 if exp and exp < now and not is_session:
                     expired_count += 1
                 
-                if name in auth_cookies:
-                    status = 'session' if is_session else (
-                        '✅ valid' if (not exp or exp > now) else 
-                        f'❌ expired {_time.strftime("%Y-%m-%d %H:%M", _time.localtime(exp))}'
-                    )
-                    found_auth[name] = {'domain': domain, 'status': status,
-                                       'value_preview': c.get('value', '')[:20]}
+                if name.startswith('SPC_'):
+                    spc_cookies.append(name)
             
             print(f"  [Cookies] Total: {total}, Expired: {expired_count}")
             print(f"  [Cookies] Domains: {', '.join(sorted(domains_seen))}")
-            print(f"  [Auth Cookies]:")
-            for name in auth_cookies:
-                if name in found_auth:
-                    info = found_auth[name]
-                    print(f"    {name}: {info['status']} (domain={info['domain']}, val={info['value_preview']}...)")
-                else:
-                    print(f"    {name}: ❌ NOT FOUND")
+            if spc_cookies:
+                print(f"  [Cookies] SPC cookies: {', '.join(spc_cookies)}")
             
-            # Check if we have the critical ones
-            critical = ['SPC_EC', 'SPC_ST']
-            missing_critical = [c for c in critical if c not in found_auth]
-            if missing_critical:
-                print(f"  ⚠️  MISSING critical cookies: {', '.join(missing_critical)}")
-                print(f"  ⚠️  These are required for API authentication!")
-                
-            # Check if cookies are from the right domain
-            aff_domain = '.affiliate.shopee.co.id'
-            if aff_domain not in domains_seen:
-                print(f"  ⚠️  No cookies from {aff_domain} domain!")
-                print(f"  ⚠️  Make sure to export from affiliate.shopee.co.id (not shopee.co.id)")
+            # Warn if ALL cookies are expired
+            if expired_count == total and total > 0:
+                print(f"  ⚠️  ALL {total} cookies are expired!")
+                _COOKIES_VALID = False
+                return False
         else:
             print(f"  [Cookies] Dict format with {len(cookies)} entries")
     except Exception as e:
         print(f"  [Cookies] Parse error: {e}")
+        _COOKIES_VALID = False
+        return False
 
     # ── Step 3: Check expiry dates ──
     if not _check_cookie_expiry(cookies_raw):
