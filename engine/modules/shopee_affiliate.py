@@ -61,10 +61,133 @@ AFFILIATE_KEYWORDS = {
 
 
 # ═══════════════════════════════════════════════════════════════════
+#  COOKIE VALIDATION
+# ═══════════════════════════════════════════════════════════════════
+_COOKIES_VALID = None  # Cached result: True/False/None (unknown)
+
+
+def _check_cookie_expiry(cookies_raw):
+    """Check if critical cookies have expired based on expirationDate."""
+    try:
+        cookies = json.loads(cookies_raw)
+        if not isinstance(cookies, list):
+            return True  # Can't check dict format, assume OK
+
+        import time as _time
+        now = _time.time()
+        critical = ['SPC_EC', 'SPC_ST', 'SPC_U']
+        expired = []
+        found = []
+
+        for c in cookies:
+            name = c.get('name', '')
+            exp = c.get('expirationDate', 0)
+            if name in critical:
+                found.append(name)
+                if exp and exp < now:
+                    expired.append(f"{name} (expired {_time.strftime('%Y-%m-%d', _time.localtime(exp))})")
+
+        if expired:
+            print(f"  ⚠️  EXPIRED COOKIES: {', '.join(expired)}")
+            print(f"  ⚠️  Please re-export cookies from affiliate.shopee.co.id")
+            return False
+
+        if not found:
+            print(f"  ⚠️  No critical cookies found (SPC_EC, SPC_ST, SPC_U)")
+            print(f"  ⚠️  Make sure to export cookies from affiliate.shopee.co.id")
+            return False
+
+        return True
+    except Exception:
+        return True  # Can't check, assume OK
+
+
+def check_cookies_health():
+    """Quick API call to verify cookies are accepted by Shopee.
+    Returns True if cookies work, False if expired/invalid.
+    Caches result so it's only called once per run."""
+    global _COOKIES_VALID
+    if _COOKIES_VALID is not None:
+        return _COOKIES_VALID
+
+    cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
+    if not cookies_raw:
+        cookies_raw = os.environ.get('SHOPEE_COOKIES', '')
+    if not cookies_raw:
+        print("  ⚠️  No cookies set — affiliate API disabled")
+        _COOKIES_VALID = False
+        return False
+
+    # Check expiry dates first (free, no API call)
+    if not _check_cookie_expiry(cookies_raw):
+        _COOKIES_VALID = False
+        return False
+
+    # Quick API health check: search for a common term
+    print("  [Health] Testing affiliate cookies...")
+    url = f"{AFFILIATE_BASE}/api/v3/offer/shop/list"
+    params = {'sort_type': 1, 'page_offset': 0, 'page_limit': 1, 'keyword': 'tas'}
+    headers = {
+        'User-Agent': random.choice(USER_AGENTS),
+        'Accept': 'application/json',
+        'Referer': f'{AFFILIATE_BASE}/offer/shopee',
+        'Origin': AFFILIATE_BASE,
+    }
+    cookies_str = _build_cookie_string()
+
+    try:
+        from shopee_proxy import proxy_get_json, is_proxy_available
+        if is_proxy_available():
+            full_url = f"{url}?{urlencode(params)}"
+            status, data = proxy_get_json(full_url, headers=headers,
+                                          cookies_str=cookies_str)
+            if status == 200 and data and data.get('code') == 0:
+                print("  ✅ Affiliate cookies are VALID")
+                _COOKIES_VALID = True
+                return True
+            else:
+                code = data.get('code', '?') if data else '?'
+                msg = data.get('msg', '?') if data else f'HTTP {status}'
+                print(f"  ❌ Affiliate cookies REJECTED: code={code}, msg={msg}")
+                if code == 30002:
+                    print("  ⚠️  Cookies expired! Re-export from affiliate.shopee.co.id")
+                _COOKIES_VALID = False
+                return False
+    except ImportError:
+        pass
+
+    # Try direct
+    try:
+        req_headers = headers.copy()
+        req_headers['Cookie'] = cookies_str
+        full_url = f"{url}?{urlencode(params)}"
+        resp = requests.get(full_url, headers=req_headers, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get('code') == 0:
+                print("  ✅ Affiliate cookies are VALID (direct)")
+                _COOKIES_VALID = True
+                return True
+            else:
+                print(f"  ❌ Cookies REJECTED: code={data.get('code')}, msg={data.get('msg')}")
+                _COOKIES_VALID = False
+                return False
+    except Exception as e:
+        print(f"  [Health] Check failed: {e}")
+
+    _COOKIES_VALID = None  # Unknown
+    return True  # Optimistic default
+
+
+# ═══════════════════════════════════════════════════════════════════
 #  SESSION BUILDER
 # ═══════════════════════════════════════════════════════════════════
 def _build_affiliate_session():
     """Build requests session with affiliate.shopee.co.id cookies."""
+    # Quick check: if cookies already known to be invalid, skip
+    if _COOKIES_VALID is False:
+        return None
+
     session = requests.Session()
     session.headers.update({
         'User-Agent': random.choice(USER_AGENTS),
