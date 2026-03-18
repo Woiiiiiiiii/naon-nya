@@ -5,16 +5,16 @@ Automatically login to affiliate.shopee.co.id and export fresh cookies.
 Uses Playwright (headless browser) to:
 1. Navigate to affiliate.shopee.co.id
 2. Login with username/password from environment
-3. Wait for session to establish
-4. Export all cookies as JSON
-5. Save to environment / file for product_collector to use
+3. Wait for session to FULLY establish (SPC_EC, SPC_ST, SPC_U)
+4. Navigate to Komisi XTRA page to ensure all cookies set
+5. Export all cookies as JSON
 
 Required env vars:
   SHOPEE_USERNAME  = Shopee login (email/phone)
   SHOPEE_PASSWORD  = Shopee password
 
 Output:
-  Prints SHOPEE_AFFILIATE_COOKIES=<json> for GitHub Actions to capture
+  Sets SHOPEE_AFFILIATE_COOKIES via GITHUB_ENV
   Also saves to /tmp/affiliate_cookies.json as backup
 """
 
@@ -22,6 +22,28 @@ import os
 import sys
 import json
 import time
+
+# Critical cookies that MUST be present for affiliate API to work
+CRITICAL_COOKIES = ['SPC_EC', 'SPC_ST', 'SPC_U']
+MAX_WAIT_FOR_COOKIES = 30  # seconds
+
+
+def _has_critical_cookies(context):
+    """Check if browser context has all critical SPC cookies."""
+    cookies = context.cookies()
+    names = {c['name'] for c in cookies}
+    missing = [c for c in CRITICAL_COOKIES if c not in names]
+    return len(missing) == 0, missing
+
+
+def _log_cookies(context, label=""):
+    """Log all SPC cookies for debugging."""
+    cookies = context.cookies()
+    spc = [c for c in cookies if c['name'].startswith('SPC_')]
+    print(f"  [{label}] Total cookies: {len(cookies)}, SPC cookies: {len(spc)}")
+    for c in spc:
+        print(f"    {c['name']}: domain={c['domain']}, val={c['value'][:15]}...")
+    return cookies
 
 
 def auto_login():
@@ -38,13 +60,12 @@ def auto_login():
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        print("[AutoLogin] ERROR: playwright not installed. Run: pip install playwright && playwright install chromium")
+        print("[AutoLogin] ERROR: playwright not installed")
         return None
 
     cookies = None
 
     with sync_playwright() as p:
-        # Launch headless browser
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -55,32 +76,35 @@ def auto_login():
         page = context.new_page()
 
         try:
-            # Step 1: Go to affiliate dashboard (will redirect to login)
-            print("[AutoLogin] Navigating to affiliate dashboard...")
-            page.goto('https://affiliate.shopee.co.id/dashboard', timeout=30000)
+            # ═══════════════════════════════════════════════════════
+            #  STEP 1: Go to Shopee main login page first
+            #  SPC_EC/SPC_ST are set on .shopee.co.id domain
+            #  which requires visiting the main Shopee site
+            # ═══════════════════════════════════════════════════════
+            print("[AutoLogin] Step 1: Navigating to Shopee login...")
+            page.goto('https://shopee.co.id/buyer/login', timeout=30000)
+            page.wait_for_load_state('networkidle', timeout=15000)
             time.sleep(3)
 
-            # Check if already logged in
             current_url = page.url
             print(f"[AutoLogin] Current URL: {current_url}")
 
-            if 'login' in current_url.lower() or 'buyer/login' in current_url.lower():
-                print("[AutoLogin] Login page detected, entering credentials...")
+            # ═══════════════════════════════════════════════════════
+            #  STEP 2: Fill login form
+            # ═══════════════════════════════════════════════════════
+            if 'login' in current_url.lower():
+                print("[AutoLogin] Step 2: Filling login form...")
 
-                # Try to find and fill login form
-                # Shopee login can be via email/phone
-                # Wait for login form to be ready
-                page.wait_for_load_state('networkidle', timeout=15000)
-                time.sleep(2)
-
-                # Try multiple selectors for username field
+                # Username field
                 username_selectors = [
                     'input[name="loginKey"]',
                     'input[name="username"]',
-                    'input[type="text"]',
+                    'input[autocomplete="username"]',
+                    'input[type="text"]:not([type="hidden"])',
                     'input[placeholder*="Email"]',
                     'input[placeholder*="phone"]',
                     'input[placeholder*="Nomor"]',
+                    'input[placeholder*="No."]',
                     '.shopee-input__input',
                 ]
 
@@ -90,26 +114,25 @@ def auto_login():
                         el = page.query_selector(sel)
                         if el and el.is_visible():
                             el.click()
+                            time.sleep(0.3)
                             el.fill(username)
                             username_filled = True
-                            print(f"[AutoLogin] Username filled using: {sel}")
+                            print(f"  Username filled: {sel}")
                             break
                     except Exception:
                         continue
 
                 if not username_filled:
-                    print("[AutoLogin] WARNING: Could not find username field")
-                    # Take screenshot for debugging
+                    print("  ⚠️ Could not find username field!")
                     page.screenshot(path='/tmp/login_page.png')
-                    print("[AutoLogin] Screenshot saved to /tmp/login_page.png")
 
                 time.sleep(1)
 
-                # Try to find password field
+                # Password field
                 password_selectors = [
                     'input[name="password"]',
                     'input[type="password"]',
-                    '.shopee-input__input[type="password"]',
+                    'input[autocomplete="current-password"]',
                 ]
 
                 password_filled = False
@@ -118,15 +141,16 @@ def auto_login():
                         el = page.query_selector(sel)
                         if el and el.is_visible():
                             el.click()
+                            time.sleep(0.3)
                             el.fill(password)
                             password_filled = True
-                            print(f"[AutoLogin] Password filled using: {sel}")
+                            print(f"  Password filled: {sel}")
                             break
                     except Exception:
                         continue
 
                 if not password_filled:
-                    print("[AutoLogin] WARNING: Could not find password field")
+                    print("  ⚠️ Could not find password field!")
 
                 time.sleep(1)
 
@@ -135,8 +159,9 @@ def auto_login():
                     'button[type="submit"]',
                     'button:has-text("Log In")',
                     'button:has-text("Masuk")',
-                    'button:has-text("Login")',
+                    'button:has-text("LOGIN")',
                     '.btn-solid-primary',
+                    'button.wyhvVD',
                 ]
 
                 login_clicked = False
@@ -146,53 +171,98 @@ def auto_login():
                         if el and el.is_visible():
                             el.click()
                             login_clicked = True
-                            print(f"[AutoLogin] Login button clicked: {sel}")
+                            print(f"  Login button clicked: {sel}")
                             break
                     except Exception:
                         continue
 
                 if not login_clicked:
-                    print("[AutoLogin] WARNING: Could not find login button")
-                    page.screenshot(path='/tmp/login_page_buttons.png')
+                    print("  ⚠️ Could not find login button!")
+                    page.screenshot(path='/tmp/login_buttons.png')
 
-                # Wait for login to complete
-                print("[AutoLogin] Waiting for login to complete...")
-                time.sleep(8)
+                # ═══════════════════════════════════════════════════
+                #  STEP 3: Wait for SPC cookies to appear
+                #  Shopee sets SPC_EC/SPC_ST AFTER full auth completion
+                #  which may involve background API calls
+                # ═══════════════════════════════════════════════════
+                print("[AutoLogin] Step 3: Waiting for session cookies...")
 
-                # Check for CAPTCHA or verification
+                # Wait and poll for critical cookies
+                start = time.time()
+                while time.time() - start < MAX_WAIT_FOR_COOKIES:
+                    time.sleep(2)
+                    has_all, missing = _has_critical_cookies(context)
+                    elapsed = int(time.time() - start)
+                    print(f"  [{elapsed}s] Missing: {', '.join(missing) if missing else 'NONE ✅'}")
+
+                    if has_all:
+                        print(f"  ✅ All critical cookies found after {elapsed}s!")
+                        break
+
+                    # Check if stuck on login/captcha
+                    current_url = page.url
+                    if 'verify' in current_url.lower() or 'captcha' in current_url.lower():
+                        print("  ⚠️ CAPTCHA/verification detected!")
+                        page.screenshot(path='/tmp/captcha.png')
+                        browser.close()
+                        return None
+                else:
+                    # Timeout — log what we DO have
+                    print(f"  ⚠️ Timeout after {MAX_WAIT_FOR_COOKIES}s")
+                    _log_cookies(context, "Timeout")
+
+                # Check if still on login page
                 current_url = page.url
-                page_content = page.content().lower()
-
-                if 'verify' in current_url.lower() or 'captcha' in page_content:
-                    print("[AutoLogin] ⚠️  CAPTCHA/Verification detected!")
-                    print("[AutoLogin] ⚠️  Auto-login cannot bypass CAPTCHA")
-                    page.screenshot(path='/tmp/captcha_page.png')
-                    browser.close()
-                    return None
-
                 if 'login' in current_url.lower():
-                    print("[AutoLogin] ⚠️  Still on login page — credentials may be wrong")
+                    print(f"  ⚠️ Still on login page: {current_url}")
                     page.screenshot(path='/tmp/login_failed.png')
-                    browser.close()
-                    return None
+                    # Don't return None yet — check if we got some cookies anyway
+                    has_all, _ = _has_critical_cookies(context)
+                    if not has_all:
+                        browser.close()
+                        return None
 
-            # Step 2: Navigate to affiliate dashboard to ensure cookies are set
-            print("[AutoLogin] Navigating to affiliate offer page...")
-            page.goto('https://affiliate.shopee.co.id/offer/shopee', timeout=30000)
-            page.wait_for_load_state('networkidle', timeout=15000)
-            time.sleep(3)
+            # ═══════════════════════════════════════════════════════
+            #  STEP 4: Navigate to main Shopee to trigger cookie set
+            #  Some SPC cookies only get set when you visit shopee.co.id
+            # ═══════════════════════════════════════════════════════
+            print("[AutoLogin] Step 4: Visiting shopee.co.id for full cookies...")
+            try:
+                page.goto('https://shopee.co.id/', timeout=15000)
+                page.wait_for_load_state('domcontentloaded', timeout=10000)
+                time.sleep(3)
+            except Exception as e:
+                print(f"  shopee.co.id navigation: {e}")
 
-            # Step 3: Export cookies
+            _log_cookies(context, "After shopee.co.id")
+
+            # ═══════════════════════════════════════════════════════
+            #  STEP 5: Navigate to affiliate dashboard
+            #  This ensures affiliate-specific cookies are also set
+            # ═══════════════════════════════════════════════════════
+            print("[AutoLogin] Step 5: Navigating to affiliate Komisi XTRA...")
+            try:
+                page.goto('https://affiliate.shopee.co.id/offer/brand_offer',
+                          timeout=30000)
+                page.wait_for_load_state('networkidle', timeout=15000)
+                time.sleep(5)
+            except Exception as e:
+                print(f"  Affiliate nav: {e}")
+
+            # ═══════════════════════════════════════════════════════
+            #  STEP 6: Export ALL cookies from ALL domains
+            # ═══════════════════════════════════════════════════════
+            print("[AutoLogin] Step 6: Exporting cookies...")
             cookies = context.cookies()
-            print(f"[AutoLogin] Exported {len(cookies)} cookies")
+            _log_cookies(context, "Final export")
 
-            # Log domains
-            domains = set(c.get('domain', '') for c in cookies)
-            print(f"[AutoLogin] Domains: {', '.join(sorted(domains))}")
-
-            # Check for auth cookies
-            auth_names = [c['name'] for c in cookies if c['name'].startswith('SPC_')]
-            print(f"[AutoLogin] Auth cookies: {', '.join(auth_names)}")
+            # Final check
+            has_all, missing = _has_critical_cookies(context)
+            if not has_all:
+                print(f"  ⚠️ WARNING: Still missing: {', '.join(missing)}")
+                print(f"  Will proceed anyway with {len(cookies)} cookies")
+            else:
+                print(f"  ✅ All {len(CRITICAL_COOKIES)} critical cookies present!")
 
         except Exception as e:
             print(f"[AutoLogin] ERROR: {e}")
@@ -208,7 +278,7 @@ def auto_login():
     if not cookies:
         return None
 
-    # Convert to the JSON format expected by our code
+    # Convert to JSON
     cookies_json = json.dumps(cookies, ensure_ascii=False)
     print(f"[AutoLogin] Cookies JSON: {len(cookies_json)} chars")
 
@@ -223,18 +293,14 @@ def auto_login():
 def main():
     cookies_json = auto_login()
     if cookies_json:
-        # Output for GitHub Actions to capture as env var
-        # Using GITHUB_ENV file for multi-line values
         github_env = os.environ.get('GITHUB_ENV', '')
         if github_env:
             with open(github_env, 'a') as f:
-                # Use delimiter for multi-line value
                 f.write(f"SHOPEE_AFFILIATE_COOKIES<<EOF\n")
                 f.write(cookies_json)
                 f.write(f"\nEOF\n")
             print("[AutoLogin] ✅ Set SHOPEE_AFFILIATE_COOKIES in GITHUB_ENV")
         else:
-            # Not in GitHub Actions — just print
             print(f"\nSHOPEE_AFFILIATE_COOKIES={cookies_json[:100]}...")
 
         print("[AutoLogin] ✅ Login successful!")
