@@ -199,7 +199,7 @@ def check_cookies_health():
     headers = {
         'User-Agent': random.choice(USER_AGENTS),
         'Accept': 'application/json',
-        'Referer': f'{AFFILIATE_BASE}/offer/shopee',
+        'Referer': f'{AFFILIATE_BASE}/offer/brand_offer',
         'Origin': AFFILIATE_BASE,
     }
     cookies_str = _build_cookie_string()
@@ -262,7 +262,7 @@ def _build_affiliate_session():
         'User-Agent': random.choice(USER_AGENTS),
         'Accept': 'application/json',
         'Accept-Language': 'id-ID,id;q=0.9,en;q=0.8',
-        'Referer': f'{AFFILIATE_BASE}/offer/shopee',
+        'Referer': f'{AFFILIATE_BASE}/offer/brand_offer',
         'Origin': AFFILIATE_BASE,
     })
 
@@ -334,7 +334,7 @@ def get_affiliate_shops(keyword, session=None, limit=20):
     headers = {
         'User-Agent': random.choice(USER_AGENTS),
         'Accept': 'application/json',
-        'Referer': f'{AFFILIATE_BASE}/offer/shopee',
+        'Referer': f'{AFFILIATE_BASE}/offer/brand_offer',
         'Origin': AFFILIATE_BASE,
         'X-Requested-With': 'XMLHttpRequest',
     }
@@ -435,7 +435,7 @@ def get_affiliate_product_offers(keyword, session=None, limit=20):
     headers = {
         'User-Agent': random.choice(USER_AGENTS),
         'Accept': 'application/json',
-        'Referer': f'{AFFILIATE_BASE}/offer/shopee',
+        'Referer': f'{AFFILIATE_BASE}/offer/brand_offer',
         'Origin': AFFILIATE_BASE,
         'X-Requested-With': 'XMLHttpRequest',
     }
