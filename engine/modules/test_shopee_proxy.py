@@ -22,12 +22,12 @@ def test_proxy():
     # 1. Check environment variables
     proxy_url = os.environ.get('CF_PROXY_URL', '').rstrip('/')
     proxy_key = os.environ.get('CF_PROXY_KEY', os.environ.get('CF_PROXY_KEY_API', ''))
-    cookies_raw = os.environ.get('SHOPEE_COOKIES', '')
+    cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
 
     print(f"\n[1] ENVIRONMENT VARIABLES")
     print(f"  CF_PROXY_URL:   {'SET -> ' + proxy_url[:50] + '...' if proxy_url else 'NOT SET !!!'}")
     print(f"  CF_PROXY_KEY:   {'SET -> ' + str(len(proxy_key)) + ' chars' if proxy_key else 'NOT SET !!!'}")
-    print(f"  SHOPEE_COOKIES: {'SET -> ' + str(len(cookies_raw)) + ' chars' if cookies_raw else 'NOT SET !!!'}")
+    print(f"  SHOPEE_AFFILIATE_COOKIES: {'SET -> ' + str(len(cookies_raw)) + ' chars' if cookies_raw else 'NOT SET !!!'}")
 
     if not proxy_url:
         print("\n  FATAL: CF_PROXY_URL is not set. Cannot proceed.")
@@ -186,7 +186,7 @@ def test_proxy():
         except Exception as e:
             print(f"  Cookie parse error: {e}")
     else:
-        print(f"\n[5] SKIP: No SHOPEE_COOKIES set")
+        print(f"\n[5] SKIP: No SHOPEE_AFFILIATE_COOKIES set")
 
     print(f"\n{'=' * 60}")
     print(f"  DIAGNOSTIC COMPLETE")

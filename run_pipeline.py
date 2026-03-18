@@ -53,7 +53,7 @@ def main():
     v1_checkpoint = {
         'file': 'engine/data/produk.csv',
         'min_lines': 2,  # header + at least 1 product
-        'msg': 'V1 menghasilkan 0 produk — semua tier Shopee gagal. Cek: CF_PROXY_URL, SHOPEE_COOKIES',
+        'msg': 'V1 menghasilkan 0 produk — semua tier Shopee gagal. Cek: CF_PROXY_URL, SHOPEE_AFFILIATE_COOKIES',
         'fatal': False,  # WARNING only — pipeline will catch 0-video at end
     }
     

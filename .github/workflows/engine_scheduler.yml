@@ -180,7 +180,7 @@ jobs:
         env:
           CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
           CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
-          SHOPEE_COOKIES: ${{ secrets.SHOPEE_COOKIES }}
+          SHOPEE_AFFILIATE_COOKIES: ${{ secrets.SHOPEE_AFFILIATE_COOKIES }}
         run: python engine/modules/test_shopee_proxy.py
 
       - name: Run full pipeline
@@ -218,8 +218,8 @@ jobs:
           HF_API_KEY_12: ${{ secrets.HF_API_KEY_12 }}
           HF_API_KEY_13: ${{ secrets.HF_API_KEY_13 }}
           HF_API_KEY_14: ${{ secrets.HF_API_KEY_14 }}
-          # Shopee Cookies
-          SHOPEE_COOKIES: ${{ secrets.SHOPEE_COOKIES }}
+          # Shopee Affiliate Cookies
+          SHOPEE_AFFILIATE_COOKIES: ${{ secrets.SHOPEE_AFFILIATE_COOKIES }}
           # CF Workers Proxy (bypass Shopee IP block)
           CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
           CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}

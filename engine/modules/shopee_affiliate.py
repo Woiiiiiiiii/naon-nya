@@ -14,7 +14,7 @@ Flow:
 
 Environment:
   SHOPEE_AFFILIATE_COOKIES  = cookies from affiliate.shopee.co.id
-  (fallback: SHOPEE_COOKIES if affiliate cookies not set)
+  Requires: SHOPEE_AFFILIATE_COOKIES environment variable
 """
 
 import os
@@ -111,19 +111,13 @@ def check_cookies_health():
         return _COOKIES_VALID
 
     # ── Step 1: Which env var are we using? ──
-    source = None
     cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
-    if cookies_raw:
-        source = 'SHOPEE_AFFILIATE_COOKIES'
-    else:
-        cookies_raw = os.environ.get('SHOPEE_COOKIES', '')
-        if cookies_raw:
-            source = 'SHOPEE_COOKIES (fallback!)'
-    
     if not cookies_raw:
-        print("  ⚠️  No cookies set — neither SHOPEE_AFFILIATE_COOKIES nor SHOPEE_COOKIES")
+        print("  ⚠️  SHOPEE_AFFILIATE_COOKIES not set!")
+        print("  ⚠️  Set it in GitHub Secrets or use auto-login (SHOPEE_USERNAME/PASSWORD)")
         _COOKIES_VALID = False
         return False
+    source = 'SHOPEE_AFFILIATE_COOKIES'
 
     print(f"  [Cookie Source] Using: {source} ({len(cookies_raw)} chars)")
 
@@ -266,12 +260,9 @@ def _build_affiliate_session():
         'Origin': AFFILIATE_BASE,
     })
 
-    # Try affiliate cookies first, fallback to regular cookies
     cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
     if not cookies_raw:
-        cookies_raw = os.environ.get('SHOPEE_COOKIES', '')
-    if not cookies_raw:
-        print("  [WARN] No affiliate cookies — set SHOPEE_AFFILIATE_COOKIES")
+        print("  [WARN] SHOPEE_AFFILIATE_COOKIES not set")
         return None
 
     try:
@@ -296,8 +287,6 @@ def _build_affiliate_session():
 def _build_cookie_string():
     """Build cookie string from env for proxy requests."""
     cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
-    if not cookies_raw:
-        cookies_raw = os.environ.get('SHOPEE_COOKIES', '')
     if not cookies_raw:
         return ''
     try:

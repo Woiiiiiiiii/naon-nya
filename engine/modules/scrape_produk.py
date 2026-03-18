@@ -60,12 +60,12 @@ def get_affiliate_url(product_name, affiliate_id):
 _shopee_session = None
 
 def _build_shopee_session():
-    """Build authenticated Shopee session from SHOPEE_COOKIES env var."""
+    """Build authenticated Shopee session from SHOPEE_AFFILIATE_COOKIES env var."""
     global _shopee_session
     if _shopee_session is not None:
         return _shopee_session
 
-    cookies_raw = os.environ.get('SHOPEE_COOKIES', '')
+    cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
     if not cookies_raw:
         _shopee_session = False
         return False
@@ -107,7 +107,7 @@ user_agents = [
 ]
 
 
-def search_shopee_cookies(keyword, limit=5):
+def search_SHOPEE_AFFILIATE_COOKIES(keyword, limit=5):
     """Tier 3: Shopee search with authenticated cookies (direct or via proxy).
     Retry once with backoff if 200-but-0-items (rate limit response)."""
     session = _build_shopee_session()
@@ -397,7 +397,7 @@ def scrape_category(category, affiliate_id, target_count=3):
 
         # ── Tier 3: Shopee Cookies (with retry built into function) ──
         if items is None:
-            items = search_shopee_cookies(keyword, limit=5)
+            items = search_SHOPEE_AFFILIATE_COOKIES(keyword, limit=5)
 
         if items is None:
             print(f"    [FAILED] All tiers failed for '{keyword}' → trying next keyword")
@@ -429,7 +429,7 @@ def scrape_category(category, affiliate_id, target_count=3):
     if not products:
         print(f"    [EMPTY] No products for {category} — all keywords + tiers failed")
         print(f"    Tried keywords: {keywords}")
-        print(f"    Checklist: CF_PROXY_URL? CF_PROXY_KEY? SHOPEE_COOKIES expired?")
+        print(f"    Checklist: CF_PROXY_URL? CF_PROXY_KEY? SHOPEE_AFFILIATE_COOKIES expired?")
 
     return products
 
@@ -459,15 +459,15 @@ def scrape_products(output_file, config):
     # ── DIAGNOSTIC: check all required env vars ──
     proxy_url = os.environ.get('CF_PROXY_URL', '')
     proxy_key = os.environ.get('CF_PROXY_KEY', '')
-    cookies = os.environ.get('SHOPEE_COOKIES', '')
+    cookies = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
     print(f"\n  [ENV DIAGNOSTIC]")
     print(f"  CF_PROXY_URL:   {'SET (' + proxy_url[:30] + '...)' if proxy_url else 'NOT SET'}")
     print(f"  CF_PROXY_KEY:   {'SET (' + str(len(proxy_key)) + ' chars)' if proxy_key else 'NOT SET'}")
-    print(f"  SHOPEE_COOKIES: {'SET (' + str(len(cookies)) + ' chars)' if cookies else 'NOT SET'}")
+    print(f"  SHOPEE_AFFILIATE_COOKIES: {'SET (' + str(len(cookies)) + ' chars)' if cookies else 'NOT SET'}")
     if not proxy_url:
         print(f"  WARNING: CF_PROXY_URL not set -- Shopee API will be blocked (403)!")
     if not cookies:
-        print(f"  WARNING: SHOPEE_COOKIES not set -- cookies search disabled!")
+        print(f"  WARNING: SHOPEE_AFFILIATE_COOKIES not set -- cookies search disabled!")
 
 
     # Step 1: Load existing bank data (from product_collector --export)
@@ -523,7 +523,7 @@ def scrape_products(output_file, config):
             # No products at all — skip this category
             stats['skipped'] += 1
             print(f"    [SKIP] SKIPPED {category} -- no Shopee products available")
-            print(f"      Fix: ensure CF_PROXY_URL + SHOPEE_COOKIES are set in CI secrets")
+            print(f"      Fix: ensure CF_PROXY_URL + SHOPEE_AFFILIATE_COOKIES are set in CI secrets")
 
     # Save merged result
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -547,7 +547,7 @@ def scrape_products(output_file, config):
     if stats['skipped'] > 0:
         print(f"\n  WARNING: {stats['skipped']} categories had NO products!")
         print(f"  This means Shopee API is blocked and CF proxy may not be working.")
-        print(f"  Check GitHub secrets: CF_PROXY_URL, CF_PROXY_KEY_API, SHOPEE_COOKIES")
+        print(f"  Check GitHub secrets: CF_PROXY_URL, CF_PROXY_KEY_API, SHOPEE_AFFILIATE_COOKIES")
 
     return all_products
 

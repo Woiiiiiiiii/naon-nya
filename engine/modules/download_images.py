@@ -43,12 +43,12 @@ _shopee_session = None
 
 
 def _build_shopee_session():
-    """Build authenticated Shopee session from SHOPEE_COOKIES env var."""
+    """Build authenticated Shopee session from SHOPEE_AFFILIATE_COOKIES env var."""
     global _shopee_session
     if _shopee_session is not None:
         return _shopee_session
 
-    cookies_raw = os.environ.get('SHOPEE_COOKIES', '')
+    cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
     if not cookies_raw:
         _shopee_session = False  # Mark as attempted
         return False
@@ -260,7 +260,7 @@ def _download_single_image(cdn_url):
     return None
 
 
-def _try_shopee_cookies(product_name, img_path):
+def _try_SHOPEE_AFFILIATE_COOKIES(product_name, img_path):
     """Tier 1: Search Shopee with cookies — download ALL images, pick SIMPLEST.
     
     Shopee products have 5-9 images. Image #1 is usually the marketing image
@@ -674,7 +674,7 @@ def download_images(produk_file, output_dir):
             continue
         
         # TIER 2: Shopee Cookies (authenticated search, pick simplest image)
-        if _try_shopee_cookies(name, img_path):
+        if _try_SHOPEE_AFFILIATE_COOKIES(name, img_path):
             stats['cookies'] += 1
             continue
         

@@ -100,9 +100,9 @@ def _build_shopee_session():
         'Referer': 'https://shopee.co.id/',
     })
 
-    cookies_raw = os.environ.get('SHOPEE_COOKIES', '')
+    cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
     if not cookies_raw:
-        print("  [WARN] SHOPEE_COOKIES not set — Layer 1 disabled")
+        print("  [WARN] SHOPEE_AFFILIATE_COOKIES not set — Layer 1 disabled")
         return None
 
     try:
@@ -198,7 +198,7 @@ def _shopee_search_with_cookies(session, keyword, limit=5):
                 'desc': name,
                 'image_url': img_url,
                 'shopee_url': shopee_url,
-                'source': 'shopee_cookies',
+                'source': 'shopee_affiliate',
             })
 
         print(f"    [Layer1] '{keyword}' → {len(products)} products")
@@ -353,7 +353,7 @@ def _shopee_recommend_discover(category, limit=10):
 
     # Build cookie string from env
     cookies_str = ''
-    cookies_raw = os.environ.get('SHOPEE_COOKIES', '')
+    cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
     if cookies_raw:
         try:
             cookies = json.loads(cookies_raw)
