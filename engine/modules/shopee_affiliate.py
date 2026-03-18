@@ -110,21 +110,90 @@ def check_cookies_health():
     if _COOKIES_VALID is not None:
         return _COOKIES_VALID
 
+    # ── Step 1: Which env var are we using? ──
+    source = None
     cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
-    if not cookies_raw:
+    if cookies_raw:
+        source = 'SHOPEE_AFFILIATE_COOKIES'
+    else:
         cookies_raw = os.environ.get('SHOPEE_COOKIES', '')
+        if cookies_raw:
+            source = 'SHOPEE_COOKIES (fallback!)'
+    
     if not cookies_raw:
-        print("  ⚠️  No cookies set — affiliate API disabled")
+        print("  ⚠️  No cookies set — neither SHOPEE_AFFILIATE_COOKIES nor SHOPEE_COOKIES")
         _COOKIES_VALID = False
         return False
 
-    # Check expiry dates first (free, no API call)
+    print(f"  [Cookie Source] Using: {source} ({len(cookies_raw)} chars)")
+
+    # ── Step 2: Parse and debug all cookies ──
+    try:
+        cookies = json.loads(cookies_raw)
+        if isinstance(cookies, list):
+            import time as _time
+            now = _time.time()
+            
+            # Categorize cookies
+            auth_cookies = ['SPC_EC', 'SPC_ST', 'SPC_U', 'SPC_CDS_CHAT_OFFSET_KEY',
+                            'SPC_SC_TK', 'SPC_SC_SA', 'SPC_SC_UD']
+            found_auth = {}
+            domains_seen = set()
+            total = len(cookies)
+            expired_count = 0
+            
+            for c in cookies:
+                name = c.get('name', '')
+                domain = c.get('domain', '?')
+                exp = c.get('expirationDate', 0)
+                is_session = c.get('session', False)
+                domains_seen.add(domain)
+                
+                if exp and exp < now and not is_session:
+                    expired_count += 1
+                
+                if name in auth_cookies:
+                    status = 'session' if is_session else (
+                        '✅ valid' if (not exp or exp > now) else 
+                        f'❌ expired {_time.strftime("%Y-%m-%d %H:%M", _time.localtime(exp))}'
+                    )
+                    found_auth[name] = {'domain': domain, 'status': status,
+                                       'value_preview': c.get('value', '')[:20]}
+            
+            print(f"  [Cookies] Total: {total}, Expired: {expired_count}")
+            print(f"  [Cookies] Domains: {', '.join(sorted(domains_seen))}")
+            print(f"  [Auth Cookies]:")
+            for name in auth_cookies:
+                if name in found_auth:
+                    info = found_auth[name]
+                    print(f"    {name}: {info['status']} (domain={info['domain']}, val={info['value_preview']}...)")
+                else:
+                    print(f"    {name}: ❌ NOT FOUND")
+            
+            # Check if we have the critical ones
+            critical = ['SPC_EC', 'SPC_ST']
+            missing_critical = [c for c in critical if c not in found_auth]
+            if missing_critical:
+                print(f"  ⚠️  MISSING critical cookies: {', '.join(missing_critical)}")
+                print(f"  ⚠️  These are required for API authentication!")
+                
+            # Check if cookies are from the right domain
+            aff_domain = '.affiliate.shopee.co.id'
+            if aff_domain not in domains_seen:
+                print(f"  ⚠️  No cookies from {aff_domain} domain!")
+                print(f"  ⚠️  Make sure to export from affiliate.shopee.co.id (not shopee.co.id)")
+        else:
+            print(f"  [Cookies] Dict format with {len(cookies)} entries")
+    except Exception as e:
+        print(f"  [Cookies] Parse error: {e}")
+
+    # ── Step 3: Check expiry dates ──
     if not _check_cookie_expiry(cookies_raw):
         _COOKIES_VALID = False
         return False
 
-    # Quick API health check: search for a common term
-    print("  [Health] Testing affiliate cookies...")
+    # ── Step 4: Quick API health check ──
+    print("  [Health] Testing API with these cookies...")
     url = f"{AFFILIATE_BASE}/api/v3/offer/shop/list"
     params = {'sort_type': 1, 'page_offset': 0, 'page_limit': 1, 'keyword': 'tas'}
     headers = {
