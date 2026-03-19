@@ -168,60 +168,18 @@ def check_cookies_health():
     print("  [Health] Testing API with these cookies...")
     url = f"{AFFILIATE_BASE}/api/v3/offer/shop/list"
     params = {'sort_type': 1, 'page_offset': 0, 'page_limit': 1, 'keyword': 'tas'}
-    headers = {
-        'User-Agent': random.choice(USER_AGENTS),
-        'Accept': 'application/json',
-        'Referer': f'{AFFILIATE_BASE}/offer/brand_offer',
-        'Origin': AFFILIATE_BASE,
-    }
-    # Add CSRF token (required for authenticated API calls)
-    csrf = _get_csrftoken()
-    if csrf:
-        headers['x-csrftoken'] = csrf
-    cookies_str = _build_cookie_string()
-
-    try:
-        from shopee_proxy import proxy_get_json, is_proxy_available
-        if is_proxy_available():
-            full_url = f"{url}?{urlencode(params)}"
-            status, data = proxy_get_json(full_url, headers=headers,
-                                          cookies_str=cookies_str)
-            if status == 200 and data and data.get('code') == 0:
-                print("  ✅ Affiliate cookies are VALID")
-                _COOKIES_VALID = True
-                return True
-            else:
-                code = data.get('code', '?') if data else '?'
-                msg = data.get('msg', '?') if data else f'HTTP {status}'
-                print(f"  ❌ Affiliate cookies REJECTED: code={code}, msg={msg}")
-                if code == 30002:
-                    print("  ⚠️  Cookies expired! Re-export from affiliate.shopee.co.id")
-                _COOKIES_VALID = False
-                return False
-    except ImportError:
-        pass
-
-    # Try direct
-    try:
-        req_headers = headers.copy()
-        req_headers['Cookie'] = cookies_str
-        full_url = f"{url}?{urlencode(params)}"
-        resp = requests.get(full_url, headers=req_headers, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get('code') == 0:
-                print("  ✅ Affiliate cookies are VALID (direct)")
-                _COOKIES_VALID = True
-                return True
-            else:
-                print(f"  ❌ Cookies REJECTED: code={data.get('code')}, msg={data.get('msg')}")
-                _COOKIES_VALID = False
-                return False
-    except Exception as e:
-        print(f"  [Health] Check failed: {e}")
-
-    _COOKIES_VALID = None  # Unknown
-    return True  # Optimistic default
+    
+    data = _make_affiliate_request(url, params, label='HealthCheck')
+    if data and data.get('code') == 0:
+        print("  ✅ Affiliate cookies are VALID")
+        _COOKIES_VALID = True
+        return True
+    else:
+        code = data.get('code', '?') if data else '?'
+        msg = data.get('msg', '?') if data else 'no response'
+        print(f"  ❌ Affiliate cookies REJECTED: code={code}, msg={msg}")
+        _COOKIES_VALID = False
+        return False
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -267,26 +225,15 @@ def _build_affiliate_session():
 
 
 def _build_cookie_string():
-    """Build cookie string from env for proxy requests.
-    Only includes cookies from Shopee-related domains."""
+    """Build cookie string from env for HTTP requests."""
     cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
     if not cookies_raw:
         return ''
     try:
         cookies = json.loads(cookies_raw)
         if isinstance(cookies, list):
-            # Filter: only include cookies from Shopee domains
-            shopee_cookies = []
-            for c in cookies:
-                domain = c.get('domain', '')
-                name = c.get('name', '')
-                value = c.get('value', '')
-                if not name or not value:
-                    continue
-                # Only include Shopee-related cookies
-                if 'shopee' in domain.lower():
-                    shopee_cookies.append(f"{name}={value}")
-            return '; '.join(shopee_cookies)
+            return '; '.join([f"{c.get('name','')}={c.get('value','')}"
+                              for c in cookies if c.get('name')])
         elif isinstance(cookies, dict):
             return '; '.join([f'{k}={v}' for k, v in cookies.items()])
     except Exception:
@@ -294,23 +241,104 @@ def _build_cookie_string():
     return ''
 
 
-def _get_csrftoken():
-    """Extract csrftoken value from cookies for x-csrftoken header.
-    Shopee affiliate API requires this header for authenticated requests."""
-    cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
-    if not cookies_raw:
-        return ''
+def _make_affiliate_request(url, params=None, session=None, label='API'):
+    """Centralized request helper for affiliate.shopee.co.id.
+    
+    Strategy: Try DIRECT first (auto-login proves GitHub Actions 
+    can reach affiliate.shopee.co.id), proxy as fallback.
+    
+    Returns: parsed JSON data or None
+    """
+    from urllib.parse import urlencode
+    
+    cookies_str = _build_cookie_string()
+    full_url = f"{url}?{urlencode(params)}" if params else url
+    
+    headers = {
+        'User-Agent': random.choice(USER_AGENTS),
+        'Accept': 'application/json',
+        'Accept-Language': 'id-ID,id;q=0.9,en;q=0.8',
+        'Referer': f'{AFFILIATE_BASE}/offer/brand_offer',
+        'Origin': AFFILIATE_BASE,
+        'X-Requested-With': 'XMLHttpRequest',
+        'sec-ch-ua': '"Not A(Brand";v="99", "Chromium";v="121"',
+        'sec-ch-ua-platform': '"Windows"',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+    }
+    
+    # Extract csrftoken from cookies if available
     try:
-        cookies = json.loads(cookies_raw)
+        cookies = json.loads(os.environ.get('SHOPEE_AFFILIATE_COOKIES', '[]'))
         if isinstance(cookies, list):
             for c in cookies:
                 if c.get('name') == 'csrftoken':
-                    return c.get('value', '')
-        elif isinstance(cookies, dict):
-            return cookies.get('csrftoken', '')
+                    headers['x-csrftoken'] = c.get('value', '')
+                    break
     except Exception:
         pass
-    return ''
+    
+    data = None
+    
+    # ── Method 1: Direct with session (if available) ──
+    if session and data is None:
+        try:
+            resp = session.get(url, params=params, headers=headers, timeout=15)
+            print(f"    [{label}] Direct(session): HTTP {resp.status_code}")
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('code') == 0:
+                    print(f"    [{label}] ✅ Direct(session) succeeded!")
+                    return data
+                else:
+                    print(f"    [{label}] API code={data.get('code')}, msg={data.get('msg','?')}")
+                    data = None
+        except Exception as e:
+            print(f"    [{label}] Direct(session) error: {e}")
+    
+    # ── Method 2: Direct with Cookie header ──
+    if cookies_str and data is None:
+        try:
+            req_headers = headers.copy()
+            req_headers['Cookie'] = cookies_str
+            resp = requests.get(full_url, headers=req_headers, timeout=15)
+            print(f"    [{label}] Direct(cookie): HTTP {resp.status_code}")
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('code') == 0:
+                    print(f"    [{label}] ✅ Direct(cookie) succeeded!")
+                    return data
+                else:
+                    print(f"    [{label}] API code={data.get('code')}, msg={data.get('msg','?')}")
+                    data = None
+            else:
+                print(f"    [{label}] Response: {resp.text[:200]}")
+        except Exception as e:
+            print(f"    [{label}] Direct(cookie) error: {e}")
+    
+    # ── Method 3: Proxy fallback ──
+    if data is None:
+        try:
+            from shopee_proxy import proxy_get_json, is_proxy_available
+            if is_proxy_available():
+                print(f"    [{label}] Trying proxy...")
+                status, data = proxy_get_json(full_url, headers=headers,
+                                              cookies_str=cookies_str)
+                print(f"    [{label}] Proxy: HTTP {status}")
+                if status == 200 and data and data.get('code') == 0:
+                    print(f"    [{label}] ✅ Proxy succeeded!")
+                    return data
+                else:
+                    preview = str(data)[:200] if data else 'empty'
+                    print(f"    [{label}] Proxy response: {preview}")
+                    data = None
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"    [{label}] Proxy error: {e}")
+    
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -318,12 +346,7 @@ def _get_csrftoken():
 # ═══════════════════════════════════════════════════════════════════
 def get_affiliate_shops(keyword, session=None, limit=20):
     """Fetch shop offers from Shopee Affiliate Dashboard API.
-
-    Endpoint: /api/v3/offer/shop/list
-    Returns: list of shops with affiliate links + commission rates.
-
-    This endpoint is NOT affected by error 90309999 (search block)
-    because it's the affiliate dashboard's internal API."""
+    Endpoint: /api/v3/offer/shop/list"""
     url = f"{AFFILIATE_BASE}/api/v3/offer/shop/list"
     params = {
         'sort_type': 1,
@@ -332,78 +355,9 @@ def get_affiliate_shops(keyword, session=None, limit=20):
         'keyword': keyword,
     }
 
-    headers = {
-        'User-Agent': random.choice(USER_AGENTS),
-        'Accept': 'application/json',
-        'Referer': f'{AFFILIATE_BASE}/offer/brand_offer',
-        'Origin': AFFILIATE_BASE,
-        'X-Requested-With': 'XMLHttpRequest',
-    }
-
-    # Add CSRF token header (required by Shopee for authenticated API calls)
-    csrf = _get_csrftoken()
-    if csrf:
-        headers['x-csrftoken'] = csrf
-        print(f"    [Affiliate] CSRF token: {csrf[:10]}...")
-    else:
-        print("    [Affiliate] ⚠️ No csrftoken found in cookies!")
-
     try:
-        # Try via proxy first (GitHub Actions IP is in US → blocked without proxy)
-        data = None
-        cookies_str = _build_cookie_string()
-        print(f"    [Affiliate] Cookies: {len(cookies_str)} chars")
-
-        try:
-            from shopee_proxy import proxy_get_json, is_proxy_available
-            if is_proxy_available():
-                full_url = f"{url}?{urlencode(params)}"
-                print(f"    [Affiliate] Trying proxy → {full_url[:80]}...")
-                status, data = proxy_get_json(full_url, headers=headers,
-                                              cookies_str=cookies_str)
-                print(f"    [Affiliate] Proxy response: HTTP {status}")
-                if status != 200:
-                    # Show response preview for debugging
-                    preview = str(data)[:200] if data else 'empty'
-                    print(f"    [Affiliate] Response preview: {preview}")
-                    data = None
-                elif data and data.get('code') != 0:
-                    print(f"    [Affiliate] Proxy API code={data.get('code')}, msg={data.get('msg', '?')}")
-                    data = None
-            else:
-                print("    [Affiliate] Proxy not available")
-        except ImportError:
-            print("    [Affiliate] shopee_proxy module not found")
-
-        # Direct request fallback (works if running locally or from Indonesian IP)
-        if data is None:
-            if session:
-                print(f"    [Affiliate] Trying direct request...")
-                resp = session.get(url, params=params, timeout=15)
-                print(f"    [Affiliate] Direct response: HTTP {resp.status_code}")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get('code') != 0:
-                        print(f"    [Affiliate] Direct API code={data.get('code')}, msg={data.get('msg', '?')}")
-                        data = None
-                else:
-                    print(f"    [Affiliate] Direct failed: {resp.text[:200]}")
-            elif cookies_str:
-                # No session but have cookies — try direct with cookie header
-                print(f"    [Affiliate] Trying direct with cookie header...")
-                full_url = f"{url}?{urlencode(params)}"
-                req_headers = headers.copy()
-                req_headers['Cookie'] = cookies_str
-                resp = requests.get(full_url, headers=req_headers, timeout=15)
-                print(f"    [Affiliate] Direct+cookies response: HTTP {resp.status_code}")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get('code') != 0:
-                        print(f"    [Affiliate] API code={data.get('code')}, msg={data.get('msg', '?')}")
-                        data = None
-            else:
-                print("    [Affiliate] No session and no cookies — cannot make request")
-
+        data = _make_affiliate_request(url, params, session=session,
+                                        label=f'Shops/{keyword}')
         if not data:
             print(f"    [Affiliate] No valid data for '{keyword}'")
             return []
@@ -425,14 +379,7 @@ def get_affiliate_shops(keyword, session=None, limit=20):
 # ═══════════════════════════════════════════════════════════════════
 def get_affiliate_product_offers(keyword, session=None, limit=20):
     """Fetch product offers from Shopee Affiliate Dashboard API.
-
-    Endpoint: /api/v3/offer/product/list  (Penawaran Produk tab)
-    Returns individual products with affiliate links, prices, images.
-
-    This is DIFFERENT from shop/list — gives actual products, not shops.
-    Each product has: item_id, shop_id, product_name, image, price,
-    commission_rate, and long_link (affiliate URL).
-    """
+    Endpoint: /api/v3/offer/product/list (Penawaran Produk tab)"""
     url = f"{AFFILIATE_BASE}/api/v3/offer/product/list"
     params = {
         'sort_type': 1,
@@ -441,60 +388,9 @@ def get_affiliate_product_offers(keyword, session=None, limit=20):
         'keyword': keyword,
     }
 
-    headers = {
-        'User-Agent': random.choice(USER_AGENTS),
-        'Accept': 'application/json',
-        'Referer': f'{AFFILIATE_BASE}/offer/brand_offer',
-        'Origin': AFFILIATE_BASE,
-        'X-Requested-With': 'XMLHttpRequest',
-    }
-
     try:
-        data = None
-        cookies_str = _build_cookie_string()
-
-        # Try via proxy first (GitHub Actions = US IP → needs proxy)
-        try:
-            from shopee_proxy import proxy_get_json, is_proxy_available
-            if is_proxy_available():
-                full_url = f"{url}?{urlencode(params)}"
-                print(f"    [ProductOffer] Proxy → {full_url[:80]}...")
-                status, data = proxy_get_json(full_url, headers=headers,
-                                              cookies_str=cookies_str)
-                print(f"    [ProductOffer] Proxy HTTP {status}")
-                if status != 200:
-                    preview = str(data)[:200] if data else 'empty'
-                    print(f"    [ProductOffer] Preview: {preview}")
-                    data = None
-                elif data and data.get('code') != 0:
-                    print(f"    [ProductOffer] API code={data.get('code')}, msg={data.get('msg','?')}")
-                    data = None
-            else:
-                print("    [ProductOffer] Proxy not available")
-        except ImportError:
-            print("    [ProductOffer] shopee_proxy not found")
-
-        # Direct request fallback
-        if data is None:
-            if session:
-                resp = session.get(url, params=params, timeout=15)
-                print(f"    [ProductOffer] Direct HTTP {resp.status_code}")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get('code') != 0:
-                        print(f"    [ProductOffer] API code={data.get('code')}")
-                        data = None
-            elif cookies_str:
-                full_url = f"{url}?{urlencode(params)}"
-                req_headers = headers.copy()
-                req_headers['Cookie'] = cookies_str
-                resp = requests.get(full_url, headers=req_headers, timeout=15)
-                print(f"    [ProductOffer] Direct+cookies HTTP {resp.status_code}")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get('code') != 0:
-                        data = None
-
+        data = _make_affiliate_request(url, params, session=session,
+                                        label=f'ProductOffer/{keyword}')
         if not data:
             print(f"    [ProductOffer] No data for '{keyword}'")
             return []
