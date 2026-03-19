@@ -174,13 +174,27 @@ jobs:
           restore-keys: |
             music-library-
 
+      # ── Auto Cookie Refresh (PRIMARY METHOD) ─────────────────────
+      - name: Auto-refresh Affiliate Cookies
+        if: ${{ secrets.SHOPEE_USERNAME != '' }}
+        env:
+          SHOPEE_USERNAME: ${{ secrets.SHOPEE_USERNAME }}
+          SHOPEE_PASSWORD: ${{ secrets.SHOPEE_PASSWORD }}
+        run: |
+          echo "=== Auto-login: getting fresh cookies ==="
+          pip install playwright
+          playwright install chromium --with-deps
+          cd engine/modules
+          python shopee_auto_login.py
+        continue-on-error: true
+
       # DIAGNOSTIC: test CF Worker + Shopee API connectivity
       - name: Test Shopee proxy connectivity
         continue-on-error: true
         env:
           CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
           CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
-          SHOPEE_AFFILIATE_COOKIES: ${{ secrets.SHOPEE_AFFILIATE_COOKIES }}
+          SHOPEE_AFFILIATE_COOKIES: ${{ env.SHOPEE_AFFILIATE_COOKIES || secrets.SHOPEE_AFFILIATE_COOKIES }}
         run: python engine/modules/test_shopee_proxy.py
 
       - name: Run full pipeline
@@ -218,8 +232,8 @@ jobs:
           HF_API_KEY_12: ${{ secrets.HF_API_KEY_12 }}
           HF_API_KEY_13: ${{ secrets.HF_API_KEY_13 }}
           HF_API_KEY_14: ${{ secrets.HF_API_KEY_14 }}
-          # Shopee Affiliate Cookies
-          SHOPEE_AFFILIATE_COOKIES: ${{ secrets.SHOPEE_AFFILIATE_COOKIES }}
+          # Shopee Affiliate Cookies (auto-login → fresh, manual → fallback)
+          SHOPEE_AFFILIATE_COOKIES: ${{ env.SHOPEE_AFFILIATE_COOKIES || secrets.SHOPEE_AFFILIATE_COOKIES }}
           # CF Workers Proxy (bypass Shopee IP block)
           CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
           CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}

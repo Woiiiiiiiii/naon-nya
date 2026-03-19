@@ -10,7 +10,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -24,10 +24,25 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
+      # ── Auto Cookie Refresh (PRIMARY METHOD) ─────────────────────
+      # Gets fresh cookies via auto-login before health check
+      - name: Auto-refresh Affiliate Cookies
+        if: ${{ secrets.SHOPEE_USERNAME != '' }}
+        env:
+          SHOPEE_USERNAME: ${{ secrets.SHOPEE_USERNAME }}
+          SHOPEE_PASSWORD: ${{ secrets.SHOPEE_PASSWORD }}
+        run: |
+          echo "=== Auto-login: getting fresh cookies ==="
+          pip install playwright
+          playwright install chromium --with-deps
+          cd engine/modules
+          python shopee_auto_login.py
+        continue-on-error: true
+
       - name: Check Cookie Health
         id: cookie_check
         env:
-          SHOPEE_AFFILIATE_COOKIES: ${{ secrets.SHOPEE_AFFILIATE_COOKIES }}
+          SHOPEE_AFFILIATE_COOKIES: ${{ env.SHOPEE_AFFILIATE_COOKIES || secrets.SHOPEE_AFFILIATE_COOKIES }}
           CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
           CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
         run: |
@@ -43,7 +58,7 @@ jobs:
               print('STATUS=NO_COOKIES')
               with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                   f.write('status=NO_COOKIES\n')
-                  f.write('message=SHOPEE_AFFILIATE_COOKIES secret is EMPTY. Please update it.\n')
+                  f.write('message=SHOPEE_AFFILIATE_COOKIES not available. Set SHOPEE_USERNAME+PASSWORD for auto-login.\n')
               sys.exit(0)
 
           # Check 2: Cookies valid JSON?
@@ -63,15 +78,15 @@ jobs:
                   f.write('message=SHOPEE_AFFILIATE_COOKIES is not valid JSON. Please re-export.\n')
               sys.exit(0)
 
-          # Check 3: Check expiry of critical cookies
+          # Check 3: Check if all cookies expired
           if isinstance(cookies, list):
               now = time.time()
-              critical = ['SPC_EC', 'SPC_ST', 'SPC_U']
-              for c in cookies:
-                  name = c.get('name', '')
-                  exp = c.get('expirationDate', 0)
-                  if name in critical and exp and exp < now:
-                      print(f'Cookie {name} EXPIRED on {time.strftime(\"%Y-%m-%d\", time.localtime(exp))}')
+              expired = sum(1 for c in cookies if c.get('expirationDate', 0) and c.get('expirationDate', 0) < now and not c.get('session', False))
+              total = len(cookies)
+              if expired > 0:
+                  print(f'{expired}/{total} cookies expired')
+              if expired == total and total > 0:
+                  print('ALL cookies expired!')
 
           # Check 4: Test affiliate API via proxy (Komisi XTRA endpoint)
           import requests
@@ -85,9 +100,9 @@ jobs:
 
           cookie_str = ''
           if isinstance(cookies, list):
-              cookie_str = '; '.join([f\"{c.get('name','')}\u003d{c.get('value','')}\" for c in cookies if c.get('name')])
+              cookie_str = '; '.join([f\"{c.get('name','')}={c.get('value','')}\" for c in cookies if c.get('name')])
           elif isinstance(cookies, dict):
-              cookie_str = '; '.join([f'{k}\u003d{v}' for k, v in cookies.items()])
+              cookie_str = '; '.join([f'{k}={v}' for k, v in cookies.items()])
 
           # Try via proxy if available
           success = False
@@ -151,15 +166,16 @@ jobs:
 
             ${{ steps.cookie_check.outputs.message }}
 
-            Cara update cookies:
+            Solusi paling mudah:
+            Set SHOPEE_USERNAME + SHOPEE_PASSWORD di GitHub Secrets
+            untuk auto-login otomatis (tidak perlu manual cookie update).
+
+            Manual update (jika auto-login gagal):
             1. Login ke https://affiliate.shopee.co.id di browser
             2. Buka halaman Komisi XTRA (/offer/brand_offer)
             3. Export semua cookies sebagai JSON (pakai Cookie Editor extension)
             4. Update secret SHOPEE_AFFILIATE_COOKIES di:
                https://github.com/Woiiiiiiiii/naon-nya/settings/secrets/actions
-
-            Atau: Tambahkan SHOPEE_USERNAME + SHOPEE_PASSWORD secrets
-            untuk auto-login otomatis (tidak perlu manual cookie update).
 
             Cek dilakukan: Setiap Minggu jam 10:00 WIB
             Run: https://github.com/Woiiiiiiiii/naon-nya/actions
