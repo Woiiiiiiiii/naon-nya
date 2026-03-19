@@ -25,13 +25,15 @@ jobs:
         run: pip install requests
 
       # ── Auto Cookie Refresh (PRIMARY METHOD) ─────────────────────
-      # Gets fresh cookies via auto-login before health check
       - name: Auto-refresh Affiliate Cookies
-        if: ${{ secrets.SHOPEE_USERNAME != '' }}
         env:
           SHOPEE_USERNAME: ${{ secrets.SHOPEE_USERNAME }}
           SHOPEE_PASSWORD: ${{ secrets.SHOPEE_PASSWORD }}
         run: |
+          if [ -z "$SHOPEE_USERNAME" ]; then
+            echo "SHOPEE_USERNAME not set — skipping auto-login"
+            exit 0
+          fi
           echo "=== Auto-login: getting fresh cookies ==="
           pip install playwright
           playwright install chromium --with-deps
