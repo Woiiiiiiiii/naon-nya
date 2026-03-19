@@ -188,9 +188,43 @@ def auto_login():
 
         try:
             # ═══════════════════════════════════════════════════════
+            #  STEP 0: Inject existing cookies (if available)
+            #  This uses cookies from secrets/env to authenticate
+            #  WITHOUT needing to fill the login form.
+            #  If cookies are valid, the browser is already logged in!
+            # ═══════════════════════════════════════════════════════
+            existing_cookies = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
+            if existing_cookies:
+                print("[AutoLogin] Step 0: Injecting existing cookies into browser...")
+                try:
+                    stored = json.loads(existing_cookies)
+                    # Playwright needs cookies in specific format with url or domain
+                    pw_cookies = []
+                    for c in stored:
+                        cookie = {
+                            'name': c.get('name', ''),
+                            'value': c.get('value', ''),
+                            'domain': c.get('domain', '.shopee.co.id'),
+                            'path': c.get('path', '/'),
+                        }
+                        # Only inject if name and value exist
+                        if cookie['name'] and cookie['value']:
+                            pw_cookies.append(cookie)
+                    
+                    if pw_cookies:
+                        context.add_cookies(pw_cookies)
+                        print(f"  ✅ Injected {len(pw_cookies)} cookies into browser")
+                    else:
+                        print("  ⚠️ No valid cookies to inject")
+                except (json.JSONDecodeError, TypeError) as e:
+                    print(f"  ⚠️ Could not parse stored cookies: {e}")
+            else:
+                print("[AutoLogin] Step 0: No stored cookies available")
+
+            # ═══════════════════════════════════════════════════════
             #  STEP 1: Go DIRECTLY to affiliate.shopee.co.id
-            #  This will redirect to the affiliate login page
-            #  (NOT shopee.co.id/buyer/login)
+            #  If cookies were injected, this should load without login.
+            #  If not, it will redirect to the login page.
             # ═══════════════════════════════════════════════════════
             print("[AutoLogin] Step 1: Navigating to affiliate.shopee.co.id...")
             page.goto(AFFILIATE_URL, timeout=30000)
