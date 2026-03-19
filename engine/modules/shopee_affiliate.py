@@ -568,14 +568,34 @@ def collect_affiliate_products(category, target=5):
             products_raw = prefetched.get(category, [])
             if products_raw:
                 print(f"  ✅ Found {len(products_raw)} pre-fetched products (via Playwright)")
+                # Debug: show raw field names from first product
+                if products_raw:
+                    print(f"  [DEBUG] First product keys: {list(products_raw[0].keys())}")
+                
                 all_products = []
                 for po in products_raw[:target]:
-                    product_name = po.get('product_name', '')
-                    product_image = po.get('product_image', '')
-                    product_link = po.get('long_link', '')
-                    commission = po.get('commission_rate', '0%')
-                    item_price = po.get('price', 0)
-                    shop_name = po.get('shop_name', '')
+                    # Flexible field mapping — try all known Shopee API field names
+                    product_name = (
+                        po.get('product_name') or po.get('item_name') or 
+                        po.get('name') or po.get('title') or ''
+                    )
+                    product_image = (
+                        po.get('product_image') or po.get('image') or 
+                        po.get('item_image') or po.get('image_url') or ''
+                    )
+                    product_link = (
+                        po.get('long_link') or po.get('product_link') or 
+                        po.get('offer_link') or po.get('item_url') or ''
+                    )
+                    commission = (
+                        po.get('commission_rate') or po.get('commission') or 
+                        po.get('ratio') or '0%'
+                    )
+                    item_price = (
+                        po.get('price') or po.get('product_price') or
+                        po.get('item_price') or po.get('original_price') or 0
+                    )
+                    shop_name = po.get('shop_name') or po.get('seller_name') or ''
                     
                     if not product_name:
                         continue
@@ -593,9 +613,12 @@ def collect_affiliate_products(category, target=5):
                         'commission': commission,
                         'shop_name': shop_name,
                     })
-                    print(f"      ✓ {product_name[:40]}")
                 
                 print(f"  → Pre-fetched: {len(all_products)} products for {category}")
+                if not all_products and products_raw:
+                    # If 0 products after filtering, show what went wrong
+                    sample = products_raw[0]
+                    print(f"  [DEBUG] Sample product data: { {k: str(v)[:30] for k, v in sample.items()} }")
                 return all_products
             else:
                 print(f"  ⚠️ Pre-fetch file exists but no products for '{category}'")

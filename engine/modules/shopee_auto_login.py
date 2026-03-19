@@ -114,15 +114,17 @@ def _fetch_products_via_browser(page):
                 if result and result.get('code') == 0:
                     products = result.get('data', {}).get('list', [])
                     print(f"  ✅ [{category}/{kw}] → {len(products)} products")
-                    for p in products:
-                        category_products.append({
-                            'product_name': p.get('product_name', p.get('item_name', '')),
-                            'product_image': p.get('product_image', p.get('image', '')),
-                            'long_link': p.get('long_link', p.get('product_link', '')),
-                            'commission_rate': p.get('commission_rate', '0%'),
-                            'price': p.get('price', p.get('product_price', 0)),
-                            'shop_name': p.get('shop_name', ''),
-                        })
+                    # Log raw field names from first product for debugging
+                    if products and not category_products:
+                        first = products[0]
+                        print(f"  [DEBUG] Raw API fields: {list(first.keys())}")
+                        # Show a sample of key values
+                        for key in ['product_name', 'item_name', 'name', 'product_image', 'image', 'long_link', 'product_link', 'offer_link']:
+                            if key in first:
+                                val = str(first[key])[:50]
+                                print(f"    {key} = {val}")
+                    # Save RAW data — let the reader handle field mapping
+                    category_products.extend(products)
                 else:
                     err = result.get('error', '?') if result else 'null'
                     print(f"  ❌ [{category}/{kw}] error={err}")
