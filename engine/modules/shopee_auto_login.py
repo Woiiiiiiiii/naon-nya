@@ -58,6 +58,28 @@ def _fetch_products_via_browser(page):
     """Fetch products from affiliate API using the browser's own fetch().
     This bypasses Shopee anti-bot because it runs in a REAL browser context."""
     print("\n[AutoLogin] Step 4B: Fetching products via browser...")
+    
+    # ── Ensure we're on affiliate.shopee.co.id (fetch uses relative URL) ──
+    current_url = page.url
+    print(f"  Current page: {current_url[:80]}")
+    
+    if 'affiliate.shopee.co.id' not in current_url:
+        print("  ⚠️ Not on affiliate domain! Navigating...")
+        try:
+            page.goto('https://affiliate.shopee.co.id/offer/brand_offer', 
+                      timeout=30000, wait_until='networkidle')
+            time.sleep(3)
+            current_url = page.url
+            print(f"  After navigation: {current_url[:80]}")
+            
+            if 'affiliate.shopee.co.id' not in current_url:
+                print("  ❌ Still not on affiliate domain — cannot fetch products")
+                return {}
+        except Exception as e:
+            print(f"  ❌ Navigation failed: {e}")
+            return {}
+    
+    print("  ✅ On affiliate domain — starting product fetch")
     all_results = {}
     
     for category, keywords in AFFILIATE_KEYWORDS.items():
