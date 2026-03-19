@@ -174,6 +174,10 @@ def check_cookies_health():
         'Referer': f'{AFFILIATE_BASE}/offer/brand_offer',
         'Origin': AFFILIATE_BASE,
     }
+    # Add CSRF token (required for authenticated API calls)
+    csrf = _get_csrftoken()
+    if csrf:
+        headers['x-csrftoken'] = csrf
     cookies_str = _build_cookie_string()
 
     try:
@@ -263,17 +267,47 @@ def _build_affiliate_session():
 
 
 def _build_cookie_string():
-    """Build cookie string from env for proxy requests."""
+    """Build cookie string from env for proxy requests.
+    Only includes cookies from Shopee-related domains."""
     cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
     if not cookies_raw:
         return ''
     try:
         cookies = json.loads(cookies_raw)
         if isinstance(cookies, list):
-            return '; '.join([f"{c.get('name','')}={c.get('value','')}"
-                              for c in cookies if c.get('name')])
+            # Filter: only include cookies from Shopee domains
+            shopee_cookies = []
+            for c in cookies:
+                domain = c.get('domain', '')
+                name = c.get('name', '')
+                value = c.get('value', '')
+                if not name or not value:
+                    continue
+                # Only include Shopee-related cookies
+                if 'shopee' in domain.lower():
+                    shopee_cookies.append(f"{name}={value}")
+            return '; '.join(shopee_cookies)
         elif isinstance(cookies, dict):
             return '; '.join([f'{k}={v}' for k, v in cookies.items()])
+    except Exception:
+        pass
+    return ''
+
+
+def _get_csrftoken():
+    """Extract csrftoken value from cookies for x-csrftoken header.
+    Shopee affiliate API requires this header for authenticated requests."""
+    cookies_raw = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
+    if not cookies_raw:
+        return ''
+    try:
+        cookies = json.loads(cookies_raw)
+        if isinstance(cookies, list):
+            for c in cookies:
+                if c.get('name') == 'csrftoken':
+                    return c.get('value', '')
+        elif isinstance(cookies, dict):
+            return cookies.get('csrftoken', '')
     except Exception:
         pass
     return ''
@@ -305,6 +339,14 @@ def get_affiliate_shops(keyword, session=None, limit=20):
         'Origin': AFFILIATE_BASE,
         'X-Requested-With': 'XMLHttpRequest',
     }
+
+    # Add CSRF token header (required by Shopee for authenticated API calls)
+    csrf = _get_csrftoken()
+    if csrf:
+        headers['x-csrftoken'] = csrf
+        print(f"    [Affiliate] CSRF token: {csrf[:10]}...")
+    else:
+        print("    [Affiliate] ⚠️ No csrftoken found in cookies!")
 
     try:
         # Try via proxy first (GitHub Actions IP is in US → blocked without proxy)
