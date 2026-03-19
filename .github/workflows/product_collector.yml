@@ -39,6 +39,15 @@ jobs:
         run: |
           pip install requests Pillow
 
+      # ── Restore cached cookies (PRIVATE, not in public repo) ──
+      - name: Restore Shopee Cookies Cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.shopee_cookies.json
+          key: shopee-cookies-${{ github.run_number }}
+          restore-keys: |
+            shopee-cookies-
+
       # ── Auto Cookie Refresh (PRIMARY METHOD) ─────────────────────
       # Gets FRESH cookies via auto-login before collecting products.
       # If SHOPEE_USERNAME not set, this step is skipped gracefully.

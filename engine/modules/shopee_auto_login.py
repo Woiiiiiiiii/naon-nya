@@ -29,6 +29,10 @@ MAX_WAIT_SECONDS = 60  # max wait for login to complete
 MIN_COOKIES_FOR_SUCCESS = 5  # at least 5 cookies = login likely worked
 PRODUCTS_OUTPUT_FILE = '/tmp/affiliate_products.json'
 
+# Cookie persistence — saved to /tmp and cached by GitHub Actions
+# Cache is PRIVATE (not visible in public repo)
+COOKIES_CACHE_FILE = '/tmp/.shopee_cookies.json'
+
 # Keywords per category — same as shopee_affiliate.py
 AFFILIATE_KEYWORDS = {
     'fashion': ['tas', 'sepatu', 'jam tangan', 'sneakers'],
@@ -191,16 +195,35 @@ def auto_login():
         try:
             # ═══════════════════════════════════════════════════════
             #  STEP 0: Inject existing cookies (if available)
-            #  This uses cookies from secrets/env to authenticate
-            #  WITHOUT needing to fill the login form.
-            #  If cookies are valid, the browser is already logged in!
+            #  Priority: 1) Repo file (auto-refreshed) 2) Env/Secrets
+            #  If cookies are valid, browser is already logged in!
+            #  Each run refreshes cookies → saves back → no manual update
             # ═══════════════════════════════════════════════════════
-            existing_cookies = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
+            cookie_source = None
+            existing_cookies = ''
+            
+            # Priority 1: Read from repo file (auto-refreshed cookies)
+            if os.path.exists(COOKIES_CACHE_FILE):
+                try:
+                    with open(COOKIES_CACHE_FILE, 'r') as f:
+                        existing_cookies = f.read().strip()
+                    if existing_cookies:
+                        cookie_source = 'cache file'
+                        print(f"[AutoLogin] Step 0: Found cookies in cache ({len(existing_cookies)} chars)")
+                except Exception:
+                    pass
+            
+            # Priority 2: Fall back to env/secrets
+            if not existing_cookies:
+                existing_cookies = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
+                if existing_cookies:
+                    cookie_source = 'env/secrets'
+                    print(f"[AutoLogin] Step 0: Using cookies from env/secrets ({len(existing_cookies)} chars)")
+            
             if existing_cookies:
-                print("[AutoLogin] Step 0: Injecting existing cookies into browser...")
+                print(f"  Cookie source: {cookie_source}")
                 try:
                     stored = json.loads(existing_cookies)
-                    # Playwright needs cookies in specific format with url or domain
                     pw_cookies = []
                     for c in stored:
                         cookie = {
@@ -209,7 +232,6 @@ def auto_login():
                             'domain': c.get('domain', '.shopee.co.id'),
                             'path': c.get('path', '/'),
                         }
-                        # Only inject if name and value exist
                         if cookie['name'] and cookie['value']:
                             pw_cookies.append(cookie)
                     
@@ -495,7 +517,9 @@ def auto_login():
                 print(f"[AutoLogin] Product fetch error (non-fatal): {e}")
 
             # ═══════════════════════════════════════════════════════
-            #  STEP 5: Export ALL cookies
+            #  STEP 5: Export ALL cookies + SAVE for next run
+            #  Cookies are saved to both GITHUB_ENV (current run)
+            #  and repo file (persisted for next run via git commit)
             # ═══════════════════════════════════════════════════════
             print("[AutoLogin] Step 5: Exporting cookies...")
             cookies = context.cookies()
@@ -507,6 +531,15 @@ def auto_login():
                 cookies = None
             else:
                 print(f"  ✅ Exporting {len(cookies)} cookies total")
+                # Save to cache file for auto-refresh on next run
+                try:
+                    cookies_json = json.dumps(cookies, ensure_ascii=False)
+                    with open(COOKIES_CACHE_FILE, 'w') as f:
+                        f.write(cookies_json)
+                    print(f"  ✅ Saved refreshed cookies to {COOKIES_CACHE_FILE}")
+                    print(f"     (cached by workflow for next run)")
+                except Exception as e:
+                    print(f"  ⚠️ Could not save cookies to cache: {e}")
 
         except Exception as e:
             print(f"[AutoLogin] ERROR: {e}")
