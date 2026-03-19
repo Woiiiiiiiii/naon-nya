@@ -568,44 +568,58 @@ def collect_affiliate_products(category, target=5):
             products_raw = prefetched.get(category, [])
             if products_raw:
                 print(f"  ✅ Found {len(products_raw)} pre-fetched products (via Playwright)")
-                # Debug: show raw field names from first product
-                if products_raw:
-                    print(f"  [DEBUG] First product keys: {list(products_raw[0].keys())}")
                 
                 all_products = []
                 for po in products_raw[:target]:
-                    # Flexible field mapping — try all known Shopee API field names
+                    # Shopee API structure:
+                    #   Top level: item_id, long_link, product_link, commission_rate, ...
+                    #   Nested:    batch_item_for_item_card_full → name, image, price, shopid, ...
+                    item_data = po.get('batch_item_for_item_card_full', {}) or {}
+                    
+                    # Extract name from nested item data
                     product_name = (
-                        po.get('product_name') or po.get('item_name') or 
-                        po.get('name') or po.get('title') or ''
+                        item_data.get('name') or item_data.get('item_name') or
+                        item_data.get('title') or
+                        po.get('product_name') or po.get('item_name') or po.get('name') or ''
                     )
-                    product_image = (
-                        po.get('product_image') or po.get('image') or 
-                        po.get('item_image') or po.get('image_url') or ''
+                    
+                    # Extract image from nested item data
+                    raw_image = (
+                        item_data.get('image') or item_data.get('item_image') or
+                        po.get('product_image') or po.get('image') or ''
                     )
-                    product_link = (
-                        po.get('long_link') or po.get('product_link') or 
-                        po.get('offer_link') or po.get('item_url') or ''
+                    if raw_image and not raw_image.startswith('http'):
+                        product_image = f"https://down-id.img.susercontent.com/file/{raw_image}"
+                    else:
+                        product_image = raw_image
+                    
+                    # Extract price from nested item data (Shopee prices are in units * 100000)
+                    raw_price = (
+                        item_data.get('price') or item_data.get('price_min') or
+                        po.get('price') or 0
                     )
+                    if isinstance(raw_price, (int, float)) and raw_price > 100000:
+                        item_price = raw_price / 100000  # Convert from Shopee price units
+                    else:
+                        item_price = raw_price
+                    
+                    # Top-level fields
+                    product_link = po.get('long_link') or po.get('product_link') or ''
                     commission = (
-                        po.get('commission_rate') or po.get('commission') or 
-                        po.get('ratio') or '0%'
+                        po.get('seller_commission_rate') or po.get('max_commission_rate') or
+                        po.get('default_commission_rate') or po.get('commission_rate') or '0%'
                     )
-                    item_price = (
-                        po.get('price') or po.get('product_price') or
-                        po.get('item_price') or po.get('original_price') or 0
+                    shop_name = (
+                        item_data.get('shop_name') or item_data.get('seller_name') or
+                        po.get('shop_name') or ''
                     )
-                    shop_name = po.get('shop_name') or po.get('seller_name') or ''
                     
                     if not product_name:
                         continue
                     
-                    if product_image and not product_image.startswith('http'):
-                        product_image = f"https://down-id.img.susercontent.com/file/{product_image}"
-                    
                     all_products.append({
                         'nama': product_name[:80],
-                        'price': f"Rp{item_price:,}".replace(',', '.') if isinstance(item_price, (int, float)) and item_price > 0 else 'Lihat harga',
+                        'price': f"Rp{int(item_price):,}".replace(',', '.') if isinstance(item_price, (int, float)) and item_price > 0 else 'Lihat harga',
                         'desc': product_name,
                         'image_url': product_image,
                         'shopee_url': product_link,
@@ -615,10 +629,12 @@ def collect_affiliate_products(category, target=5):
                     })
                 
                 print(f"  → Pre-fetched: {len(all_products)} products for {category}")
-                if not all_products and products_raw:
-                    # If 0 products after filtering, show what went wrong
+                if all_products:
+                    print(f"    Sample: {all_products[0]['nama'][:50]} | img={'YES' if all_products[0]['image_url'] else 'NO'}")
+                elif products_raw:
                     sample = products_raw[0]
-                    print(f"  [DEBUG] Sample product data: { {k: str(v)[:30] for k, v in sample.items()} }")
+                    nested = sample.get('batch_item_for_item_card_full', {})
+                    print(f"  [DEBUG] Nested keys: {list(nested.keys()) if isinstance(nested, dict) else type(nested)}")
                 return all_products
             else:
                 print(f"  ⚠️ Pre-fetch file exists but no products for '{category}'")
