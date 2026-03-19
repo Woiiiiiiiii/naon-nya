@@ -1037,8 +1037,30 @@ if __name__ == "__main__":
         sys.exit(0)
 
     cats = [args.category] if args.category else None
-    collect_products(categories=cats, target=args.target)
+    stats = collect_products(categories=cats, target=args.target)
 
     # Auto-export after collection
-    export_bank_to_csv()
-    copy_bank_images_to_pipeline()
+    n_exported = export_bank_to_csv()
+    n_copied = copy_bank_images_to_pipeline()
+
+    # ── EXIT CODE: fail if 0 products in bank ──
+    total_new = sum(s['new'] for s in stats.values()) if stats else 0
+    total_bank = sum(count_bank(c) for c in CATEGORIES)
+
+    print(f"\n{'=' * 60}")
+    print(f"  FINAL STATUS")
+    print(f"  New products collected : {total_new}")
+    print(f"  Total products in bank: {total_bank}")
+    print(f"  Exported to CSV       : {n_exported}")
+    print(f"  Images copied         : {n_copied}")
+    print(f"{'=' * 60}")
+
+    if total_bank == 0 and n_exported == 0:
+        print("\n  ❌ FAIL: Bank is empty — no products available for pipeline!")
+        print("  Check: SHOPEE_AFFILIATE_COOKIES, CF_PROXY_URL, CF_PROXY_KEY")
+        sys.exit(1)
+    elif total_new == 0 and total_bank > 0:
+        print(f"\n  ⚠️ No NEW products, but bank has {total_bank} existing products.")
+        print("  Pipeline can still use existing bank stock.")
+    else:
+        print(f"\n  ✅ Collection complete!")
