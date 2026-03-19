@@ -23,17 +23,19 @@ import sys
 import json
 import time
 
-# Critical cookies that MUST be present for affiliate API to work
-CRITICAL_COOKIES = ['SPC_EC', 'SPC_ST', 'SPC_U']
+# Cookies to LOOK FOR (but NOT required — affiliate works without them)
+# SPC_EC/SPC_ST/SPC_U are set by shopee.co.id login but not always needed
+DESIRED_COOKIES = ['SPC_EC', 'SPC_ST', 'SPC_U']
 MAX_WAIT_FOR_COOKIES = 30  # seconds
+MIN_COOKIES_FOR_SUCCESS = 5  # at least 5 cookies = login likely worked
 
 
-def _has_critical_cookies(context):
-    """Check if browser context has all critical SPC cookies."""
+def _has_desired_cookies(context):
+    """Check if browser context has desired SPC cookies (NOT required)."""
     cookies = context.cookies()
     names = {c['name'] for c in cookies}
-    missing = [c for c in CRITICAL_COOKIES if c not in names]
-    return len(missing) == 0, missing
+    missing = [c for c in DESIRED_COOKIES if c not in names]
+    return len(missing) == 0, missing, len(cookies)
 
 
 def _log_cookies(context, label=""):
@@ -187,40 +189,47 @@ def auto_login():
                 # ═══════════════════════════════════════════════════
                 print("[AutoLogin] Step 3: Waiting for session cookies...")
 
-                # Wait and poll for critical cookies
+                # Wait and poll for cookies (SPC desired but not required)
                 start = time.time()
                 while time.time() - start < MAX_WAIT_FOR_COOKIES:
                     time.sleep(2)
-                    has_all, missing = _has_critical_cookies(context)
+                    has_all, missing, total = _has_desired_cookies(context)
                     elapsed = int(time.time() - start)
-                    print(f"  [{elapsed}s] Missing: {', '.join(missing) if missing else 'NONE ✅'}")
+                    print(f"  [{elapsed}s] Total cookies: {total}, SPC missing: {', '.join(missing) if missing else 'NONE ✅'}")
 
                     if has_all:
-                        print(f"  ✅ All critical cookies found after {elapsed}s!")
+                        print(f"  ✅ All SPC cookies found after {elapsed}s!")
                         break
 
-                    # Check if stuck on login/captcha
+                    # Check if stuck on captcha
                     current_url = page.url
                     if 'verify' in current_url.lower() or 'captcha' in current_url.lower():
                         print("  ⚠️ CAPTCHA/verification detected!")
                         page.screenshot(path='/tmp/captcha.png')
                         browser.close()
                         return None
+
+                    # If we have enough cookies, don't wait for SPC
+                    if total >= MIN_COOKIES_FOR_SUCCESS:
+                        print(f"  ✅ Have {total} cookies (SPC optional) — continuing")
+                        break
                 else:
                     # Timeout — log what we DO have
                     print(f"  ⚠️ Timeout after {MAX_WAIT_FOR_COOKIES}s")
                     _log_cookies(context, "Timeout")
 
-                # Check if still on login page
+                # Check if still on login page with NO cookies
                 current_url = page.url
                 if 'login' in current_url.lower():
                     print(f"  ⚠️ Still on login page: {current_url}")
                     page.screenshot(path='/tmp/login_failed.png')
-                    # Don't return None yet — check if we got some cookies anyway
-                    has_all, _ = _has_critical_cookies(context)
-                    if not has_all:
+                    all_cookies = context.cookies()
+                    if len(all_cookies) < MIN_COOKIES_FOR_SUCCESS:
+                        print(f"  ❌ Login failed — only {len(all_cookies)} cookies (need {MIN_COOKIES_FOR_SUCCESS}+)")
                         browser.close()
                         return None
+                    else:
+                        print(f"  ⚠️ On login page but have {len(all_cookies)} cookies — proceeding")
 
             # ═══════════════════════════════════════════════════════
             #  STEP 4: Navigate to main Shopee to trigger cookie set
@@ -256,13 +265,11 @@ def auto_login():
             cookies = context.cookies()
             _log_cookies(context, "Final export")
 
-            # Final check
-            has_all, missing = _has_critical_cookies(context)
+            # Final check — SPC_EC/SPC_ST are nice to have, not required
+            has_all, missing, total = _has_desired_cookies(context)
             if not has_all:
-                print(f"  ⚠️ WARNING: Still missing: {', '.join(missing)}")
-                print(f"  Will proceed anyway with {len(cookies)} cookies")
-            else:
-                print(f"  ✅ All {len(CRITICAL_COOKIES)} critical cookies present!")
+                print(f"  ℹ️ SPC cookies missing: {', '.join(missing)} (OK — affiliate works without them)")
+            print(f"  ✅ Exporting {len(cookies)} cookies total")
 
         except Exception as e:
             print(f"[AutoLogin] ERROR: {e}")
