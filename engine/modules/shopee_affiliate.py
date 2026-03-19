@@ -67,7 +67,9 @@ _COOKIES_VALID = None  # Cached result: True/False/None (unknown)
 
 
 def _check_cookie_expiry(cookies_raw):
-    """Check if critical cookies have expired based on expirationDate."""
+    """Check if cookies are valid and not all expired.
+    Does NOT require specific cookie names — the API health check
+    (Step 4 in check_cookies_health) handles actual auth validation."""
     try:
         cookies = json.loads(cookies_raw)
         if not isinstance(cookies, list):
@@ -75,27 +77,21 @@ def _check_cookie_expiry(cookies_raw):
 
         import time as _time
         now = _time.time()
-        critical = ['SPC_EC', 'SPC_ST', 'SPC_U']
-        expired = []
-        found = []
+        total = len(cookies)
+        expired = 0
 
         for c in cookies:
-            name = c.get('name', '')
             exp = c.get('expirationDate', 0)
-            if name in critical:
-                found.append(name)
-                if exp and exp < now:
-                    expired.append(f"{name} (expired {_time.strftime('%Y-%m-%d', _time.localtime(exp))})")
+            is_session = c.get('session', False)
+            if exp and exp < now and not is_session:
+                expired += 1
 
-        if expired:
-            print(f"  ⚠️  EXPIRED COOKIES: {', '.join(expired)}")
-            print(f"  ⚠️  Please re-export cookies from affiliate.shopee.co.id")
+        if expired > 0 and expired == total:
+            print(f"  ⚠️  ALL {total} cookies expired! Please refresh.")
             return False
 
-        if not found:
-            print(f"  ⚠️  No critical cookies found (SPC_EC, SPC_ST, SPC_U)")
-            print(f"  ⚠️  Make sure to export cookies from affiliate.shopee.co.id")
-            return False
+        if expired > 0:
+            print(f"  [Cookies] {expired}/{total} cookies expired (some still valid)")
 
         return True
     except Exception:
