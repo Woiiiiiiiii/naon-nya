@@ -633,20 +633,24 @@ def collect_products(categories=None, target=None):
     if target is None:
         target = TARGET_PER_CATEGORY
 
-    # ── Pre-flight: Check if affiliate cookies are valid ──
-    affiliate_ok = False
-    try:
-        from shopee_affiliate import check_cookies_health
-        affiliate_ok = check_cookies_health()
-        if not affiliate_ok:
-            print("\n  ══════════════════════════════════════════════")
-            print("  ⚠️  AFFILIATE COOKIES EXPIRED/INVALID!")
-            print("  ⚠️  Layers 0 and 1+2 (affiliate API) will be SKIPPED")
-            print("  ⚠️  Only Layer 3+4 fallback will be used")
-            print("  ⚠️  → Update SHOPEE_AFFILIATE_COOKIES secret with fresh cookies")
-            print("  ══════════════════════════════════════════════\n")
-    except ImportError:
-        print("  [SKIP] shopee_affiliate module not found")
+    # ── Pre-flight: Check if cookies are SET (not if they're valid) ──
+    # Health check is diagnostic only — does NOT block collection.
+    # Each layer handles its own errors gracefully.
+    has_cookies = bool(os.environ.get('SHOPEE_AFFILIATE_COOKIES', ''))
+    if not has_cookies:
+        print("\n  ⚠️ SHOPEE_AFFILIATE_COOKIES not set — Layer 0/1/2 will be skipped")
+    else:
+        print(f"  ✅ SHOPEE_AFFILIATE_COOKIES set ({len(os.environ.get('SHOPEE_AFFILIATE_COOKIES', ''))} chars)")
+        # Diagnostic only — log health but don't block
+        try:
+            from shopee_affiliate import check_cookies_health
+            health = check_cookies_health()
+            if not health:
+                print("  ⚠️ Health check returned False — but will TRY layers anyway")
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"  ⚠️ Health check error: {e} — will TRY layers anyway")
 
     # Build Shopee session for legacy search (rarely used)
     shopee_session = _build_shopee_session()
@@ -669,8 +673,8 @@ def collect_products(categories=None, target=None):
         # ══════════════════════════════════════════════════════════
         #  LAYER 0: Shopee Affiliate API (PRIMARY)
         # ══════════════════════════════════════════════════════════
-        if not affiliate_ok:
-            print(f"  [SKIP] Layer 0 — affiliate cookies invalid")
+        if not has_cookies:
+            print(f"  [SKIP] Layer 0 — no cookies set")
         else:
             try:
                 from shopee_affiliate import collect_affiliate_products
@@ -710,7 +714,7 @@ def collect_products(categories=None, target=None):
         #  Uses PROVEN /api/v3/offer/shop/list → get_shop_products
         #  (product/list endpoint also blocked by 90309999)
         # ══════════════════════════════════════════════════════════
-        if collected < need and affiliate_ok:
+        if collected < need and has_cookies:
             try:
                 from shopee_affiliate import get_affiliate_shops, \
                     get_shop_products, _build_affiliate_session, \
