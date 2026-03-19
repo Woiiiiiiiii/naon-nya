@@ -54,6 +54,12 @@ def _log_cookies(context, label=""):
     return cookies
 
 
+def _is_on_affiliate(url):
+    """Check if URL hostname is affiliate.shopee.co.id (not just substring)."""
+    from urllib.parse import urlparse
+    return urlparse(url).hostname == 'affiliate.shopee.co.id'
+
+
 def _fetch_products_via_browser(page):
     """Fetch products from affiliate API using the browser's own fetch().
     This bypasses Shopee anti-bot because it runs in a REAL browser context."""
@@ -61,19 +67,21 @@ def _fetch_products_via_browser(page):
     
     # ── Ensure we're on affiliate.shopee.co.id (fetch uses relative URL) ──
     current_url = page.url
-    print(f"  Current page: {current_url[:80]}")
+    print(f"  Current page: {current_url[:120]}")
     
-    if 'affiliate.shopee.co.id' not in current_url:
-        print("  ⚠️ Not on affiliate domain! Navigating...")
+    if not _is_on_affiliate(current_url):
+        print(f"  ⚠️ Not on affiliate domain (hostname={__import__('urllib.parse', fromlist=['urlparse']).urlparse(current_url).hostname})")
+        print("  Navigating to affiliate.shopee.co.id...")
         try:
             page.goto('https://affiliate.shopee.co.id/offer/brand_offer', 
                       timeout=30000, wait_until='networkidle')
             time.sleep(3)
             current_url = page.url
-            print(f"  After navigation: {current_url[:80]}")
+            print(f"  After navigation: {current_url[:120]}")
             
-            if 'affiliate.shopee.co.id' not in current_url:
-                print("  ❌ Still not on affiliate domain — cannot fetch products")
+            if not _is_on_affiliate(current_url):
+                print("  ❌ Still not on affiliate domain — login probably failed")
+                print("  ❌ Cannot fetch products without valid session")
                 return {}
         except Exception as e:
             print(f"  ❌ Navigation failed: {e}")
