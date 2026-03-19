@@ -195,10 +195,8 @@ def auto_login():
 
             # ═══════════════════════════════════════════════════════
             #  STEP 2: Handle login
-            #  affiliate.shopee.co.id may redirect to:
-            #  a) Its own login form
-            #  b) Shopee SSO login
-            #  c) Already logged in (if cookies exist)
+            #  Shopee is a React SPA — form renders AFTER JS loads.
+            #  We must WAIT for input elements to appear.
             # ═══════════════════════════════════════════════════════
             needs_login = (
                 'login' in current_url.lower() or
@@ -217,23 +215,58 @@ def auto_login():
             if needs_login:
                 print(f"[AutoLogin] Step 2: Login required at: {current_url}")
 
+                # ── Wait for SPA to render the form ──
+                # Shopee login is a React SPA: <div id="main"></div>
+                # Form elements appear AFTER JS bundle loads and executes
+                print("  Waiting for login form to render (SPA)...")
+                form_found = False
+                try:
+                    page.wait_for_selector(
+                        'input[type="text"], input[type="password"], input[name="loginKey"], input[placeholder]',
+                        timeout=15000
+                    )
+                    form_found = True
+                    print("  ✅ Form elements detected")
+                except Exception:
+                    print("  ⚠️ Form not rendered after 15s — trying anyway")
+                
+                time.sleep(2)  # Extra wait for all form fields
+                
+                # ── Debug: log ALL visible inputs ──
+                all_inputs = page.query_selector_all('input')
+                print(f"  Found {len(all_inputs)} input elements:")
+                for i, inp in enumerate(all_inputs):
+                    try:
+                        inp_type = inp.get_attribute('type') or '?'
+                        inp_name = inp.get_attribute('name') or '?'
+                        inp_ph = inp.get_attribute('placeholder') or '?'
+                        inp_ac = inp.get_attribute('autocomplete') or '?'
+                        vis = inp.is_visible()
+                        print(f"    [{i}] type={inp_type}, name={inp_name}, placeholder={inp_ph}, autocomplete={inp_ac}, visible={vis}")
+                    except Exception:
+                        print(f"    [{i}] (error reading attributes)")
+                
+                page.screenshot(path='/tmp/login_form.png')
+
                 # ── Fill username ──
+                # Strategy: try specific selectors first, then fall back 
+                # to first visible text-like input
                 username_selectors = [
                     'input[name="loginKey"]',
                     'input[name="username"]',
                     'input[name="email"]',
                     'input[autocomplete="username"]',
-                    'input[type="text"]:not([type="hidden"])',
+                    'input[type="text"]',
                     'input[type="email"]',
+                    'input[type="tel"]',
                     'input[placeholder*="Email"]',
                     'input[placeholder*="email"]',
                     'input[placeholder*="phone"]',
                     'input[placeholder*="Nomor"]',
-                    'input[placeholder*="Login"]',
+                    'input[placeholder*="No."]',
                     'input[placeholder*="Username"]',
+                    'input[placeholder*="Masuk"]',
                     '.shopee-input__input',
-                    '#username',
-                    '#email',
                 ]
 
                 username_filled = False
@@ -243,10 +276,8 @@ def auto_login():
                         if el and el.is_visible():
                             el.click()
                             time.sleep(0.5)
-                            # Clear existing value first
                             el.fill('')
                             time.sleep(0.2)
-                            # Type character by character (more human-like)
                             page.keyboard.type(username, delay=50)
                             username_filled = True
                             print(f"  ✅ Username filled via: {sel}")
@@ -255,16 +286,26 @@ def auto_login():
                         continue
 
                 if not username_filled:
-                    print("  ⚠️ Could not find username field!")
-                    # Try finding ANY visible text input
-                    all_inputs = page.query_selector_all('input:visible')
-                    print(f"  Visible inputs: {len(all_inputs)}")
-                    for i, inp in enumerate(all_inputs):
-                        inp_type = inp.get_attribute('type') or 'text'
-                        inp_name = inp.get_attribute('name') or '?'
-                        inp_ph = inp.get_attribute('placeholder') or '?'
-                        print(f"    [{i}] type={inp_type}, name={inp_name}, placeholder={inp_ph}")
-                    page.screenshot(path='/tmp/login_page.png')
+                    # Last resort: fill first visible non-password input
+                    print("  ⚠️ No specific selector worked — trying first visible input")
+                    for inp in all_inputs:
+                        try:
+                            inp_type = inp.get_attribute('type') or 'text'
+                            if inp_type not in ('password', 'hidden', 'submit', 'button', 'checkbox') and inp.is_visible():
+                                inp.click()
+                                time.sleep(0.5)
+                                inp.fill('')
+                                time.sleep(0.2)
+                                page.keyboard.type(username, delay=50)
+                                username_filled = True
+                                print(f"  ✅ Username filled via: first visible input (type={inp_type})")
+                                break
+                        except Exception:
+                            continue
+                    
+                    if not username_filled:
+                        print("  ❌ Could not find username field!")
+                        page.screenshot(path='/tmp/login_page.png')
 
                 time.sleep(1)
 
