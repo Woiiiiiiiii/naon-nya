@@ -66,20 +66,20 @@ def _fetch_products_via_browser(page):
         for kw in keywords[:2]:
             try:
                 # Call affiliate API via browser's fetch() — same origin, no CORS
-                result = page.evaluate(f"""
-                    async () => {{
-                        try {{
+                result = page.evaluate("""
+                    async (keyword) => {
+                        try {
                             const resp = await fetch(
-                                '/api/v3/offer/product/list?sort_type=1&page_offset=0&page_limit=10&keyword={kw}',
-                                {{headers: {{'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}}}}
+                                '/api/v3/offer/product/list?sort_type=1&page_offset=0&page_limit=10&keyword=' + encodeURIComponent(keyword),
+                                {headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}}
                             );
-                            if (!resp.ok) return {{error: resp.status, text: await resp.text().catch(() => '')}};
+                            if (!resp.ok) return {error: resp.status, text: await resp.text().catch(() => '')};
                             return await resp.json();
-                        }} catch(e) {{
-                            return {{error: e.message}};
-                        }}
-                    }}
-                """)
+                        } catch(e) {
+                            return {error: e.message};
+                        }
+                    }
+                """, kw)
                 
                 if result and result.get('code') == 0:
                     products = result.get('data', {}).get('list', [])
