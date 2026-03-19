@@ -550,14 +550,60 @@ def collect_affiliate_products(category, target=5):
     """Collect products via Shopee Affiliate Dashboard API.
     
     Flow:
-      1. Try product offer API (/api/v3/offer/product/list) → direct products
-      2. Try shop offer API (/api/v3/offer/shop/list) → shops → products
-      3. Build affiliate links for each product
-      4. Return product list ready for bank storage
+      1. Check if auto-login pre-fetched products (from Playwright browser)
+      2. If not, try HTTP API calls (may fail due to anti-bot)
+      3. Return product list ready for bank storage
       
     Returns: list of dicts with nama, price, image_url, shopee_url, source, commission
     """
     print(f"\n  === Affiliate API: {category} (target={target}) ===")
+    
+    # ── Check for pre-fetched products from auto-login (Playwright) ──
+    prefetch_file = '/tmp/affiliate_products.json'
+    try:
+        if os.path.exists(prefetch_file):
+            with open(prefetch_file, 'r') as f:
+                prefetched = json.load(f)
+            
+            products_raw = prefetched.get(category, [])
+            if products_raw:
+                print(f"  ✅ Found {len(products_raw)} pre-fetched products (via Playwright)")
+                all_products = []
+                for po in products_raw[:target]:
+                    product_name = po.get('product_name', '')
+                    product_image = po.get('product_image', '')
+                    product_link = po.get('long_link', '')
+                    commission = po.get('commission_rate', '0%')
+                    item_price = po.get('price', 0)
+                    shop_name = po.get('shop_name', '')
+                    
+                    if not product_name:
+                        continue
+                    
+                    if product_image and not product_image.startswith('http'):
+                        product_image = f"https://down-id.img.susercontent.com/file/{product_image}"
+                    
+                    all_products.append({
+                        'nama': product_name[:80],
+                        'price': f"Rp{item_price:,}".replace(',', '.') if isinstance(item_price, (int, float)) and item_price > 0 else 'Lihat harga',
+                        'desc': product_name,
+                        'image_url': product_image,
+                        'shopee_url': product_link,
+                        'source': 'shopee_affiliate_product',
+                        'commission': commission,
+                        'shop_name': shop_name,
+                    })
+                    print(f"      ✓ {product_name[:40]}")
+                
+                print(f"  → Pre-fetched: {len(all_products)} products for {category}")
+                return all_products
+            else:
+                print(f"  ⚠️ Pre-fetch file exists but no products for '{category}'")
+    except Exception as e:
+        print(f"  ⚠️ Pre-fetch read error: {e}")
+    
+    # ── Fallback: HTTP requests (for local dev, may fail in CI) ──
+    print(f"  [Fallback] Trying HTTP API calls...")
     session = _build_affiliate_session()
 
     keywords = AFFILIATE_KEYWORDS.get(category, [category])

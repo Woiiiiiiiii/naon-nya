@@ -27,6 +27,16 @@ AFFILIATE_URL = "https://affiliate.shopee.co.id"
 KOMISI_XTRA_URL = f"{AFFILIATE_URL}/offer/brand_offer"
 MAX_WAIT_SECONDS = 60  # max wait for login to complete
 MIN_COOKIES_FOR_SUCCESS = 5  # at least 5 cookies = login likely worked
+PRODUCTS_OUTPUT_FILE = '/tmp/affiliate_products.json'
+
+# Keywords per category — same as shopee_affiliate.py
+AFFILIATE_KEYWORDS = {
+    'fashion': ['tas', 'sepatu', 'jam tangan', 'sneakers'],
+    'gadget': ['earphone', 'powerbank', 'smartwatch', 'speaker'],
+    'beauty': ['skincare', 'serum', 'sunscreen', 'makeup'],
+    'home': ['rumah tangga', 'lampu', 'organizer', 'vacuum'],
+    'wellness': ['olahraga', 'fitness', 'botol minum', 'vitamin'],
+}
 
 
 def _log_cookies(context, label=""):
@@ -42,6 +52,67 @@ def _log_cookies(context, label=""):
         if name.startswith('SPC_') or name in ('csrftoken', 'ds', 'sessionid'):
             print(f"    {name}: domain={c['domain']}, val={c['value'][:20]}...")
     return cookies
+
+
+def _fetch_products_via_browser(page):
+    """Fetch products from affiliate API using the browser's own fetch().
+    This bypasses Shopee anti-bot because it runs in a REAL browser context."""
+    print("\n[AutoLogin] Step 4B: Fetching products via browser...")
+    all_results = {}
+    
+    for category, keywords in AFFILIATE_KEYWORDS.items():
+        category_products = []
+        # Use 2 keywords per category
+        for kw in keywords[:2]:
+            try:
+                # Call affiliate API via browser's fetch() — same origin, no CORS
+                result = page.evaluate(f"""
+                    async () => {{
+                        try {{
+                            const resp = await fetch(
+                                '/api/v3/offer/product/list?sort_type=1&page_offset=0&page_limit=10&keyword={kw}',
+                                {{headers: {{'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}}}}
+                            );
+                            if (!resp.ok) return {{error: resp.status, text: await resp.text().catch(() => '')}};
+                            return await resp.json();
+                        }} catch(e) {{
+                            return {{error: e.message}};
+                        }}
+                    }}
+                """)
+                
+                if result and result.get('code') == 0:
+                    products = result.get('data', {}).get('list', [])
+                    print(f"  ✅ [{category}/{kw}] → {len(products)} products")
+                    for p in products:
+                        category_products.append({
+                            'product_name': p.get('product_name', p.get('item_name', '')),
+                            'product_image': p.get('product_image', p.get('image', '')),
+                            'long_link': p.get('long_link', p.get('product_link', '')),
+                            'commission_rate': p.get('commission_rate', '0%'),
+                            'price': p.get('price', p.get('product_price', 0)),
+                            'shop_name': p.get('shop_name', ''),
+                        })
+                else:
+                    err = result.get('error', '?') if result else 'null'
+                    print(f"  ❌ [{category}/{kw}] error={err}")
+                
+                time.sleep(1)  # Rate limit between requests
+            except Exception as e:
+                print(f"  ❌ [{category}/{kw}] Exception: {e}")
+        
+        all_results[category] = category_products
+        print(f"  [{category}] Total: {len(category_products)} products")
+    
+    total = sum(len(v) for v in all_results.values())
+    print(f"\n  → Total products fetched: {total}")
+    
+    if total > 0:
+        with open(PRODUCTS_OUTPUT_FILE, 'w') as f:
+            json.dump(all_results, f, ensure_ascii=False)
+        print(f"  → Saved to {PRODUCTS_OUTPUT_FILE}")
+    
+    return all_results
 
 
 def auto_login():
@@ -305,6 +376,16 @@ def auto_login():
                     print("  ✅ Komisi XTRA page loaded — session valid!")
             except Exception as e:
                 print(f"  Komisi XTRA navigation: {e}")
+
+            # ═══════════════════════════════════════════════════════
+            #  STEP 4B: Fetch products via browser API
+            #  Uses page.evaluate(fetch()) — runs in real browser
+            #  context so Shopee's anti-bot doesn't block it
+            # ═══════════════════════════════════════════════════════
+            try:
+                _fetch_products_via_browser(page)
+            except Exception as e:
+                print(f"[AutoLogin] Product fetch error (non-fatal): {e}")
 
             # ═══════════════════════════════════════════════════════
             #  STEP 5: Export ALL cookies
