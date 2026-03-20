@@ -30,6 +30,55 @@ CF_GENERATED_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'back
 PHOTO_BG_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'backgrounds', 'photo')
 
 
+def _get_font(size=24):
+    """Get a font, falling back to default if no system fonts available."""
+    try:
+        return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", size)
+    except (OSError, IOError):
+        try:
+            return ImageFont.truetype("arial.ttf", size)
+        except (OSError, IOError):
+            return ImageFont.load_default()
+
+
+def add_badge(canvas_rgba, text, position, accent_color):
+    """Add a colored badge with text (e.g. 'BEST SELLER') onto the canvas."""
+    draw = ImageDraw.Draw(canvas_rgba)
+    font = _get_font(22)
+    px, py = position
+
+    # Measure text
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    pad_x, pad_y = 16, 8
+
+    # Draw rounded rectangle badge
+    badge_rect = [px, py, px + tw + pad_x * 2, py + th + pad_y * 2]
+    draw.rounded_rectangle(badge_rect, radius=8, fill=accent_color)
+    draw.text((px + pad_x, py + pad_y), text, fill='white', font=font)
+
+    return canvas_rgba
+
+
+def add_watermark(canvas_rgba, channel_name):
+    """Add a semi-transparent channel name watermark at the bottom."""
+    W, H = canvas_rgba.size
+    overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    font = _get_font(18)
+
+    text = f"@{channel_name}"
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+
+    x = W - tw - 20
+    y = H - 40
+    # Semi-transparent white text
+    draw.text((x, y), text, fill=(255, 255, 255, 120), font=font)
+    canvas_rgba = Image.alpha_composite(canvas_rgba, overlay)
+    return canvas_rgba
+
+
 def get_random_background(category):
     """Get random background — prefer CF SD generated, fallback to photo dir."""
     # Priority 1: CF Stable Diffusion generated backgrounds
