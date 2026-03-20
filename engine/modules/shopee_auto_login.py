@@ -139,7 +139,7 @@ def _fetch_products_via_browser(page):
         
         all_results[category] = category_products
         print(f"  [{category}] Total: {len(category_products)} products")
-    
+
     total = sum(len(v) for v in all_results.values())
     print(f"\n  → Total products fetched: {total}")
     
@@ -149,6 +149,88 @@ def _fetch_products_via_browser(page):
         print(f"  → Saved to {PRODUCTS_OUTPUT_FILE}")
     
     return all_results
+
+
+def _validate_cookies_via_proxy(cookies_json_str):
+    """Validate cookies by calling affiliate API through CF proxy.
+    
+    This bypasses CAPTCHA because:
+    - API calls don't trigger CAPTCHA (no browser detection)
+    - CF Worker IP is a Cloudflare PoP IP (not datacenter)
+    
+    Returns: cookies_json_str if valid, None if expired/invalid
+    """
+    if not cookies_json_str:
+        return None
+    
+    try:
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from shopee_proxy import proxy_get_json, is_proxy_available
+        
+        if not is_proxy_available():
+            print("[CookieCheck] CF proxy not available — skipping API check")
+            return None
+        
+        # Parse cookies JSON (Playwright format) → cookie string
+        cookies = json.loads(cookies_json_str)
+        cookie_parts = []
+        for c in cookies:
+            name = c.get('name', '')
+            value = c.get('value', '')
+            if name and value:
+                cookie_parts.append(f"{name}={value}")
+        
+        if not cookie_parts:
+            print("[CookieCheck] No valid cookies to test")
+            return None
+        
+        cookies_str = '; '.join(cookie_parts)
+        
+        # Call affiliate API via CF proxy
+        test_url = "https://affiliate.shopee.co.id/api/v3/offer/product/list"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Referer': 'https://affiliate.shopee.co.id/',
+            'X-Requested-With': 'XMLHttpRequest',
+        }
+        params = {
+            'sort_type': '1',
+            'page_offset': '0',
+            'page_limit': '1',
+            'keyword': 'tas',
+        }
+        
+        from urllib.parse import urlencode
+        full_url = f"{test_url}?{urlencode(params)}"
+        
+        print("[CookieCheck] Testing cookies via CF proxy API call...")
+        status, data = proxy_get_json(full_url, headers=headers, cookies_str=cookies_str)
+        
+        if status == 200 and data:
+            code = data.get('code', -1)
+            if code == 0:
+                products = data.get('data', {}).get('list', [])
+                print(f"[CookieCheck] ✅ Cookies VALID! API returned {len(products)} products")
+                return cookies_json_str
+            elif code == 30002:
+                print(f"[CookieCheck] ❌ Cookies EXPIRED (code={code}: cookie incorrect)")
+                return None
+            else:
+                print(f"[CookieCheck] ⚠️ API code={code}, msg={data.get('msg', '?')}")
+                # Unknown code — treat as invalid
+                return None
+        else:
+            print(f"[CookieCheck] ⚠️ HTTP {status} — cannot validate")
+            return None
+            
+    except ImportError:
+        print("[CookieCheck] shopee_proxy not available — skipping")
+        return None
+    except Exception as e:
+        print(f"[CookieCheck] Error: {e}")
+        return None
 
 
 def auto_login():
@@ -162,11 +244,43 @@ def auto_login():
 
     print(f"[AutoLogin] Logging in as: {username[:3]}***{username[-3:]}")
 
+    # ═══════════════════════════════════════════════════════════════
+    #  PRE-CHECK: Validate existing cookies via CF proxy API call
+    #  If cookies still work → return them immediately (skip browser!)
+    #  This avoids CAPTCHA entirely since API calls don't trigger it
+    # ═══════════════════════════════════════════════════════════════
+    existing_cookies = ''
+    if os.path.exists(COOKIES_CACHE_FILE):
+        try:
+            with open(COOKIES_CACHE_FILE, 'r') as f:
+                existing_cookies = f.read().strip()
+        except Exception:
+            pass
+    if not existing_cookies:
+        existing_cookies = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
+    
+    if existing_cookies:
+        validated = _validate_cookies_via_proxy(existing_cookies)
+        if validated:
+            print("[AutoLogin] ✅ Cookies validated via API — skipping browser login!")
+            # Save as cache + set marker for workflow
+            try:
+                with open(COOKIES_CACHE_FILE, 'w') as f:
+                    f.write(validated)
+                with open('/tmp/.cookies_session_valid', 'w') as f:
+                    f.write('1')
+            except Exception:
+                pass
+            return validated
+        else:
+            print("[AutoLogin] Cookies invalid via API — proceeding to browser login...")
+
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         print("[AutoLogin] ERROR: playwright not installed")
         return None
+
 
     cookies = None
 
