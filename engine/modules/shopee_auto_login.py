@@ -1,4 +1,4 @@
-"""
+﻿"""
 shopee_auto_login.py
 Automatically login to affiliate.shopee.co.id and export fresh cookies.
 
@@ -29,11 +29,11 @@ MAX_WAIT_SECONDS = 60  # max wait for login to complete
 MIN_COOKIES_FOR_SUCCESS = 5  # at least 5 cookies = login likely worked
 PRODUCTS_OUTPUT_FILE = '/tmp/affiliate_products.json'
 
-# Cookie persistence — saved to /tmp and cached by GitHub Actions
+# Cookie persistence â€” saved to /tmp and cached by GitHub Actions
 # Cache is PRIVATE (not visible in public repo)
 COOKIES_CACHE_FILE = '/tmp/.shopee_cookies.json'
 
-# Keywords per category — same as shopee_affiliate.py
+# Keywords per category â€” same as shopee_affiliate.py
 AFFILIATE_KEYWORDS = {
     'fashion': ['tas', 'sepatu', 'jam tangan', 'sneakers'],
     'gadget': ['earphone', 'powerbank', 'smartwatch', 'speaker'],
@@ -69,12 +69,12 @@ def _fetch_products_via_browser(page):
     This bypasses Shopee anti-bot because it runs in a REAL browser context."""
     print("\n[AutoLogin] Step 4B: Fetching products via browser...")
     
-    # ── Ensure we're on affiliate.shopee.co.id (fetch uses relative URL) ──
+    # â”€â”€ Ensure we're on affiliate.shopee.co.id (fetch uses relative URL) â”€â”€
     current_url = page.url
     print(f"  Current page: {current_url[:120]}")
     
     if not _is_on_affiliate(current_url):
-        print(f"  ⚠️ Not on affiliate domain (hostname={__import__('urllib.parse', fromlist=['urlparse']).urlparse(current_url).hostname})")
+        print(f"  âš ï¸ Not on affiliate domain (hostname={__import__('urllib.parse', fromlist=['urlparse']).urlparse(current_url).hostname})")
         print("  Navigating to affiliate.shopee.co.id...")
         try:
             page.goto('https://affiliate.shopee.co.id/offer/brand_offer', 
@@ -84,14 +84,14 @@ def _fetch_products_via_browser(page):
             print(f"  After navigation: {current_url[:120]}")
             
             if not _is_on_affiliate(current_url):
-                print("  ❌ Still not on affiliate domain — login probably failed")
-                print("  ❌ Cannot fetch products without valid session")
+                print("  âŒ Still not on affiliate domain â€” login probably failed")
+                print("  âŒ Cannot fetch products without valid session")
                 return {}
         except Exception as e:
-            print(f"  ❌ Navigation failed: {e}")
+            print(f"  âŒ Navigation failed: {e}")
             return {}
     
-    print("  ✅ On affiliate domain — starting product fetch")
+    print("  âœ… On affiliate domain â€” starting product fetch")
     all_results = {}
     
     for category, keywords in AFFILIATE_KEYWORDS.items():
@@ -99,7 +99,7 @@ def _fetch_products_via_browser(page):
         # Use 2 keywords per category
         for kw in keywords[:2]:
             try:
-                # Call affiliate API via browser's fetch() — same origin, no CORS
+                # Call affiliate API via browser's fetch() â€” same origin, no CORS
                 result = page.evaluate("""
                     async (keyword) => {
                         try {
@@ -117,7 +117,7 @@ def _fetch_products_via_browser(page):
                 
                 if result and result.get('code') == 0:
                     products = result.get('data', {}).get('list', [])
-                    print(f"  ✅ [{category}/{kw}] → {len(products)} products")
+                    print(f"  âœ… [{category}/{kw}] â†’ {len(products)} products")
                     # Log raw field names from first product for debugging
                     if products and not category_products:
                         first = products[0]
@@ -127,36 +127,35 @@ def _fetch_products_via_browser(page):
                             if key in first:
                                 val = str(first[key])[:50]
                                 print(f"    {key} = {val}")
-                    # Save RAW data — let the reader handle field mapping
+                    # Save RAW data â€” let the reader handle field mapping
                     category_products.extend(products)
                 else:
                     err = result.get('error', '?') if result else 'null'
-                    print(f"  ❌ [{category}/{kw}] error={err}")
+                    print(f"  âŒ [{category}/{kw}] error={err}")
                 
                 time.sleep(1)  # Rate limit between requests
             except Exception as e:
-                print(f"  ❌ [{category}/{kw}] Exception: {e}")
+                print(f"  âŒ [{category}/{kw}] Exception: {e}")
         
         all_results[category] = category_products
         print(f"  [{category}] Total: {len(category_products)} products")
 
     total = sum(len(v) for v in all_results.values())
-    print(f"\n  → Total products fetched: {total}")
+    print(f"\n  â†’ Total products fetched: {total}")
     
     if total > 0:
         with open(PRODUCTS_OUTPUT_FILE, 'w') as f:
             json.dump(all_results, f, ensure_ascii=False)
-        print(f"  → Saved to {PRODUCTS_OUTPUT_FILE}")
+        print(f"  â†’ Saved to {PRODUCTS_OUTPUT_FILE}")
     
     return all_results
 
-
-def _validate_cookies_via_proxy(cookies_json_str):
-    """Validate cookies by calling affiliate API through CF proxy.
+def _validate_cookies_via_api(cookies_json_str):
+    """Validate cookies by calling Shopee affiliate API.
     
-    This bypasses CAPTCHA because:
-    - API calls don't trigger CAPTCHA (no browser detection)
-    - CF Worker IP is a Cloudflare PoP IP (not datacenter)
+    Tries TWO methods:
+      1. Via CF proxy (if available) â€” Cloudflare PoP IP, most reliable
+      2. Direct API call â€” may work from GitHub Actions IP for API endpoints
     
     Returns: cookies_json_str if valid, None if expired/invalid
     """
@@ -164,15 +163,7 @@ def _validate_cookies_via_proxy(cookies_json_str):
         return None
     
     try:
-        import sys
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from shopee_proxy import proxy_get_json, is_proxy_available
-        
-        if not is_proxy_available():
-            print("[CookieCheck] CF proxy not available — skipping API check")
-            return None
-        
-        # Parse cookies JSON (Playwright format) → cookie string
+        # Parse cookies JSON (Playwright format) â†’ cookie string
         cookies = json.loads(cookies_json_str)
         cookie_parts = []
         for c in cookies:
@@ -187,7 +178,7 @@ def _validate_cookies_via_proxy(cookies_json_str):
         
         cookies_str = '; '.join(cookie_parts)
         
-        # Call affiliate API via CF proxy
+        # Test URL + headers
         test_url = "https://affiliate.shopee.co.id/api/v3/offer/product/list"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
@@ -201,47 +192,74 @@ def _validate_cookies_via_proxy(cookies_json_str):
             'page_limit': '1',
             'keyword': 'tas',
         }
-        
         from urllib.parse import urlencode
         full_url = f"{test_url}?{urlencode(params)}"
         
-        print("[CookieCheck] Testing cookies via CF proxy API call...")
-        status, data = proxy_get_json(full_url, headers=headers, cookies_str=cookies_str)
+        # â”€â”€ Method 1: Via CF proxy â”€â”€
+        data = None
+        status = 0
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from shopee_proxy import proxy_get_json, is_proxy_available
+            
+            if is_proxy_available():
+                print("[CookieCheck] Method 1: Testing via CF proxy...")
+                status, data = proxy_get_json(full_url, headers=headers, cookies_str=cookies_str)
+                print(f"[CookieCheck] Proxy response: HTTP {status}, data={str(data)[:200] if data else 'None'}")
+        except ImportError:
+            print("[CookieCheck] shopee_proxy not available")
+        except Exception as e:
+            print(f"[CookieCheck] Proxy error: {e}")
         
-        print(f"[CookieCheck] Response: HTTP {status}, data={str(data)[:200] if data else 'None'}")
+        # â”€â”€ Method 2: Direct API call (fallback) â”€â”€
+        if not data or not isinstance(data, dict) or (isinstance(data, dict) and 'error' in data):
+            print("[CookieCheck] Method 2: Testing via direct API call...")
+            try:
+                import requests
+                direct_headers = dict(headers)
+                direct_headers['Cookie'] = cookies_str
+                resp = requests.get(full_url, headers=direct_headers, timeout=15)
+                status = resp.status_code
+                try:
+                    data = resp.json()
+                except Exception:
+                    data = None
+                print(f"[CookieCheck] Direct response: HTTP {status}, data={str(data)[:200] if data else 'None'}")
+            except Exception as e:
+                print(f"[CookieCheck] Direct API error: {e}")
         
+        # â”€â”€ Evaluate response â”€â”€
         if data and isinstance(data, dict):
             code = data.get('code', -1)
             if code == 0:
                 products = data.get('data', {}).get('list', [])
-                print(f"[CookieCheck] ✅ Cookies VALID! API returned {len(products)} products")
+                print(f"[CookieCheck] âœ… Cookies VALID! API returned {len(products)} products")
                 return cookies_json_str
             elif code == 30002:
-                print(f"[CookieCheck] ❌ Cookies EXPIRED (code={code}: cookie incorrect)")
-                return None
-            elif 'error' in data:
-                print(f"[CookieCheck] ⚠️ Proxy error: {data.get('error', '?')}")
+                print(f"[CookieCheck] âŒ Cookies EXPIRED (code 30002: cookie incorrect)")
                 return None
             else:
-                print(f"[CookieCheck] ⚠️ API code={code}, msg={data.get('msg', '?')}")
+                msg = data.get('msg', data.get('error', '?'))
+                print(f"[CookieCheck] âš ï¸ API response: code={code}, msg={msg}")
                 return None
-        elif status == 401:
-            print("[CookieCheck] ❌ Proxy auth failed — CF_PROXY_KEY mismatch!")
-            return None
         else:
-            print(f"[CookieCheck] ⚠️ HTTP {status}, no valid JSON — cannot validate")
+            print(f"[CookieCheck] âš ï¸ HTTP {status}, no valid JSON response")
             return None
             
-    except ImportError:
-        print("[CookieCheck] shopee_proxy not available — skipping")
-        return None
     except Exception as e:
         print(f"[CookieCheck] Error: {e}")
         return None
 
 
 def auto_login():
-    """Login to affiliate.shopee.co.id and return fresh cookies."""
+    """Login to affiliate.shopee.co.id and return fresh cookies.
+    
+    Flow:
+      1. PRE-CHECK: Validate existing cookies via API (proxy + direct)
+         â†’ If VALID: return immediately, skip browser entirely
+         â†’ If EXPIRED: try browser login (but will likely fail to CAPTCHA)
+      2. BROWSER LOGIN: Only if cookies don't exist or are expired
+    """
     username = os.environ.get('SHOPEE_USERNAME', '')
     password = os.environ.get('SHOPEE_PASSWORD', '')
 
@@ -251,26 +269,36 @@ def auto_login():
 
     print(f"[AutoLogin] Logging in as: {username[:3]}***{username[-3:]}")
 
-    # ═══════════════════════════════════════════════════════════════
-    #  PRE-CHECK: Validate existing cookies via CF proxy API call
-    #  If cookies still work → return them immediately (skip browser!)
-    #  This avoids CAPTCHA entirely since API calls don't trigger it
-    # ═══════════════════════════════════════════════════════════════
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    #  PRE-CHECK: Validate existing cookies via API call
+    #  If cookies still work â†’ return immediately (skip browser!)
+    #  Tries CF proxy first, then direct API call as fallback
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     existing_cookies = ''
+    cookie_source = ''
+    
+    # Priority 1: Cache file (from previous run)
     if os.path.exists(COOKIES_CACHE_FILE):
         try:
             with open(COOKIES_CACHE_FILE, 'r') as f:
                 existing_cookies = f.read().strip()
+            if existing_cookies:
+                cookie_source = 'cache'
         except Exception:
             pass
+    
+    # Priority 2: Environment/secrets
     if not existing_cookies:
         existing_cookies = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
+        if existing_cookies:
+            cookie_source = 'secret'
     
     if existing_cookies:
-        validated = _validate_cookies_via_proxy(existing_cookies)
+        print(f"[AutoLogin] Found cookies from {cookie_source} ({len(existing_cookies)} chars)")
+        validated = _validate_cookies_via_api(existing_cookies)
         if validated:
-            print("[AutoLogin] ✅ Cookies validated via API — skipping browser login!")
-            # Save as cache + set marker for workflow
+            print("[AutoLogin] âœ… Cookies VALID via API â€” skipping browser login!")
+            # Save to cache + marker
             try:
                 with open(COOKIES_CACHE_FILE, 'w') as f:
                     f.write(validated)
@@ -280,19 +308,24 @@ def auto_login():
                 pass
             return validated
         else:
-            print("[AutoLogin] Cookies invalid via API — proceeding to browser login...")
+            print("[AutoLogin] âŒ Cookies expired â€” browser login needed")
+    else:
+        print("[AutoLogin] No existing cookies found")
 
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    #  BROWSER LOGIN: Only if cookies are expired or missing
+    #  NOTE: From GitHub Actions, this will likely hit CAPTCHA.
+    #  But we still try because sometimes it works.
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         print("[AutoLogin] ERROR: playwright not installed")
         return None
 
-
     cookies = None
 
     with sync_playwright() as p:
-        # Use stealth-like settings to avoid bot detection
         browser = p.chromium.launch(
             headless=True,
             args=[
@@ -314,35 +347,8 @@ def auto_login():
         page = context.new_page()
 
         try:
-            # ═══════════════════════════════════════════════════════
-            #  STEP 0: Inject existing cookies (if available)
-            #  Priority: 1) Repo file (auto-refreshed) 2) Env/Secrets
-            #  If cookies are valid, browser is already logged in!
-            #  Each run refreshes cookies → saves back → no manual update
-            # ═══════════════════════════════════════════════════════
-            cookie_source = None
-            existing_cookies = ''
-            
-            # Priority 1: Read from repo file (auto-refreshed cookies)
-            if os.path.exists(COOKIES_CACHE_FILE):
-                try:
-                    with open(COOKIES_CACHE_FILE, 'r') as f:
-                        existing_cookies = f.read().strip()
-                    if existing_cookies:
-                        cookie_source = 'cache file'
-                        print(f"[AutoLogin] Step 0: Found cookies in cache ({len(existing_cookies)} chars)")
-                except Exception:
-                    pass
-            
-            # Priority 2: Fall back to env/secrets
-            if not existing_cookies:
-                existing_cookies = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
-                if existing_cookies:
-                    cookie_source = 'env/secrets'
-                    print(f"[AutoLogin] Step 0: Using cookies from env/secrets ({len(existing_cookies)} chars)")
-            
+            # â”€â”€ Step 0: Inject existing cookies â”€â”€
             if existing_cookies:
-                print(f"  Cookie source: {cookie_source}")
                 try:
                     stored = json.loads(existing_cookies)
                     pw_cookies = []
@@ -358,19 +364,11 @@ def auto_login():
                     
                     if pw_cookies:
                         context.add_cookies(pw_cookies)
-                        print(f"  ✅ Injected {len(pw_cookies)} cookies into browser")
-                    else:
-                        print("  ⚠️ No valid cookies to inject")
+                        print(f"[AutoLogin] Step 0: Injected {len(pw_cookies)} cookies")
                 except (json.JSONDecodeError, TypeError) as e:
-                    print(f"  ⚠️ Could not parse stored cookies: {e}")
-            else:
-                print("[AutoLogin] Step 0: No stored cookies available")
+                    print(f"[AutoLogin] Step 0: Cookie parse error: {e}")
 
-            # ═══════════════════════════════════════════════════════
-            #  STEP 1: Go DIRECTLY to affiliate.shopee.co.id
-            #  If cookies were injected, this should load without login.
-            #  If not, it will redirect to the login page.
-            # ═══════════════════════════════════════════════════════
+            # â”€â”€ Step 1: Navigate to affiliate site â”€â”€
             print("[AutoLogin] Step 1: Navigating to affiliate.shopee.co.id...")
             page.goto(AFFILIATE_URL, timeout=30000)
             page.wait_for_load_state('networkidle', timeout=20000)
@@ -378,402 +376,144 @@ def auto_login():
 
             current_url = page.url
             print(f"[AutoLogin] Current URL: {current_url}")
-            page.screenshot(path='/tmp/step1_page.png')
 
-            # ═══════════════════════════════════════════════════════
-            #  STEP 2: Handle login
-            #  Shopee is a React SPA — form renders AFTER JS loads.
-            #  We must WAIT for input elements to appear.
-            # ═══════════════════════════════════════════════════════
+            # â”€â”€ Step 2: Handle login if needed â”€â”€
             needs_login = (
                 'login' in current_url.lower() or
                 'signin' in current_url.lower() or
                 'auth' in current_url.lower() or
-                'buyer/login' in current_url.lower()
+                'buyer/login' in current_url.lower() or
+                'captcha' in current_url.lower() or
+                'verify' in current_url.lower()
             )
 
-            # Also check if page has login form
             if not needs_login:
                 login_form = page.query_selector('input[type="password"]')
                 if login_form:
                     needs_login = True
-                    print("[AutoLogin] Found password field — login required")
 
             if needs_login:
                 print(f"[AutoLogin] Step 2: Login required at: {current_url}")
 
-                # ── Wait for SPA to render the form ──
-                # Shopee login is a React SPA: <div id="main"></div>
-                # Form elements appear AFTER JS bundle loads and executes
-                print("  Waiting for login form to render (SPA)...")
-                form_found = False
-                try:
-                    page.wait_for_selector(
-                        'input[type="text"], input[type="password"], input[name="loginKey"], input[placeholder]',
-                        timeout=15000
-                    )
-                    form_found = True
-                    print("  ✅ Form elements detected")
-                except Exception:
-                    print("  ⚠️ Form not rendered after 15s — trying anyway")
-                
-                time.sleep(2)  # Extra wait for all form fields
-                
-                # ── Debug: log ALL visible inputs ──
-                all_inputs = page.query_selector_all('input')
-                print(f"  Found {len(all_inputs)} input elements:")
-                for i, inp in enumerate(all_inputs):
+                # Check for CAPTCHA immediately
+                if 'captcha' in current_url.lower() or 'verify' in current_url.lower():
+                    print("[AutoLogin] âš ï¸ CAPTCHA detected â€” cannot auto-login from this IP")
+                    page.screenshot(path='/tmp/captcha_detected.png')
+                    # Don't proceed with login â€” will fail
+                else:
+                    # Wait for SPA form
                     try:
-                        inp_type = inp.get_attribute('type') or '?'
-                        inp_name = inp.get_attribute('name') or '?'
-                        inp_ph = inp.get_attribute('placeholder') or '?'
-                        inp_ac = inp.get_attribute('autocomplete') or '?'
-                        vis = inp.is_visible()
-                        print(f"    [{i}] type={inp_type}, name={inp_name}, placeholder={inp_ph}, autocomplete={inp_ac}, visible={vis}")
+                        page.wait_for_selector(
+                            'input[type="text"], input[type="password"], input[name="loginKey"]',
+                            timeout=15000
+                        )
                     except Exception:
-                        print(f"    [{i}] (error reading attributes)")
-                
-                page.screenshot(path='/tmp/login_form.png')
-
-                # ── Fill username ──
-                # Strategy: try specific selectors first, then fall back 
-                # to first visible text-like input
-                username_selectors = [
-                    'input[name="loginKey"]',
-                    'input[name="username"]',
-                    'input[name="email"]',
-                    'input[autocomplete="username"]',
-                    'input[type="text"]',
-                    'input[type="email"]',
-                    'input[type="tel"]',
-                    'input[placeholder*="Email"]',
-                    'input[placeholder*="email"]',
-                    'input[placeholder*="phone"]',
-                    'input[placeholder*="Nomor"]',
-                    'input[placeholder*="No."]',
-                    'input[placeholder*="Username"]',
-                    'input[placeholder*="Masuk"]',
-                    '.shopee-input__input',
-                ]
-
-                username_filled = False
-                for sel in username_selectors:
-                    try:
-                        el = page.query_selector(sel)
-                        if el and el.is_visible():
-                            el.click()
-                            time.sleep(0.5)
-                            el.fill('')
-                            time.sleep(0.2)
-                            page.keyboard.type(username, delay=50)
-                            username_filled = True
-                            print(f"  ✅ Username filled via: {sel}")
-                            break
-                    except Exception:
-                        continue
-
-                if not username_filled:
-                    # Last resort: fill first visible non-password input
-                    print("  ⚠️ No specific selector worked — trying first visible input")
-                    for inp in all_inputs:
+                        print("  âš ï¸ Form not rendered after 15s")
+                    
+                    time.sleep(2)
+                    
+                    # Fill username
+                    for sel in ['input[name="loginKey"]', 'input[name="username"]',
+                                'input[autocomplete="username"]', 'input[type="text"]',
+                                'input[type="email"]', 'input[type="tel"]']:
                         try:
-                            inp_type = inp.get_attribute('type') or 'text'
-                            if inp_type not in ('password', 'hidden', 'submit', 'button', 'checkbox') and inp.is_visible():
-                                inp.click()
+                            el = page.query_selector(sel)
+                            if el and el.is_visible():
+                                el.click()
                                 time.sleep(0.5)
-                                inp.fill('')
-                                time.sleep(0.2)
+                                el.fill('')
                                 page.keyboard.type(username, delay=50)
-                                username_filled = True
-                                print(f"  ✅ Username filled via: first visible input (type={inp_type})")
+                                print(f"  âœ… Username filled: {sel}")
                                 break
                         except Exception:
                             continue
-                    
-                    if not username_filled:
-                        print("  ❌ Could not find username field!")
-                        page.screenshot(path='/tmp/login_page.png')
 
-                time.sleep(1)
+                    time.sleep(1)
 
-                # ── Fill password ──
-                password_selectors = [
-                    'input[name="password"]',
-                    'input[type="password"]',
-                    'input[autocomplete="current-password"]',
-                    '#password',
-                ]
+                    # Fill password
+                    for sel in ['input[name="password"]', 'input[type="password"]']:
+                        try:
+                            el = page.query_selector(sel)
+                            if el and el.is_visible():
+                                el.click()
+                                time.sleep(0.3)
+                                page.keyboard.type(password, delay=50)
+                                print(f"  âœ… Password filled: {sel}")
+                                break
+                        except Exception:
+                            continue
 
-                password_filled = False
-                for sel in password_selectors:
-                    try:
-                        el = page.query_selector(sel)
-                        if el and el.is_visible():
-                            el.click()
-                            time.sleep(0.3)
-                            page.keyboard.type(password, delay=50)
-                            password_filled = True
-                            print(f"  ✅ Password filled via: {sel}")
-                            break
-                    except Exception:
-                        continue
+                    time.sleep(1)
 
-                if not password_filled:
-                    print("  ⚠️ Could not find password field!")
-                    page.screenshot(path='/tmp/login_nopass.png')
+                    # Click login
+                    for sel in ['button[type="submit"]', 'button:has-text("Log In")',
+                                'button:has-text("Masuk")', '.btn-solid-primary', 'form button']:
+                        try:
+                            el = page.query_selector(sel)
+                            if el and el.is_visible():
+                                el.click()
+                                print(f"  âœ… Login button clicked: {sel}")
+                                break
+                        except Exception:
+                            continue
 
-                time.sleep(1)
+                    # â”€â”€ Step 3: Wait for login â”€â”€
+                    print("[AutoLogin] Step 3: Waiting for login...")
+                    start = time.time()
+                    while time.time() - start < MAX_WAIT_SECONDS:
+                        time.sleep(3)
+                        current_url = page.url
+                        elapsed = int(time.time() - start)
+                        print(f"  [{elapsed}s] {current_url[:60]}")
 
-                # ── Click login button ──
-                login_selectors = [
-                    'button[type="submit"]',
-                    'button:has-text("Log In")',
-                    'button:has-text("Masuk")',
-                    'button:has-text("LOGIN")',
-                    'button:has-text("Sign In")',
-                    '.btn-solid-primary',
-                    'button.shopee-button--primary',
-                    'form button',
-                ]
-
-                login_clicked = False
-                for sel in login_selectors:
-                    try:
-                        el = page.query_selector(sel)
-                        if el and el.is_visible():
-                            el.click()
-                            login_clicked = True
-                            print(f"  ✅ Login button clicked: {sel}")
-                            break
-                    except Exception:
-                        continue
-
-                if not login_clicked:
-                    # Try pressing Enter instead
-                    print("  ⚠️ No login button found — pressing Enter")
-                    page.keyboard.press('Enter')
-
-                # ═══════════════════════════════════════════════════
-                #  STEP 3: Wait for login to complete
-                # ═══════════════════════════════════════════════════
-                print("[AutoLogin] Step 3: Waiting for login to complete...")
-                start = time.time()
-                login_success = False
-
-                while time.time() - start < MAX_WAIT_SECONDS:
-                    time.sleep(3)
-                    current_url = page.url
-                    elapsed = int(time.time() - start)
-                    all_cookies = context.cookies()
-
-                    print(f"  [{elapsed}s] URL: {current_url[:60]}..., Cookies: {len(all_cookies)}")
-
-                    # Check for CAPTCHA/verification
-                    if 'verify' in current_url.lower() or 'captcha' in current_url.lower():
-                        print("  ⚠️ CAPTCHA/verification detected!")
-                        page.screenshot(path='/tmp/captcha.png')
-                        # Don't exit immediately — sometimes captcha passes automatically
-                        continue
-
-                    # Check if we left the login page
-                    not_on_login = (
-                        'login' not in current_url.lower() and
-                        'signin' not in current_url.lower() and
-                        'auth' not in current_url.lower()
-                    )
-
-                    if not_on_login:
-                        print(f"  ✅ Redirected away from login! URL: {current_url[:80]}")
-                        login_success = True
-                        break
-
-                    # Even if on login-like URL, check if we have enough cookies
-                    if len(all_cookies) >= MIN_COOKIES_FOR_SUCCESS:
-                        # Check if affiliate cookies specifically are present
-                        aff_cookies = [c for c in all_cookies if 'affiliate' in c.get('domain', '')]
-                        if aff_cookies:
-                            print(f"  ✅ Got {len(aff_cookies)} affiliate cookies — login likely succeeded")
-                            login_success = True
+                        if 'captcha' in current_url.lower() or 'verify' in current_url.lower():
+                            print("  âš ï¸ CAPTCHA â€” cannot proceed automatically")
+                            page.screenshot(path='/tmp/captcha.png')
                             break
 
-                if not login_success:
-                    print(f"  ⚠️ Login may not have completed (waited {MAX_WAIT_SECONDS}s)")
-                    page.screenshot(path='/tmp/login_timeout.png')
-                    _log_cookies(context, "Timeout")
-                    # Continue anyway — maybe partial cookies work
-
+                        if 'login' not in current_url.lower() and 'signin' not in current_url.lower():
+                            print("  âœ… Login successful!")
+                            break
             else:
-                print("[AutoLogin] Step 2: Already logged in (no login page detected)")
+                print("[AutoLogin] Step 2: Already logged in (no login page)")
 
-            # ═══════════════════════════════════════════════════════
-            #  STEP 4: Navigate to Komisi XTRA page
-            #  This ensures all affiliate-specific cookies are set
-            # ═══════════════════════════════════════════════════════
-            session_valid = False  # Track if we actually landed on affiliate
-            print("[AutoLogin] Step 4: Navigating to Komisi XTRA...")
+            # â”€â”€ Step 4: Verify session on affiliate domain â”€â”€
+            session_valid = False
+            print("[AutoLogin] Step 4: Verifying session...")
             try:
                 page.goto(KOMISI_XTRA_URL, timeout=30000)
                 page.wait_for_load_state('networkidle', timeout=20000)
                 time.sleep(5)
 
                 current_url = page.url
-                print(f"  URL after nav: {current_url[:80]}")
+                print(f"  URL: {current_url[:80]}")
 
-                # If redirected back to login, cookies didn't work
                 if _is_on_affiliate(current_url):
-                    print("  ✅ Komisi XTRA page loaded — session valid!")
+                    print("  âœ… Session valid!")
                     session_valid = True
                 else:
-                    print("  ⚠️ NOT on affiliate domain — session not established")
-                    page.screenshot(path='/tmp/komisi_xtra_redirect.png')
+                    print("  âŒ Not on affiliate domain â€” session invalid")
+                    page.screenshot(path='/tmp/session_invalid.png')
             except Exception as e:
-                print(f"  Komisi XTRA navigation: {e}")
+                print(f"  âŒ Navigation error: {e}")
 
-            # ═══════════════════════════════════════════════════════
-            #  STEP 4-RETRY: If session invalid and we SKIPPED login
-            #  (cookies looked good but were actually expired),
-            #  go back and do FULL login with username/password
-            # ═══════════════════════════════════════════════════════
-            if not session_valid and not needs_login and username and password:
-                print("\n[AutoLogin] RETRY: Cookies expired — doing full login...")
-                current_url = page.url
-
-                # If we're already on the login page (redirected), use it
-                if 'login' not in current_url.lower():
-                    login_url = f"https://shopee.co.id/buyer/login?next={AFFILIATE_URL}"
-                    print(f"  Navigating to login: {login_url[:80]}")
-                    page.goto(login_url, timeout=30000)
-                    page.wait_for_load_state('networkidle', timeout=20000)
-                    time.sleep(3)
-
-                print("  Waiting for login form...")
-                try:
-                    page.wait_for_selector(
-                        'input[type="text"], input[type="password"], input[name="loginKey"]',
-                        timeout=15000
-                    )
-                except Exception:
-                    print("  ⚠️ Form not found after 15s")
-
-                time.sleep(2)
-
-                # Fill username
-                for sel in ['input[name="loginKey"]', 'input[name="username"]',
-                            'input[type="text"]', 'input[type="email"]', 'input[type="tel"]']:
-                    try:
-                        el = page.query_selector(sel)
-                        if el and el.is_visible():
-                            el.click()
-                            time.sleep(0.3)
-                            el.fill('')
-                            page.keyboard.type(username, delay=50)
-                            print(f"  ✅ Username filled: {sel}")
-                            break
-                    except Exception:
-                        continue
-
-                time.sleep(1)
-
-                # Fill password
-                for sel in ['input[name="password"]', 'input[type="password"]']:
-                    try:
-                        el = page.query_selector(sel)
-                        if el and el.is_visible():
-                            el.click()
-                            time.sleep(0.3)
-                            el.fill('')
-                            page.keyboard.type(password, delay=50)
-                            print(f"  ✅ Password filled: {sel}")
-                            break
-                    except Exception:
-                        continue
-
-                time.sleep(1)
-
-                # Click login
-                for sel in ['button[type="submit"]', 'button:has-text("Log In")',
-                            'button:has-text("Masuk")', '.btn-solid-primary']:
-                    try:
-                        el = page.query_selector(sel)
-                        if el and el.is_visible():
-                            el.click()
-                            print(f"  ✅ Login clicked: {sel}")
-                            break
-                    except Exception:
-                        continue
-
-                # Wait for login
-                print("  Waiting for login to complete...")
-                start = time.time()
-                while time.time() - start < MAX_WAIT_SECONDS:
-                    time.sleep(3)
-                    current_url = page.url
-                    print(f"  [{int(time.time()-start)}s] {current_url[:60]}")
-
-                    if 'verify' in current_url.lower() or 'captcha' in current_url.lower():
-                        print("  ⚠️ CAPTCHA detected — waiting...")
-                        page.screenshot(path='/tmp/retry_captcha.png')
-                        continue
-
-                    if 'login' not in current_url.lower() and 'signin' not in current_url.lower():
-                        print("  ✅ Login successful!")
-                        break
-
-                # Re-check session: navigate to Komisi XTRA again
-                print("  Re-checking session...")
-                try:
-                    page.goto(KOMISI_XTRA_URL, timeout=30000)
-                    page.wait_for_load_state('networkidle', timeout=20000)
-                    time.sleep(5)
-                    current_url = page.url
-                    if _is_on_affiliate(current_url):
-                        print("  ✅ RETRY SUCCESS — session valid!")
-                        session_valid = True
-                    else:
-                        print(f"  ❌ RETRY FAILED — still not on affiliate: {current_url[:80]}")
-                        page.screenshot(path='/tmp/retry_failed.png')
-                except Exception as e:
-                    print(f"  ❌ RETRY navigation error: {e}")
-
-            # ═══════════════════════════════════════════════════════
-            #  STEP 4B: Fetch products via browser API
-            #  Uses page.evaluate(fetch()) — runs in real browser
-            #  context so Shopee's anti-bot doesn't block it
-            #  ONLY if session is valid (on affiliate domain)
-            # ═══════════════════════════════════════════════════════
-            if session_valid:
-                try:
-                    _fetch_products_via_browser(page)
-                except Exception as e:
-                    print(f"[AutoLogin] Product fetch error (non-fatal): {e}")
-            else:
-                print("[AutoLogin] Step 4B: SKIPPED — session not valid, would get empty results")
-
-            # ═══════════════════════════════════════════════════════
-            #  STEP 5: Export cookies + SAVE to cache
-            #  CRITICAL: Only save if session_valid!
-            #  Otherwise we'd overwrite good cached cookies with
-            #  bad ones from a failed CAPTCHA/login attempt.
-            # ═══════════════════════════════════════════════════════
+            # â”€â”€ Step 5: Export cookies â”€â”€
             print("[AutoLogin] Step 5: Exporting cookies...")
             cookies = context.cookies()
-            _log_cookies(context, "Final export")
 
             if session_valid:
-                print(f"  ✅ Session valid — saving {len(cookies)} cookies to cache")
+                print(f"  âœ… Saving {len(cookies)} cookies to cache")
                 try:
                     cookies_json = json.dumps(cookies, ensure_ascii=False)
                     with open(COOKIES_CACHE_FILE, 'w') as f:
                         f.write(cookies_json)
-                    # Marker file for workflow: only update secret if session was valid
                     with open('/tmp/.cookies_session_valid', 'w') as f:
                         f.write('1')
-                    print(f"  ✅ Saved to cache")
                 except Exception as e:
-                    print(f"  ⚠️ Could not save cookies to cache: {e}")
+                    print(f"  âš ï¸ Save error: {e}")
             else:
-                print("  ⚠️ Session NOT valid — keeping old cache (not overwriting!)")
-                cookies = None  # Signal to main() that login failed
+                print("  âš ï¸ Session NOT valid â€” not saving (keeping old cache)")
+                cookies = None
 
         except Exception as e:
             print(f"[AutoLogin] ERROR: {e}")
@@ -789,11 +529,9 @@ def auto_login():
     if not cookies:
         return None
 
-    # Convert to JSON
     cookies_json = json.dumps(cookies, ensure_ascii=False)
     print(f"[AutoLogin] Cookies JSON: {len(cookies_json)} chars")
 
-    # Save to file
     with open('/tmp/affiliate_cookies.json', 'w') as f:
         f.write(cookies_json)
     print("[AutoLogin] Saved to /tmp/affiliate_cookies.json")
@@ -810,18 +548,18 @@ def main():
                 f.write(f"SHOPEE_AFFILIATE_COOKIES<<EOF\n")
                 f.write(cookies_json)
                 f.write(f"\nEOF\n")
-            print("[AutoLogin] ✅ Set SHOPEE_AFFILIATE_COOKIES in GITHUB_ENV")
+            print("[AutoLogin] âœ… Set SHOPEE_AFFILIATE_COOKIES in GITHUB_ENV")
         else:
             print(f"\nSHOPEE_AFFILIATE_COOKIES={cookies_json[:100]}...")
 
-        print("[AutoLogin] ✅ Login successful!")
+        print("[AutoLogin] âœ… Login successful!")
     else:
-        print("[AutoLogin] ⚠️ Login/cookie refresh incomplete — continuing anyway")
+        print("[AutoLogin] âš ï¸ Login/cookie refresh incomplete â€” continuing anyway")
     
-    # Always exit 0 — auto-refresh is continue-on-error
-    # Products may still be in /tmp/affiliate_products.json from Step 4B
+    # Always exit 0 â€” auto-refresh is continue-on-error
     sys.exit(0)
 
 
 if __name__ == '__main__':
     main()
+
