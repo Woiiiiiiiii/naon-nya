@@ -22,15 +22,6 @@ import requests
 from PIL import Image
 from io import BytesIO
 
-# Product dedup — never reuse products (permanent, no expiry)
-try:
-    from dedup_tracker import is_product_used, cleanup_used_images
-    HAS_DEDUP = True
-except ImportError:
-    HAS_DEDUP = False
-    def is_product_used(product_id, account_id=None): return False
-    def cleanup_used_images(): pass
-
 # ═══════════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ═══════════════════════════════════════════════════════════════════
@@ -666,11 +657,6 @@ def collect_products(categories=None, target=None):
 
     stats = {cat: {'existing': 0, 'new': 0, 'failed': 0} for cat in categories}
 
-    # ── Cleanup: delete images/bank entries for already-used products ──
-    if HAS_DEDUP:
-        print("\n[DEDUP] Cleaning up used products from bank...")
-        cleanup_used_images()
-
     for category in categories:
         print(f"\n--- Category: {category.upper()} ---")
         existing = count_bank(category)
@@ -697,9 +683,6 @@ def collect_products(categories=None, target=None):
                     if collected >= need:
                         break
                     pid = _generate_product_id(prod['nama'], category)
-                    # Skip if already used (permanent dedup)
-                    if is_product_used(pid):
-                        continue
                     product_dir = os.path.join(BANK_DIR, category, pid)
                     if os.path.exists(os.path.join(product_dir, 'image.jpg')):
                         continue
@@ -1054,10 +1037,6 @@ if __name__ == "__main__":
     if args.export:
         n = export_bank_to_csv()
         copy_bank_images_to_pipeline()
-        if n == 0:
-            print("ERROR: Product bank is empty — run Product Collector first!")
-            print("  Trigger: GitHub Actions → Product Collector → Run workflow")
-            sys.exit(1)
         print(f"Done. {n} products exported.")
         sys.exit(0)
 
