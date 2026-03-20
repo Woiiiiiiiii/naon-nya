@@ -58,67 +58,6 @@ def _log_cookies(context, label=""):
     return cookies
 
 
-def _update_github_secret(cookies_json):
-    """Update SHOPEE_AFFILIATE_COOKIES secret via GitHub API.
-    This is a BACKUP persistence method — survives cache clears.
-    Requires GH_PAT env var (Personal Access Token with repo scope).
-    """
-    import requests as req
-    
-    token = os.environ.get('GH_PAT', '')
-    repo = os.environ.get('GITHUB_REPOSITORY', '')
-    
-    if not token or not repo:
-        print("  [SecretUpdate] Skipped (GH_PAT or GITHUB_REPOSITORY not set)")
-        return
-    
-    print("  [SecretUpdate] Updating SHOPEE_AFFILIATE_COOKIES secret...")
-    headers = {
-        'Authorization': f'Bearer {token}',
-        'Accept': 'application/vnd.github.v3+json',
-    }
-    
-    try:
-        # Step 1: Get repo public key for encryption
-        key_url = f'https://api.github.com/repos/{repo}/actions/secrets/public-key'
-        key_resp = req.get(key_url, headers=headers, timeout=10)
-        if key_resp.status_code != 200:
-            print(f"  [SecretUpdate] ⚠️ Could not get public key: HTTP {key_resp.status_code}")
-            return
-        
-        key_data = key_resp.json()
-        public_key = key_data['key']
-        key_id = key_data['key_id']
-        
-        # Step 2: Encrypt the secret value using libsodium (via PyNaCl)
-        try:
-            from nacl import encoding, public as nacl_public
-            sealed_box = nacl_public.SealedBox(
-                nacl_public.PublicKey(public_key.encode('utf-8'), encoding.Base64Encoder)
-            )
-            import base64
-            encrypted = base64.b64encode(
-                sealed_box.encrypt(cookies_json.encode('utf-8'))
-            ).decode('utf-8')
-        except ImportError:
-            print("  [SecretUpdate] ⚠️ PyNaCl not installed — skipping secret update")
-            return
-        
-        # Step 3: Update the secret
-        secret_url = f'https://api.github.com/repos/{repo}/actions/secrets/SHOPEE_AFFILIATE_COOKIES'
-        update_resp = req.put(secret_url, headers=headers, json={
-            'encrypted_value': encrypted,
-            'key_id': key_id,
-        }, timeout=10)
-        
-        if update_resp.status_code in (201, 204):
-            print("  [SecretUpdate] ✅ Secret updated successfully!")
-        else:
-            print(f"  [SecretUpdate] ⚠️ Update returned HTTP {update_resp.status_code}")
-    except Exception as e:
-        print(f"  [SecretUpdate] ⚠️ Failed: {e}")
-
-
 def _is_on_affiliate(url):
     """Check if URL hostname is affiliate.shopee.co.id (not just substring)."""
     from urllib.parse import urlparse
@@ -587,22 +526,19 @@ def auto_login():
             _log_cookies(context, "Final export")
 
             if len(cookies) < MIN_COOKIES_FOR_SUCCESS:
-                print(f"  ❌ Only {len(cookies)} cookies — login likely failed")
+                print(f"  ⚠️ Only {len(cookies)} cookies — login may have failed")
                 page.screenshot(path='/tmp/login_failed_final.png')
-                cookies = None
             else:
                 print(f"  ✅ Exporting {len(cookies)} cookies total")
-                # Save to cache file for auto-refresh on next run
-                try:
-                    cookies_json = json.dumps(cookies, ensure_ascii=False)
-                    with open(COOKIES_CACHE_FILE, 'w') as f:
-                        f.write(cookies_json)
-                    print(f"  ✅ Saved refreshed cookies to cache")
-                except Exception as e:
-                    print(f"  ⚠️ Could not save cookies to cache: {e}")
-                
-                # Also update GitHub Secret as backup (survives cache clears)
-                _update_github_secret(cookies_json)
+            
+            # ALWAYS save cookies to cache (even if < 5, keep what we have)
+            try:
+                cookies_json = json.dumps(cookies, ensure_ascii=False)
+                with open(COOKIES_CACHE_FILE, 'w') as f:
+                    f.write(cookies_json)
+                print(f"  ✅ Saved {len(cookies)} cookies to cache")
+            except Exception as e:
+                print(f"  ⚠️ Could not save cookies to cache: {e}")
 
         except Exception as e:
             print(f"[AutoLogin] ERROR: {e}")
@@ -644,10 +580,12 @@ def main():
             print(f"\nSHOPEE_AFFILIATE_COOKIES={cookies_json[:100]}...")
 
         print("[AutoLogin] ✅ Login successful!")
-        sys.exit(0)
     else:
-        print("[AutoLogin] ❌ Login failed!")
-        sys.exit(1)
+        print("[AutoLogin] ⚠️ Login/cookie refresh incomplete — continuing anyway")
+    
+    # Always exit 0 — auto-refresh is continue-on-error
+    # Products may still be in /tmp/affiliate_products.json from Step 4B
+    sys.exit(0)
 
 
 if __name__ == '__main__':

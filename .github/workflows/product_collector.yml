@@ -48,15 +48,14 @@ jobs:
           restore-keys: |
             shopee-cookies-
 
-      # ── Auto Cookie Refresh (PRIMARY METHOD) ─────────────────────
-      # Gets FRESH cookies via auto-login before collecting products.
-      # If SHOPEE_USERNAME not set, this step is skipped gracefully.
+      # ── Auto Cookie Refresh ──────────────────────────────────────
+      # Inject cached/stored cookies → browse site → refresh session
+      # → save refreshed cookies to cache + GITHUB_ENV
       - name: Auto-refresh Affiliate Cookies
         env:
           SHOPEE_USERNAME: ${{ secrets.SHOPEE_USERNAME }}
           SHOPEE_PASSWORD: ${{ secrets.SHOPEE_PASSWORD }}
           SHOPEE_AFFILIATE_COOKIES: ${{ secrets.SHOPEE_AFFILIATE_COOKIES }}
-          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           if [ -z "$SHOPEE_USERNAME" ]; then
             echo "SHOPEE_USERNAME not set — skipping auto-login"
@@ -64,10 +63,29 @@ jobs:
           fi
           echo "=== Auto-login: getting fresh cookies ==="
           pip install playwright
-          pip install pynacl 2>/dev/null || echo "pynacl not available — secret backup disabled"
           playwright install chromium --with-deps
           cd engine/modules
           python shopee_auto_login.py
+        continue-on-error: true
+
+      # ── Auto-update secret with refreshed cookies (gh CLI) ─────
+      # Uses GH_PAT to update SHOPEE_AFFILIATE_COOKIES secret
+      # so cookies survive even if cache expires (7 days no run)
+      - name: Update Cookies Secret
+        if: hashFiles('/tmp/.shopee_cookies.json') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "GH_PAT not set — skipping secret update"
+            exit 0
+          fi
+          if [ -f /tmp/.shopee_cookies.json ]; then
+            gh secret set SHOPEE_AFFILIATE_COOKIES < /tmp/.shopee_cookies.json
+            echo "✅ SHOPEE_AFFILIATE_COOKIES secret updated!"
+          else
+            echo "No cached cookies to save"
+          fi
         continue-on-error: true
 
       - name: Collect Products
