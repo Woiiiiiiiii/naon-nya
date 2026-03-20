@@ -517,9 +517,9 @@ def auto_login():
                 print(f"[AutoLogin] Product fetch error (non-fatal): {e}")
 
             # ═══════════════════════════════════════════════════════
-            #  STEP 5: Export ALL cookies + SAVE for next run
-            #  Cookies are saved to both GITHUB_ENV (current run)
-            #  and repo file (persisted for next run via git commit)
+            #  STEP 5: Export ALL cookies + SAVE to cache
+            #  Cache is persisted by GitHub Actions Cache (private)
+            #  Secret is updated by workflow step via gh CLI
             # ═══════════════════════════════════════════════════════
             print("[AutoLogin] Step 5: Exporting cookies...")
             cookies = context.cookies()

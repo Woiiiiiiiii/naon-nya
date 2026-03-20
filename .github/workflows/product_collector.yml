@@ -72,7 +72,7 @@ jobs:
       # Uses GH_PAT to update SHOPEE_AFFILIATE_COOKIES secret
       # so cookies survive even if cache expires (7 days no run)
       - name: Update Cookies Secret
-        if: hashFiles('/tmp/.shopee_cookies.json') != ''
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
