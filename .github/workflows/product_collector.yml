@@ -91,10 +91,35 @@ jobs:
           fi
         continue-on-error: true
 
+      # ── Load fresh cookies from cache file into env ─────────────
+      # Auto-login saves cookies to /tmp/.shopee_cookies.json
+      # GITHUB_ENV is only set when session_valid=True
+      # This step ensures cookies from cache file are available
+      # even when GITHUB_ENV wasn't set (e.g. CAPTCHA flow)
+      - name: Load Cookies from Cache
+        if: always()
+        run: |
+          if [ -f /tmp/.shopee_cookies.json ]; then
+            echo "Loading cookies from cache file..."
+            echo "SHOPEE_AFFILIATE_COOKIES<<EOF" >> $GITHUB_ENV
+            cat /tmp/.shopee_cookies.json >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+            echo "✅ Cookies loaded from cache"
+          elif [ -f /tmp/affiliate_cookies.json ]; then
+            echo "Loading cookies from affiliate_cookies.json..."
+            echo "SHOPEE_AFFILIATE_COOKIES<<EOF" >> $GITHUB_ENV
+            cat /tmp/affiliate_cookies.json >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+            echo "✅ Cookies loaded from affiliate cache"
+          else
+            echo "No cached cookies found — will use secret"
+          fi
+
       - name: Collect Products
         env:
-          # Auto-login sets SHOPEE_AFFILIATE_COOKIES via GITHUB_ENV
-          # If auto-login didn't run/failed, fall back to stored secret
+          # Priority: env var (from cache/auto-login) → stored secret
           SHOPEE_AFFILIATE_COOKIES: ${{ env.SHOPEE_AFFILIATE_COOKIES || secrets.SHOPEE_AFFILIATE_COOKIES }}
           CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
           CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
