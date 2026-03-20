@@ -283,27 +283,29 @@ def auto_login():
     existing_cookies = ''
     cookie_source = ''
     
-    # Priority 1: Cache file (from previous run)
+    # Try BOTH sources: secret first (freshest), then cache
+    cookie_sources = []
+    
+    # Source 1: Secret (user may have just updated this)
+    secret_cookies = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
+    if secret_cookies:
+        cookie_sources.append(('secret', secret_cookies))
+    
+    # Source 2: Cache file (from previous successful run)
     if os.path.exists(COOKIES_CACHE_FILE):
         try:
             with open(COOKIES_CACHE_FILE, 'r') as f:
-                existing_cookies = f.read().strip()
-            if existing_cookies:
-                cookie_source = 'cache'
+                cached = f.read().strip()
+            if cached and cached != secret_cookies:
+                cookie_sources.append(('cache', cached))
         except Exception:
             pass
     
-    # Priority 2: Environment/secrets
-    if not existing_cookies:
-        existing_cookies = os.environ.get('SHOPEE_AFFILIATE_COOKIES', '')
-        if existing_cookies:
-            cookie_source = 'secret'
-    
-    if existing_cookies:
-        print(f"[AutoLogin] Found cookies from {cookie_source} ({len(existing_cookies)} chars)")
-        validated = _validate_cookies_via_api(existing_cookies)
+    for source_name, cookies_str in cookie_sources:
+        print(f"[AutoLogin] Trying cookies from {source_name} ({len(cookies_str)} chars)")
+        validated = _validate_cookies_via_api(cookies_str)
         if validated:
-            print("[AutoLogin] âœ… Cookies VALID via API â€” skipping browser login!")
+            print(f"[AutoLogin] Cookies from {source_name} are VALID!")
             # Save to cache + marker
             try:
                 with open(COOKIES_CACHE_FILE, 'w') as f:
@@ -314,12 +316,15 @@ def auto_login():
                 pass
             return validated
         else:
-            print("[AutoLogin] \u274c Cookies expired via API")
-            print("[AutoLogin] Skipping Playwright -- GitHub Actions IP always gets CAPTCHA")
-            print("[AutoLogin] --> Update SHOPEE_AFFILIATE_COOKIES secret with fresh cookies to fix")
-            return None
+            print(f"[AutoLogin] Cookies from {source_name} are EXPIRED")
+    
+    if cookie_sources:
+        print("[AutoLogin] ALL cookie sources expired")
+        print("[AutoLogin] Skipping Playwright -- GitHub Actions IP always gets CAPTCHA")
+        print("[AutoLogin] --> Update SHOPEE_AFFILIATE_COOKIES secret with fresh cookies")
+        return None
     else:
-        print("[AutoLogin] No existing cookies found")
+        print("[AutoLogin] No cookies found in secret or cache")
 
     # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     #  BROWSER LOGIN: Only if cookies are expired or missing

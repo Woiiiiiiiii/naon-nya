@@ -63,10 +63,9 @@ jobs:
             echo "SHOPEE_USERNAME not set — skipping auto-login"
             exit 0
           fi
-          echo "=== Auto-login: getting fresh cookies ==="
-          pip install playwright
-          playwright install chromium --with-deps
+          echo "=== Auto-login: checking cookies ==="
           cd engine/modules
+          # Quick API check first — no Playwright needed
           python shopee_auto_login.py
         continue-on-error: true
 
@@ -96,6 +95,12 @@ jobs:
       - name: Load Cookies from Cache
         if: always()
         run: |
+          # ONLY load cache if session was validated (marker exists)
+          # Otherwise old expired cache overrides fresh secret!
+          if [ ! -f /tmp/.cookies_session_valid ]; then
+            echo "Session not valid — using secret directly (not loading old cache)"
+            exit 0
+          fi
           for f in /tmp/.shopee_cookies.json /tmp/affiliate_cookies.json; do
             if [ -f "$f" ]; then
               echo "SHOPEE_AFFILIATE_COOKIES<<EOF" >> $GITHUB_ENV
