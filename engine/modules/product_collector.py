@@ -1054,6 +1054,10 @@ if __name__ == "__main__":
     if args.export:
         n = export_bank_to_csv()
         copy_bank_images_to_pipeline()
+        if n == 0:
+            print("ERROR: Product bank is empty — run Product Collector first!")
+            print("  Trigger: GitHub Actions → Product Collector → Run workflow")
+            sys.exit(1)
         print(f"Done. {n} products exported.")
         sys.exit(0)
 

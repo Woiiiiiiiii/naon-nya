@@ -37,12 +37,12 @@ def main():
         
     mode = sys.argv[1].lower()
     
-    # V1: Data Prep (bank export → scrape → validate → download images → extract → storyboard)
+    # V1: Data Prep (bank export → validate → copy images → extract → storyboard)
+    # Product Collector is the SOLE source of products + images (Shopee only)
+    # No live scraping here — Product Collector runs separately on schedule
     v1_steps = [
-        "python engine/modules/product_collector.py --export",   # Load from pre-collected bank FIRST
-        "python engine/modules/scrape_produk.py",                # Scrape to fill gaps
+        "python engine/modules/product_collector.py --export",   # Export bank → produk.csv + images/
         "python engine/modules/product_validator.py",
-        "python engine/modules/download_images.py",
         # AI Vision: inspect + score downloaded images
         "python engine/modules/cf_vision_inspector.py --image engine/data/images --category home",
         "python engine/modules/extract_masalah.py",
@@ -225,8 +225,8 @@ def main():
         print(f"\n{'='*60}")
         print(f"Step {i}/{len(pipeline)} (elapsed: {int(elapsed)}s)")
         
-        # Only scrape_produk is critical — product_collector export can fail if bank empty
-        is_critical = ('scrape_produk' in step)
+        # product_collector --export is critical (if bank empty → 0 products → 0 videos)
+        is_critical = ('product_collector' in step and '--export' in step)
         
         if run_step(step, critical=is_critical):
             passed += 1
