@@ -63,7 +63,8 @@ jobs:
             exit 0
           fi
           echo "=== Auto-login: getting fresh cookies ==="
-          pip install playwright pynacl
+          pip install playwright
+          pip install pynacl 2>/dev/null || echo "pynacl not available — secret backup disabled"
           playwright install chromium --with-deps
           cd engine/modules
           python shopee_auto_login.py
