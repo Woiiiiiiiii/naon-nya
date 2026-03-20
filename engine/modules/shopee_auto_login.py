@@ -509,6 +509,112 @@ def auto_login():
                 print(f"  Komisi XTRA navigation: {e}")
 
             # ═══════════════════════════════════════════════════════
+            #  STEP 4-RETRY: If session invalid and we SKIPPED login
+            #  (cookies looked good but were actually expired),
+            #  go back and do FULL login with username/password
+            # ═══════════════════════════════════════════════════════
+            if not session_valid and not needs_login and username and password:
+                print("\n[AutoLogin] RETRY: Cookies expired — doing full login...")
+                current_url = page.url
+
+                # If we're already on the login page (redirected), use it
+                if 'login' not in current_url.lower():
+                    login_url = f"https://shopee.co.id/buyer/login?next={AFFILIATE_URL}"
+                    print(f"  Navigating to login: {login_url[:80]}")
+                    page.goto(login_url, timeout=30000)
+                    page.wait_for_load_state('networkidle', timeout=20000)
+                    time.sleep(3)
+
+                print("  Waiting for login form...")
+                try:
+                    page.wait_for_selector(
+                        'input[type="text"], input[type="password"], input[name="loginKey"]',
+                        timeout=15000
+                    )
+                except Exception:
+                    print("  ⚠️ Form not found after 15s")
+
+                time.sleep(2)
+
+                # Fill username
+                for sel in ['input[name="loginKey"]', 'input[name="username"]',
+                            'input[type="text"]', 'input[type="email"]', 'input[type="tel"]']:
+                    try:
+                        el = page.query_selector(sel)
+                        if el and el.is_visible():
+                            el.click()
+                            time.sleep(0.3)
+                            el.fill('')
+                            page.keyboard.type(username, delay=50)
+                            print(f"  ✅ Username filled: {sel}")
+                            break
+                    except Exception:
+                        continue
+
+                time.sleep(1)
+
+                # Fill password
+                for sel in ['input[name="password"]', 'input[type="password"]']:
+                    try:
+                        el = page.query_selector(sel)
+                        if el and el.is_visible():
+                            el.click()
+                            time.sleep(0.3)
+                            el.fill('')
+                            page.keyboard.type(password, delay=50)
+                            print(f"  ✅ Password filled: {sel}")
+                            break
+                    except Exception:
+                        continue
+
+                time.sleep(1)
+
+                # Click login
+                for sel in ['button[type="submit"]', 'button:has-text("Log In")',
+                            'button:has-text("Masuk")', '.btn-solid-primary']:
+                    try:
+                        el = page.query_selector(sel)
+                        if el and el.is_visible():
+                            el.click()
+                            print(f"  ✅ Login clicked: {sel}")
+                            break
+                    except Exception:
+                        continue
+
+                # Wait for login
+                print("  Waiting for login to complete...")
+                start = time.time()
+                while time.time() - start < MAX_WAIT_SECONDS:
+                    time.sleep(3)
+                    current_url = page.url
+                    print(f"  [{int(time.time()-start)}s] {current_url[:60]}")
+
+                    if 'verify' in current_url.lower() or 'captcha' in current_url.lower():
+                        print("  ⚠️ CAPTCHA detected — waiting...")
+                        page.screenshot(path='/tmp/retry_captcha.png')
+                        continue
+
+                    if 'login' not in current_url.lower() and 'signin' not in current_url.lower():
+                        print("  ✅ Login successful!")
+                        break
+
+                # Re-check session: navigate to Komisi XTRA again
+                print("  Re-checking session...")
+                try:
+                    page.goto(KOMISI_XTRA_URL, timeout=30000)
+                    page.wait_for_load_state('networkidle', timeout=20000)
+                    time.sleep(5)
+                    current_url = page.url
+                    if _is_on_affiliate(current_url):
+                        print("  ✅ RETRY SUCCESS — session valid!")
+                        session_valid = True
+                    else:
+                        print(f"  ❌ RETRY FAILED — still not on affiliate: {current_url[:80]}")
+                        page.screenshot(path='/tmp/retry_failed.png')
+                except Exception as e:
+                    print(f"  ❌ RETRY navigation error: {e}")
+
+            # ═══════════════════════════════════════════════════════
             #  STEP 4B: Fetch products via browser API
             #  Uses page.evaluate(fetch()) — runs in real browser
             #  context so Shopee's anti-bot doesn't block it
