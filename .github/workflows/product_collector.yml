@@ -56,6 +56,8 @@ jobs:
           SHOPEE_USERNAME: ${{ secrets.SHOPEE_USERNAME }}
           SHOPEE_PASSWORD: ${{ secrets.SHOPEE_PASSWORD }}
           SHOPEE_AFFILIATE_COOKIES: ${{ secrets.SHOPEE_AFFILIATE_COOKIES }}
+          CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
+          CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
         run: |
           if [ -z "$SHOPEE_USERNAME" ]; then
             echo "SHOPEE_USERNAME not set — skipping auto-login"
