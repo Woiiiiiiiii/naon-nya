@@ -69,8 +69,7 @@ jobs:
         continue-on-error: true
 
       # ── Auto-update secret with refreshed cookies (gh CLI) ─────
-      # Uses GH_PAT to update SHOPEE_AFFILIATE_COOKIES secret
-      # so cookies survive even if cache expires (7 days no run)
+      # ONLY if session was verified valid (marker file exists)
       - name: Update Cookies Secret
         if: always()
         env:
@@ -78,6 +77,10 @@ jobs:
         run: |
           if [ -z "$GH_TOKEN" ]; then
             echo "GH_PAT not set — skipping secret update"
+            exit 0
+          fi
+          if [ ! -f /tmp/.cookies_session_valid ]; then
+            echo "Session was not valid — NOT updating secret (keeping old one)"
             exit 0
           fi
           if [ -f /tmp/.shopee_cookies.json ]; then

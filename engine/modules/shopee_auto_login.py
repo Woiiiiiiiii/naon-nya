@@ -488,6 +488,7 @@ def auto_login():
             #  STEP 4: Navigate to Komisi XTRA page
             #  This ensures all affiliate-specific cookies are set
             # ═══════════════════════════════════════════════════════
+            session_valid = False  # Track if we actually landed on affiliate
             print("[AutoLogin] Step 4: Navigating to Komisi XTRA...")
             try:
                 page.goto(KOMISI_XTRA_URL, timeout=30000)
@@ -498,11 +499,12 @@ def auto_login():
                 print(f"  URL after nav: {current_url[:80]}")
 
                 # If redirected back to login, cookies didn't work
-                if 'login' in current_url.lower():
-                    print("  ⚠️ Redirected to login — session not established")
-                    page.screenshot(path='/tmp/komisi_xtra_redirect.png')
-                else:
+                if _is_on_affiliate(current_url):
                     print("  ✅ Komisi XTRA page loaded — session valid!")
+                    session_valid = True
+                else:
+                    print("  ⚠️ NOT on affiliate domain — session not established")
+                    page.screenshot(path='/tmp/komisi_xtra_redirect.png')
             except Exception as e:
                 print(f"  Komisi XTRA navigation: {e}")
 
@@ -510,35 +512,41 @@ def auto_login():
             #  STEP 4B: Fetch products via browser API
             #  Uses page.evaluate(fetch()) — runs in real browser
             #  context so Shopee's anti-bot doesn't block it
+            #  ONLY if session is valid (on affiliate domain)
             # ═══════════════════════════════════════════════════════
-            try:
-                _fetch_products_via_browser(page)
-            except Exception as e:
-                print(f"[AutoLogin] Product fetch error (non-fatal): {e}")
+            if session_valid:
+                try:
+                    _fetch_products_via_browser(page)
+                except Exception as e:
+                    print(f"[AutoLogin] Product fetch error (non-fatal): {e}")
+            else:
+                print("[AutoLogin] Step 4B: SKIPPED — session not valid, would get empty results")
 
             # ═══════════════════════════════════════════════════════
-            #  STEP 5: Export ALL cookies + SAVE to cache
-            #  Cache is persisted by GitHub Actions Cache (private)
-            #  Secret is updated by workflow step via gh CLI
+            #  STEP 5: Export cookies + SAVE to cache
+            #  CRITICAL: Only save if session_valid!
+            #  Otherwise we'd overwrite good cached cookies with
+            #  bad ones from a failed CAPTCHA/login attempt.
             # ═══════════════════════════════════════════════════════
             print("[AutoLogin] Step 5: Exporting cookies...")
             cookies = context.cookies()
             _log_cookies(context, "Final export")
 
-            if len(cookies) < MIN_COOKIES_FOR_SUCCESS:
-                print(f"  ⚠️ Only {len(cookies)} cookies — login may have failed")
-                page.screenshot(path='/tmp/login_failed_final.png')
+            if session_valid:
+                print(f"  ✅ Session valid — saving {len(cookies)} cookies to cache")
+                try:
+                    cookies_json = json.dumps(cookies, ensure_ascii=False)
+                    with open(COOKIES_CACHE_FILE, 'w') as f:
+                        f.write(cookies_json)
+                    # Marker file for workflow: only update secret if session was valid
+                    with open('/tmp/.cookies_session_valid', 'w') as f:
+                        f.write('1')
+                    print(f"  ✅ Saved to cache")
+                except Exception as e:
+                    print(f"  ⚠️ Could not save cookies to cache: {e}")
             else:
-                print(f"  ✅ Exporting {len(cookies)} cookies total")
-            
-            # ALWAYS save cookies to cache (even if < 5, keep what we have)
-            try:
-                cookies_json = json.dumps(cookies, ensure_ascii=False)
-                with open(COOKIES_CACHE_FILE, 'w') as f:
-                    f.write(cookies_json)
-                print(f"  ✅ Saved {len(cookies)} cookies to cache")
-            except Exception as e:
-                print(f"  ⚠️ Could not save cookies to cache: {e}")
+                print("  ⚠️ Session NOT valid — keeping old cache (not overwriting!)")
+                cookies = None  # Signal to main() that login failed
 
         except Exception as e:
             print(f"[AutoLogin] ERROR: {e}")
