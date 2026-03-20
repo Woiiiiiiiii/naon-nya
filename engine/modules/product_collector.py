@@ -835,6 +835,46 @@ def collect_products(categories=None, target=None):
                                     except Exception:
                                         pass
 
+        # ══════════════════════════════════════════════════════════
+        #  LAYER 5: HTML Scraper (NO cookies needed!)
+        # ══════════════════════════════════════════════════════════
+        if collected < need:
+            try:
+                from shopee_scraper import scrape_search
+                remaining = need - collected
+                print(f"\n  [Layer5] HTML scraper (no cookies needed)...")
+                category_keywords = KEYWORDS.get(category, [category])
+                for kw in category_keywords[:5]:
+                    if collected >= need:
+                        break
+                    scraped = scrape_search(kw, limit=remaining)
+                    for prod in scraped:
+                        if collected >= need:
+                            break
+                        pid = _generate_product_id(prod["nama"], category)
+                        product_dir = os.path.join(BANK_DIR, category, pid)
+                        if os.path.exists(os.path.join(product_dir, "image.jpg")):
+                            continue
+                        import tempfile
+                        tmp_img = os.path.join(tempfile.gettempdir(), f"{pid}_temp.jpg")
+                        if prod.get("image_url") and _download_product_image(prod["image_url"], tmp_img):
+                            pid, ok = _save_product(prod, category, tmp_img)
+                            if ok:
+                                print(f"    OK Saved: {prod['nama'][:40]} [scraper]")
+                                collected += 1
+                                stats[category]["new"] += 1
+                            else:
+                                stats[category]["failed"] += 1
+                            try:
+                                os.remove(tmp_img)
+                            except Exception:
+                                pass
+                    time.sleep(random.uniform(1.0, 2.0))
+            except ImportError:
+                print("  [Layer5] shopee_scraper not available")
+            except Exception as e:
+                print(f"  [Layer5] Error: {e}")
+
         # ── FALLBACK: Layer 3+4 if still need more ──
         if collected < need:
             remaining = need - collected
