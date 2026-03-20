@@ -208,7 +208,9 @@ def _validate_cookies_via_proxy(cookies_json_str):
         print("[CookieCheck] Testing cookies via CF proxy API call...")
         status, data = proxy_get_json(full_url, headers=headers, cookies_str=cookies_str)
         
-        if status == 200 and data:
+        print(f"[CookieCheck] Response: HTTP {status}, data={str(data)[:200] if data else 'None'}")
+        
+        if data and isinstance(data, dict):
             code = data.get('code', -1)
             if code == 0:
                 products = data.get('data', {}).get('list', [])
@@ -217,12 +219,17 @@ def _validate_cookies_via_proxy(cookies_json_str):
             elif code == 30002:
                 print(f"[CookieCheck] ❌ Cookies EXPIRED (code={code}: cookie incorrect)")
                 return None
+            elif 'error' in data:
+                print(f"[CookieCheck] ⚠️ Proxy error: {data.get('error', '?')}")
+                return None
             else:
                 print(f"[CookieCheck] ⚠️ API code={code}, msg={data.get('msg', '?')}")
-                # Unknown code — treat as invalid
                 return None
+        elif status == 401:
+            print("[CookieCheck] ❌ Proxy auth failed — CF_PROXY_KEY mismatch!")
+            return None
         else:
-            print(f"[CookieCheck] ⚠️ HTTP {status} — cannot validate")
+            print(f"[CookieCheck] ⚠️ HTTP {status}, no valid JSON — cannot validate")
             return None
             
     except ImportError:
