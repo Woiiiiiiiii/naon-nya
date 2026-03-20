@@ -91,10 +91,22 @@ jobs:
           fi
         continue-on-error: true
 
+      - name: Load Cookies from Cache
+        if: always()
+        run: |
+          for f in /tmp/.shopee_cookies.json /tmp/affiliate_cookies.json; do
+            if [ -f "$f" ]; then
+              echo "SHOPEE_AFFILIATE_COOKIES<<EOF" >> $GITHUB_ENV
+              cat "$f" >> $GITHUB_ENV
+              echo "" >> $GITHUB_ENV
+              echo "EOF" >> $GITHUB_ENV
+              echo "✅ Loaded cookies from $f"
+              break
+            fi
+          done
+
       - name: Collect Products
         env:
-          # Auto-login sets SHOPEE_AFFILIATE_COOKIES via GITHUB_ENV
-          # If auto-login didn't run/failed, fall back to stored secret
           SHOPEE_AFFILIATE_COOKIES: ${{ env.SHOPEE_AFFILIATE_COOKIES || secrets.SHOPEE_AFFILIATE_COOKIES }}
           CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
           CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
