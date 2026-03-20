@@ -199,85 +199,13 @@ def fetch_freesound(category, count=3):
 # ===============================================
 
 def fetch_pixabay_music(category, count=3):
-    """Fetch music from Pixabay MUSIC API (Tier 2).
-    PENTING: endpoint /api/music/ bukan /api/ (itu untuk gambar!)"""
-    api_key = os.environ.get('PIXABAY_API_KEY', '')
-    if not api_key:
-        print(f"    [SKIP] PIXABAY_API_KEY not set")
-        return 0
-
-    d = get_music_dir(category)
-    mood = CATEGORY_MOODS.get(category, CATEGORY_MOODS['fashion'])
-    query = mood.get('pixabay_query', 'background music')
-    downloaded = 0
-
-    try:
-        # Pixabay MUSIC API (BUKAN images!)
-        url = "https://pixabay.com/api/music/"
-        params = {
-            'key': api_key,
-            'q': query,
-            'per_page': min(count + 3, 15),
-        }
-
-        print(f"    [PIXABAY MUSIC] Searching for '{query}'...")
-        resp = requests.get(url, params=params, timeout=30)
-
-        if resp.status_code == 200:
-            data = resp.json()
-            hits = data.get('hits', [])
-            print(f"    [OK] Pixabay Music: {len(hits)} results")
-
-            for hit in hits:
-                if downloaded >= count:
-                    break
-
-                # Pixabay Music API returns 'audio' field with download URL
-                audio_url = hit.get('audio', '')
-                if not audio_url:
-                    # Fallback fields
-                    audio_url = hit.get('url', '') or hit.get('previewURL', '')
-                if not audio_url or not audio_url.startswith('http'):
-                    continue
-
-                track_num = count_local(category) + 1
-                title = hit.get('title', f'track_{track_num}')[:30].replace(' ', '_')
-                filename = f"{category}_px_{track_num:02d}_{title}.mp3"
-                filepath = os.path.join(d, filename)
-
-                try:
-                    audio_resp = requests.get(audio_url, timeout=60)
-                    if audio_resp.status_code == 200 and len(audio_resp.content) > 10000:
-                        # Validate: check magic bytes to ensure it's audio, not image/HTML
-                        header = audio_resp.content[:4]
-                        if header[:3] == b'ID3' or header[:2] == b'\xff\xfb' or header[:2] == b'\xff\xf3':  # MP3
-                            pass
-                        elif header[:4] == b'OggS':  # OGG
-                            pass
-                        elif header[:4] == b'RIFF':  # WAV
-                            pass
-                        else:
-                            print(f"    [WARN] Pixabay returned non-audio file (magic: {header[:4]}), skipping")
-                            continue
-                        with open(filepath, 'wb') as f:
-                            f.write(audio_resp.content)
-                        size_kb = os.path.getsize(filepath) // 1024
-                        duration = hit.get('duration', 0)
-                        print(f"    [OK] {filename} ({size_kb}KB, {duration}s)")
-                        downloaded += 1
-                        time.sleep(0.3)
-                except Exception as e:
-                    print(f"    [WARN] Download failed: {e}")
-
-        elif resp.status_code == 429:
-            print(f"    [WARN] Pixabay rate limited")
-        else:
-            print(f"    [WARN] Pixabay Music API error: {resp.status_code}")
-
-    except Exception as e:
-        print(f"    [WARN] Pixabay music fetch error: {e}")
-
-    return downloaded
+    """Pixabay does NOT have a music API endpoint.
+    Their API only supports images (/api/) and videos (/api/videos/).
+    The /api/music/ endpoint was never real — it always returned errors.
+    This tier is kept as a placeholder in case Pixabay adds music support.
+    Meanwhile, Tier 1 (Freesound) and Tier 3 (YouTube) handle music."""
+    print(f"    [SKIP] Pixabay has no music API (only images/videos)")
+    return 0
 
 
 # ===============================================
