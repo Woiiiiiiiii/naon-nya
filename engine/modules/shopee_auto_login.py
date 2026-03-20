@@ -238,6 +238,12 @@ def _validate_cookies_via_api(cookies_json_str):
             elif code == 30002:
                 print(f"[CookieCheck] âŒ Cookies EXPIRED (code 30002: cookie incorrect)")
                 return None
+            elif isinstance(data.get('error', 0), int) and data.get('error', 0) > 0:
+                # Shopee affiliate API returns {error: 90309999, is_login: True}
+                # when cookies expired — different format than code:30002
+                err = data.get('error')
+                print(f"[CookieCheck] \u274c Cookies EXPIRED (error={err}, is_login={data.get('is_login')})")
+                return None
             else:
                 msg = data.get('msg', data.get('error', '?'))
                 print(f"[CookieCheck] âš ï¸ API response: code={code}, msg={msg}")
@@ -308,7 +314,10 @@ def auto_login():
                 pass
             return validated
         else:
-            print("[AutoLogin] âŒ Cookies expired â€” browser login needed")
+            print("[AutoLogin] \u274c Cookies expired via API")
+            print("[AutoLogin] Skipping Playwright -- GitHub Actions IP always gets CAPTCHA")
+            print("[AutoLogin] --> Update SHOPEE_AFFILIATE_COOKIES secret with fresh cookies to fix")
+            return None
     else:
         print("[AutoLogin] No existing cookies found")
 
