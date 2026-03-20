@@ -56,13 +56,14 @@ jobs:
           SHOPEE_USERNAME: ${{ secrets.SHOPEE_USERNAME }}
           SHOPEE_PASSWORD: ${{ secrets.SHOPEE_PASSWORD }}
           SHOPEE_AFFILIATE_COOKIES: ${{ secrets.SHOPEE_AFFILIATE_COOKIES }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           if [ -z "$SHOPEE_USERNAME" ]; then
             echo "SHOPEE_USERNAME not set — skipping auto-login"
             exit 0
           fi
           echo "=== Auto-login: getting fresh cookies ==="
-          pip install playwright
+          pip install playwright pynacl
           playwright install chromium --with-deps
           cd engine/modules
           python shopee_auto_login.py

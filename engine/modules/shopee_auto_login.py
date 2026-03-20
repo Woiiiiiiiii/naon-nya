@@ -58,6 +58,67 @@ def _log_cookies(context, label=""):
     return cookies
 
 
+def _update_github_secret(cookies_json):
+    """Update SHOPEE_AFFILIATE_COOKIES secret via GitHub API.
+    This is a BACKUP persistence method — survives cache clears.
+    Requires GH_PAT env var (Personal Access Token with repo scope).
+    """
+    import requests as req
+    
+    token = os.environ.get('GH_PAT', '')
+    repo = os.environ.get('GITHUB_REPOSITORY', '')
+    
+    if not token or not repo:
+        print("  [SecretUpdate] Skipped (GH_PAT or GITHUB_REPOSITORY not set)")
+        return
+    
+    print("  [SecretUpdate] Updating SHOPEE_AFFILIATE_COOKIES secret...")
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Accept': 'application/vnd.github.v3+json',
+    }
+    
+    try:
+        # Step 1: Get repo public key for encryption
+        key_url = f'https://api.github.com/repos/{repo}/actions/secrets/public-key'
+        key_resp = req.get(key_url, headers=headers, timeout=10)
+        if key_resp.status_code != 200:
+            print(f"  [SecretUpdate] ⚠️ Could not get public key: HTTP {key_resp.status_code}")
+            return
+        
+        key_data = key_resp.json()
+        public_key = key_data['key']
+        key_id = key_data['key_id']
+        
+        # Step 2: Encrypt the secret value using libsodium (via PyNaCl)
+        try:
+            from nacl import encoding, public as nacl_public
+            sealed_box = nacl_public.SealedBox(
+                nacl_public.PublicKey(public_key.encode('utf-8'), encoding.Base64Encoder)
+            )
+            import base64
+            encrypted = base64.b64encode(
+                sealed_box.encrypt(cookies_json.encode('utf-8'))
+            ).decode('utf-8')
+        except ImportError:
+            print("  [SecretUpdate] ⚠️ PyNaCl not installed — skipping secret update")
+            return
+        
+        # Step 3: Update the secret
+        secret_url = f'https://api.github.com/repos/{repo}/actions/secrets/SHOPEE_AFFILIATE_COOKIES'
+        update_resp = req.put(secret_url, headers=headers, json={
+            'encrypted_value': encrypted,
+            'key_id': key_id,
+        }, timeout=10)
+        
+        if update_resp.status_code in (201, 204):
+            print("  [SecretUpdate] ✅ Secret updated successfully!")
+        else:
+            print(f"  [SecretUpdate] ⚠️ Update returned HTTP {update_resp.status_code}")
+    except Exception as e:
+        print(f"  [SecretUpdate] ⚠️ Failed: {e}")
+
+
 def _is_on_affiliate(url):
     """Check if URL hostname is affiliate.shopee.co.id (not just substring)."""
     from urllib.parse import urlparse
@@ -104,7 +165,7 @@ def _fetch_products_via_browser(page):
                     async (keyword) => {
                         try {
                             const resp = await fetch(
-                                '/api/v3/offer/product/list?sort_type=1&page_offset=0&page_limit=10&keyword=' + encodeURIComponent(keyword),
+                                '/api/v3/offer/product/list?sort_type=1&page_offset=0&page_limit=20&keyword=' + encodeURIComponent(keyword),
                                 {headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}}
                             );
                             if (!resp.ok) return {error: resp.status, text: await resp.text().catch(() => '')};
@@ -536,10 +597,12 @@ def auto_login():
                     cookies_json = json.dumps(cookies, ensure_ascii=False)
                     with open(COOKIES_CACHE_FILE, 'w') as f:
                         f.write(cookies_json)
-                    print(f"  ✅ Saved refreshed cookies to {COOKIES_CACHE_FILE}")
-                    print(f"     (cached by workflow for next run)")
+                    print(f"  ✅ Saved refreshed cookies to cache")
                 except Exception as e:
                     print(f"  ⚠️ Could not save cookies to cache: {e}")
+                
+                # Also update GitHub Secret as backup (survives cache clears)
+                _update_github_secret(cookies_json)
 
         except Exception as e:
             print(f"[AutoLogin] ERROR: {e}")
