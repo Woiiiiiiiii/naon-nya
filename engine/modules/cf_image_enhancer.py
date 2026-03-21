@@ -53,23 +53,20 @@ ENHANCE_PROMPTS = {
 
 
 def _get_cf_credentials(account_index=None):
-    """Get paired (account_id, api_key) for a DEDICATED account index."""
+    """Get paired (account_id, api_key) for a DEDICATED account index.
+    NO borrowing from other accounts."""
     if account_index is not None:
         acc_id = os.environ.get(f'CF_ACCOUNT_ID_{account_index}', '')
         api_key = os.environ.get(f'CF_API_KEY_{account_index}', '')
         if acc_id and api_key:
             return acc_id, api_key
+        # Try generic (non-indexed) as last resort for this account only
         acc_id = os.environ.get('CF_ACCOUNT_ID', '')
+        api_key = os.environ.get('CF_API_KEY', '')
         if acc_id and api_key:
             return acc_id, api_key
 
-    # Fallback: try all pairs 1-7
-    for i in range(1, 8):
-        acc_id = os.environ.get(f'CF_ACCOUNT_ID_{i}', '')
-        api_key = os.environ.get(f'CF_API_KEY_{i}', '')
-        if acc_id and api_key:
-            return acc_id, api_key
-
+    # No index provided and no generic key — return None (do NOT borrow)
     return None, None
 
 

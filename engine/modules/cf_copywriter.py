@@ -31,27 +31,19 @@ ACCOUNT_CF_MAP = {
 
 def _get_cf_credentials(account_index=None):
     """Get CF credentials for a DEDICATED account index.
-    Each channel uses ONLY its own key — no borrowing."""
+    Each channel uses ONLY its own key — NO borrowing from other accounts."""
     if account_index is not None:
         acc_id = os.environ.get(f'CF_ACCOUNT_ID_{account_index}', '')
         api_key = os.environ.get(f'CF_API_KEY_{account_index}', '')
         if acc_id and api_key:
             return acc_id, api_key
-        # Try shared account ID with per-account key
+        # Try generic (non-indexed) as last resort for this account only
         acc_id = os.environ.get('CF_ACCOUNT_ID', '')
+        api_key = os.environ.get('CF_API_KEY', '')
         if acc_id and api_key:
             return acc_id, api_key
 
-    # Last resort: first available (only when index not provided)
-    for i in range(1, 8):
-        acc_id = os.environ.get(f'CF_ACCOUNT_ID_{i}', '')
-        api_key = os.environ.get(f'CF_API_KEY_{i}', '')
-        if acc_id and api_key:
-            return acc_id, api_key
-    acc_id = os.environ.get('CF_ACCOUNT_ID', '')
-    api_key = os.environ.get('CF_API_KEY', '')
-    if acc_id and api_key:
-        return acc_id, api_key
+    # No index provided and no generic key — return None (do NOT borrow)
     return None, None
 
 
