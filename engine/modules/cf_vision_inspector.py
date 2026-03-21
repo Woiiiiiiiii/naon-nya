@@ -264,17 +264,36 @@ def inspect_and_select_best(image_paths, category='home', account_id=None):
     return best_path, best_result
 
 
+def _load_product_category_map():
+    """Load product_id → category mapping from produk.csv."""
+    import csv
+    csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'produk.csv')
+    mapping = {}
+    if os.path.exists(csv_path):
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                pid = row.get('produk_id', '')
+                cat = row.get('category', '')
+                if pid and cat:
+                    mapping[pid] = cat
+    return mapping
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--image', required=True, help='Image file or directory to inspect')
-    parser.add_argument('--category', default='home')
+    parser.add_argument('--category', default=None, help='Override category (default: auto-detect from produk.csv)')
     args = parser.parse_args()
     
     target = args.image
     
+    # Load product→category map for per-image key routing
+    prod_cat_map = _load_product_category_map()
+    print(f"[VISION] Loaded {len(prod_cat_map)} product→category mappings")
+    
     if os.path.isdir(target):
-        # Inspect all images in directory
         exts = ('.jpg', '.jpeg', '.png', '.webp')
         files = [f for f in os.listdir(target) if f.lower().endswith(exts)]
         if not files:
@@ -283,10 +302,15 @@ if __name__ == "__main__":
             print(f"[VISION] Inspecting {len(files)} images in {target}...")
             for fname in files:
                 fpath = os.path.join(target, fname)
-                result = inspect_image(fpath, args.category)
-                print(f"  {fname}: score={result['score']}, rec={result['recommendation']}")
+                # Auto-detect category from filename (produk_id.ext)
+                pid = os.path.splitext(fname)[0]
+                cat = args.category or prod_cat_map.get(pid, 'home')
+                cf_idx = ACCOUNT_CF_MAP.get(cat)
+                result = inspect_image(fpath, cat)
+                print(f"  {fname}: cat={cat}, key={cf_idx}, score={result['score']}, rec={result['recommendation']}")
     elif os.path.isfile(target):
-        result = inspect_image(target, args.category)
+        cat = args.category or 'home'
+        result = inspect_image(target, cat)
         print(json.dumps(result, indent=2))
     else:
         print(f"[VISION] Not found: {target}")

@@ -44,7 +44,7 @@ def main():
         "python engine/modules/product_collector.py --export",   # Export bank → produk.csv + images/
         "python engine/modules/product_validator.py",
         # AI Vision: inspect + score downloaded images
-        "python engine/modules/cf_vision_inspector.py --image engine/data/images --category home",
+        "python engine/modules/cf_vision_inspector.py --image engine/data/images",
         "python engine/modules/extract_masalah.py",
         "python engine/modules/generate_storyboard.py"
     ]
@@ -98,7 +98,7 @@ def main():
         "python engine/modules/image_enhancer.py",
         "python engine/modules/image_compositor.py",
         # Beautify all composites (local PIL + CF SD img2img)
-        "python engine/modules/cf_image_enhancer.py --input engine/data/composites --category home",
+        "python engine/modules/cf_image_enhancer.py --input engine/data/composites",
         # Deduplication + planning
         "python engine/modules/dedup_tracker.py",
         "python engine/modules/micro_cut_planner.py",

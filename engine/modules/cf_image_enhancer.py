@@ -227,10 +227,27 @@ def enhance_composite(img_path, category='home', account_index=None):
     return True
 
 
-def enhance_all_composites(composites_dir, category='home', account_index=None):
+def _load_product_category_map():
+    """Load product_id → category mapping from produk.csv."""
+    import csv
+    csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'produk.csv')
+    mapping = {}
+    if os.path.exists(csv_path):
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                pid = row.get('produk_id', '')
+                cat = row.get('category', '')
+                if pid and cat:
+                    mapping[pid] = cat
+    return mapping
+
+
+def enhance_all_composites(composites_dir, category=None, account_index=None):
     """Enhance all composite images in a directory.
     
-    Called after image_compositor generates composites, before video generation.
+    Auto-detects category per composite from produk.csv so each uses
+    its OWN dedicated CF key. Falls back to category arg if provided.
     """
     if not os.path.exists(composites_dir):
         print(f"  [ENHANCE] Dir not found: {composites_dir}")
@@ -243,13 +260,20 @@ def enhance_all_composites(composites_dir, category='home', account_index=None):
         print(f"  [ENHANCE] No composites found in {composites_dir}")
         return
 
-    if account_index is None:
-        account_index = ACCOUNT_CF_MAP.get(category)
+    # Load product→category map for per-image key routing
+    prod_cat_map = _load_product_category_map()
+    print(f"  [ENHANCE] Loaded {len(prod_cat_map)} product→category mappings")
+    print(f"  [ENHANCE] Enhancing {len(files)} composites (per-category CF keys)...")
 
-    print(f"  [ENHANCE] Enhancing {len(files)} composites ({category})...")
     for f in files:
         fpath = os.path.join(composites_dir, f)
-        enhance_composite(fpath, category, account_index)
+        # Extract product_id from composite filename (e.g. "composite_PRODID_v1.png")
+        parts = f.replace('composite_', '').replace('.png', '').split('_')
+        pid = parts[0] if parts else ''
+        # Auto-detect category, or use override
+        img_cat = category or prod_cat_map.get(pid, 'home')
+        img_account_index = account_index or ACCOUNT_CF_MAP.get(img_cat)
+        enhance_composite(fpath, img_cat, img_account_index)
 
     print(f"  [ENHANCE] Done — {len(files)} images enhanced")
 
@@ -258,7 +282,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', type=str, required=True, help='Composites directory')
-    parser.add_argument('--category', type=str, default='home')
+    parser.add_argument('--category', type=str, default=None, help='Override category (default: auto-detect from produk.csv)')
     parser.add_argument('--account', type=int, default=None)
     args = parser.parse_args()
 
