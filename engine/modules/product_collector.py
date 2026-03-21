@@ -957,16 +957,27 @@ def collect_products(categories=None, target=None):
 
 
 def export_bank_to_csv(output_file='engine/data/produk.csv'):
-    """Export product bank to CSV for the video pipeline.
+    """Export AVAILABLE product bank to CSV for the video pipeline.
     Column names match scrape_produk.py format for pipeline compatibility.
-    Skips garbage data (Rp0 prices, Pexels/Pixabay images)."""
+    Skips: garbage data (Rp0, Pexels) AND already-used products (dedup)."""
     import csv
 
-    # No price recovery from hardcoded data — products with Rp0 are skipped
+    # Load used product IDs from dedup tracker — these are permanently excluded
+    used_ids = set()
+    try:
+        from dedup_tracker import _load as _load_dedup
+        data = _load_dedup()
+        for acct_data in data.values():
+            used_ids.update(acct_data.keys())
+    except Exception:
+        pass
+    if used_ids:
+        print(f"  [EXPORT] Filtering out {len(used_ids)} already-used products")
+
     fallback_prices = {}
 
     all_products = []
-    skipped = {'no_price': 0, 'pexels': 0, 'no_image': 0}
+    skipped = {'no_price': 0, 'pexels': 0, 'no_image': 0, 'used': 0}
 
     for category in CATEGORIES:
         cat_dir = os.path.join(BANK_DIR, category)
@@ -974,6 +985,11 @@ def export_bank_to_csv(output_file='engine/data/produk.csv'):
             continue
 
         for pid_dir in os.listdir(cat_dir):
+            # SKIP already-used products (permanent — never reuse for video)
+            if pid_dir in used_ids:
+                skipped['used'] += 1
+                continue
+
             product_dir = os.path.join(cat_dir, pid_dir)
             info_file = os.path.join(product_dir, 'product.json')
             image_file = os.path.join(product_dir, 'image.jpg')
@@ -1025,8 +1041,8 @@ def export_bank_to_csv(output_file='engine/data/produk.csv'):
             except Exception:
                 continue
 
-    if skipped['pexels'] or skipped['no_price']:
-        print(f"  Skipped garbage: {skipped['pexels']} Pexels images, "
+    if skipped['pexels'] or skipped['no_price'] or skipped['used']:
+        print(f"  Skipped: {skipped['used']} used, {skipped['pexels']} Pexels images, "
               f"{skipped['no_price']} Rp0 prices, {skipped['no_image']} no image")
 
     if not all_products:

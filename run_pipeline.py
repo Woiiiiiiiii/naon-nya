@@ -37,23 +37,25 @@ def main():
         
     mode = sys.argv[1].lower()
     
-    # V1: Data Prep (bank export → validate → copy images → extract → storyboard)
-    # Product Collector is the SOLE source of products + images (Shopee only)
-    # No live scraping here — Product Collector runs separately on schedule
+    # V1: Data Prep (bank export → validate → inspect → extract → storyboard)
+    # Product Collector --export is NOT critical: if it fails but produk.csv
+    # already exists from a previous run, pipeline uses existing stock.
+    # Collector runs separately (manual) to ADD stock — video engine is independent.
     v1_steps = [
         "python engine/modules/product_collector.py --export",   # Export bank → produk.csv + images/
         "python engine/modules/product_validator.py",
-        # AI Vision: inspect + score downloaded images
+        # AI Vision: inspect + score downloaded images (auto-detect category per image)
         "python engine/modules/cf_vision_inspector.py --image engine/data/images",
         "python engine/modules/extract_masalah.py",
         "python engine/modules/generate_storyboard.py"
     ]
 
-    # DATA CHECKPOINT: warn if V1 produced no products (but don't hard-fail)
+    # DATA CHECKPOINT: warn if produk.csv has no products
+    # NOT fatal — pipeline checks for 0 videos at the end
     v1_checkpoint = {
         'file': 'engine/data/produk.csv',
         'min_lines': 2,  # header + at least 1 product
-        'msg': 'V1 menghasilkan 0 produk — semua tier Shopee gagal. Cek: CF_PROXY_URL, SHOPEE_AFFILIATE_COOKIES',
+        'msg': 'Stok produk kosong — produk.csv tidak ada atau kosong. Jalankan product collector untuk menambah stok.',
         'fatal': False,  # WARNING only — pipeline will catch 0-video at end
     }
     
@@ -225,17 +227,13 @@ def main():
         print(f"\n{'='*60}")
         print(f"Step {i}/{len(pipeline)} (elapsed: {int(elapsed)}s)")
         
-        # product_collector --export is critical (if bank empty → 0 products → 0 videos)
-        is_critical = ('product_collector' in step and '--export' in step)
-        
-        if run_step(step, critical=is_critical):
+        # All steps are non-critical — pipeline continues on failure
+        # Video engine depends on STOCK (produk.csv + images), not on collector
+        if run_step(step, critical=False):
             passed += 1
         else:
             failed += 1
             failed_steps.append(step.split('/')[-1].replace('.py', ''))
-            if is_critical:
-                print("[HALT] Critical step failed, aborting pipeline")
-                break
     
     # POST-PIPELINE: cleanup used product images to save storage
     try:
