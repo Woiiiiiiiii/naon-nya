@@ -844,10 +844,11 @@ def collect_products(categories=None, target=None):
                 remaining = need - collected
                 print(f"\n  [Layer5] HTML scraper (no cookies needed)...")
                 category_keywords = SEARCH_KEYWORDS.get(category, [category])
-                for kw in category_keywords[:5]:
+                random.shuffle(category_keywords)  # randomize to get variety
+                for kw in category_keywords[:15]:   # try up to 15 keywords
                     if collected >= need:
                         break
-                    scraped = scrape_search(kw, limit=remaining)
+                    scraped = scrape_search(kw, limit=10)  # 10 per keyword
                     for prod in scraped:
                         if collected >= need:
                             break
