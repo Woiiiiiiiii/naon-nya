@@ -1,10 +1,7 @@
 name: Product Collector
 
 on:
-  # Run daily at 5 AM UTC = 12:00 WIB (before video pipeline at 1 PM WIB)
-  schedule:
-    - cron: '0 5 * * *'
-  # Allow manual trigger
+  # Manual trigger only — user updates cookies + triggers together
   workflow_dispatch:
     inputs:
       category:
