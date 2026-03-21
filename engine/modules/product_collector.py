@@ -843,7 +843,7 @@ def collect_products(categories=None, target=None):
                 from shopee_scraper import scrape_search
                 remaining = need - collected
                 print(f"\n  [Layer5] HTML scraper (no cookies needed)...")
-                category_keywords = KEYWORDS.get(category, [category])
+                category_keywords = SEARCH_KEYWORDS.get(category, [category])
                 for kw in category_keywords[:5]:
                     if collected >= need:
                         break
