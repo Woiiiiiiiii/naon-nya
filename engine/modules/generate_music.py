@@ -29,14 +29,18 @@ import shutil
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from engine.modules.category_router import get_category
 
-# Import auto-restock from music_downloader
+# Import auto-restock from music_downloader (try multiple import paths)
+HAS_DOWNLOADER = False
 try:
     from engine.modules.music_downloader import restock_category as _restock, count_local as _count
     HAS_DOWNLOADER = True
 except ImportError:
-    HAS_DOWNLOADER = False
-    def _restock(cat): return 0
-    def _count(cat): return 0
+    try:
+        from music_downloader import restock_category as _restock, count_local as _count
+        HAS_DOWNLOADER = True
+    except ImportError:
+        def _restock(cat): return 0
+        def _count(cat): return 0
 
 SAMPLE_RATE = 44100
 MUSIC_DIR = os.path.join(os.path.dirname(__file__), '..', 'assets', 'music')
