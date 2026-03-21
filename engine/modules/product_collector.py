@@ -606,13 +606,32 @@ def _save_product(product, category, image_path):
 #  MAIN COLLECTOR
 # ═══════════════════════════════════════════════════════════════════
 def count_bank(category):
-    """Count products in bank for a category."""
+    """Count AVAILABLE products in bank (excludes already-used ones)."""
     cat_dir = os.path.join(BANK_DIR, category)
     if not os.path.exists(cat_dir):
         return 0
-    return len([d for d in os.listdir(cat_dir)
-                if os.path.isdir(os.path.join(cat_dir, d))
-                and os.path.exists(os.path.join(cat_dir, d, 'image.jpg'))])
+
+    # Load used product IDs from dedup tracker
+    used_ids = set()
+    try:
+        from dedup_tracker import _load as _load_dedup
+        data = _load_dedup()
+        for acct_data in data.values():
+            used_ids.update(acct_data.keys())
+    except Exception:
+        pass
+
+    count = 0
+    for d in os.listdir(cat_dir):
+        dirpath = os.path.join(cat_dir, d)
+        if not os.path.isdir(dirpath):
+            continue
+        if not os.path.exists(os.path.join(dirpath, 'image.jpg')):
+            continue
+        if d in used_ids:
+            continue  # skip — already used for video
+        count += 1
+    return count
 
 
 def collect_products(categories=None, target=None):
