@@ -48,25 +48,21 @@ jobs:
           restore-keys: |
             shopee-cookies-
 
-      # ── Auto Cookie Refresh ──────────────────────────────────────
-      # Inject cached/stored cookies → browse site → refresh session
-      # → save refreshed cookies to cache + GITHUB_ENV
+      # ── Auto Cookie Refresh via API (no browser needed) ─────────
+      # Makes a Shopee product API call → captures Set-Cookie headers
+      # → saves refreshed tokens back to secret + GITHUB_ENV
       - name: Auto-refresh Affiliate Cookies
         env:
-          SHOPEE_USERNAME: ${{ secrets.SHOPEE_USERNAME }}
-          SHOPEE_PASSWORD: ${{ secrets.SHOPEE_PASSWORD }}
           SHOPEE_AFFILIATE_COOKIES: ${{ secrets.SHOPEE_AFFILIATE_COOKIES }}
-          CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
-          CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          if [ -z "$SHOPEE_USERNAME" ]; then
-            echo "SHOPEE_USERNAME not set — skipping auto-login"
+          if [ -z "$SHOPEE_AFFILIATE_COOKIES" ]; then
+            echo "SHOPEE_AFFILIATE_COOKIES not set — skipping refresh"
             exit 0
           fi
-          echo "=== Auto-login: checking cookies ==="
+          echo "=== Cookie refresh via API ==="
           cd engine/modules
-          # Quick API check first — no Playwright needed
-          python shopee_auto_login.py
+          python cookie_refresher.py
         continue-on-error: true
 
       # ── Auto-update secret with refreshed cookies (gh CLI) ─────
