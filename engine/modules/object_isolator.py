@@ -26,7 +26,7 @@ def _get_hf_key(account_id):
     global _hf_key_counter
     hf_path = os.path.join(CONFIG_DIR, 'hf_config.json')
     if not os.path.exists(hf_path):
-        return os.environ.get('HF_API_KEY_1', '')
+        return ''  # No config = no key (do NOT borrow)
     with open(hf_path, 'r') as f:
         mapping = json.load(f)
     acct_map = {
@@ -34,8 +34,10 @@ def _get_hf_key(account_id):
         'yt_3': 'youtube_akun_3', 'yt_4': 'youtube_akun_4',
         'yt_5': 'youtube_akun_5', 'tt_1': 'tiktok', 'fb_1': 'facebook',
     }
-    config_key = acct_map.get(account_id, 'youtube_akun_1')
-    env_vars = mapping.get(config_key, ['HF_API_KEY_1'])
+    config_key = acct_map.get(account_id)
+    if not config_key or config_key not in mapping:
+        return ''  # Unknown account — do NOT borrow other channel's key
+    env_vars = mapping[config_key]
     # Support both old (string) and new (array) format
     if isinstance(env_vars, str):
         env_vars = [env_vars]

@@ -397,14 +397,16 @@ def get_hf_api_key(account_id):
             'yt_3': 'youtube_akun_3', 'yt_4': 'youtube_akun_4',
             'yt_5': 'youtube_akun_5', 'tt_1': 'tiktok', 'fb_1': 'facebook',
         }
-        key = acct_map.get(account_id, 'youtube_akun_1')
-        env_vars = mapping.get(key, ['HF_API_KEY_1'])
+        key = acct_map.get(account_id)
+        if not key or key not in mapping:
+            return ''  # Unknown account — do NOT borrow other channel's key
+        env_vars = mapping[key]
         if isinstance(env_vars, str):
             env_vars = [env_vars]
         idx = _hf_router_counter % len(env_vars)
         _hf_router_counter += 1
         return os.environ.get(env_vars[idx], '')
-    return os.environ.get('HF_API_KEY_1', '')
+    return ''  # No config = no key (do NOT borrow)
 
 
 def get_style_copy(account_id):

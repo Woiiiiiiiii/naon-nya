@@ -74,9 +74,7 @@ def _get_key_for_account(account_id=None):
                 if idx == key_index and ch in key_map:
                     return key_map[ch]
 
-    # Last resort: first available key (only when account_id not provided)
-    if key_map:
-        return next(iter(key_map.values()))
+    # No account_id or not found — return None (do NOT borrow other channel's key)
     return None
 
 
