@@ -77,7 +77,7 @@ SEARCH_KEYWORDS = {
     ],
 }
 
-TARGET_PER_CATEGORY = 20  # Aim for 20 products per category
+TARGET_PER_CATEGORY = 25  # 25 × 5 categories = 125 products (covers ~12 days at 10/day)
 MIN_IMAGE_SIZE = 300      # Minimum image dimension
 
 USER_AGENTS = [
