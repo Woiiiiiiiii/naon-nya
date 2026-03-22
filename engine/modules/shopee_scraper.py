@@ -127,18 +127,21 @@ def scrape_search(keyword, limit=10):
     
     products = []
     
-    # Try search API via proxy (better success rate)
+    # Try search API via proxy (better success rate from GitHub Actions)
     try:
         from shopee_proxy import proxy_get_json, is_proxy_available
         if is_proxy_available():
-            api_url = f"{search_api}?{urlencode(params)}"
-            status, data = proxy_get_json(api_url, headers={
-                'User-Agent': random.choice(USER_AGENTS),
-                'Accept': 'application/json',
-                'Referer': f'https://shopee.co.id/search?keyword={quote_plus(keyword)}',
-                'X-Shopee-Language': 'id',
-                'X-Requested-With': 'XMLHttpRequest',
-            })
+            status, data = proxy_get_json(
+                search_api,
+                params=params,
+                headers={
+                    'User-Agent': random.choice(USER_AGENTS),
+                    'Accept': 'application/json',
+                    'Referer': f'https://shopee.co.id/search?keyword={quote_plus(keyword)}',
+                    'X-Shopee-Language': 'id',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            )
             if status == 200 and data:
                 items = data.get('items', [])
                 for item in items[:limit]:
@@ -148,8 +151,12 @@ def scrape_search(keyword, limit=10):
                 if products:
                     print(f"    [Scraper] API proxy: {len(products)} products")
                     return products
+                else:
+                    print(f"    [Scraper] API proxy: 200 OK but 0 parseable products")
+            else:
+                print(f"    [Scraper] API proxy: status={status}, no data")
     except ImportError:
-        pass
+        print("    [Scraper] shopee_proxy not available")
     except Exception as e:
         print(f"    [Scraper] API proxy error: {e}")
     

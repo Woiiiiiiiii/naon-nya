@@ -861,38 +861,7 @@ def collect_products(categories=None, target=None):
                             else:
                                 stats[category]['failed'] += 1
 
-                        # If no products from shop, use shop as product fallback
-                        if not shop_prods and collected < need:
-                            shop_image = shop.get('shop_image', '')
-                            if shop_image and not shop_image.startswith('http'):
-                                shop_image = f"https://down-id.img.susercontent.com/file/{shop_image}"
-                            prod = {
-                                'nama': shop_name[:80],
-                                'price': f"Komisi {commission}",
-                                'desc': f"Toko {shop_name} - Komisi affiliate {commission}",
-                                'image_url': shop_image,
-                                'shopee_url': long_link,
-                                'source': 'shopee_affiliate_shop',
-                                'commission': commission,
-                                'shop_name': shop_name,
-                            }
-                            pid = _generate_product_id(prod['nama'], category)
-                            product_dir = os.path.join(BANK_DIR, category, pid)
-                            if not os.path.exists(os.path.join(product_dir, 'image.jpg')):
-                                import tempfile
-                                tmp_img = os.path.join(tempfile.gettempdir(), f'{pid}_temp.jpg')
-                                if shop_image and _download_product_image(shop_image, tmp_img):
-                                    pid, ok = _save_product(prod, category, tmp_img)
-                                    if ok:
-                                        print(f"    ✓ Saved: {shop_name[:40]} [shop_fallback]")
-                                        collected += 1
-                                        stats[category]['new'] += 1
-                                    else:
-                                        stats[category]['failed'] += 1
-                                    try:
-                                        os.remove(tmp_img)
-                                    except Exception:
-                                        pass
+                        # Shop fallback REMOVED — store logos/commission are NOT products
 
         # ══════════════════════════════════════════════════════════
         #  LAYER 5: HTML Scraper (NO cookies needed!)
@@ -1048,6 +1017,18 @@ def export_bank_to_csv(output_file=None):
                 img_url = info.get('image_url', '')
                 if any(x in img_url for x in ['pexels.com', 'pixabay.com', 'unsplash.com']):
                     skipped['pexels'] += 1
+                    continue
+
+                # SKIP garbage: shop logos (not real products)
+                source = info.get('source', '')
+                if source == 'shopee_affiliate_shop':
+                    skipped['pexels'] += 1  # reuse counter
+                    continue
+
+                # SKIP garbage: "Komisi" prices (shop data, not product data)
+                price_raw = info.get('price', '')
+                if isinstance(price_raw, str) and 'komisi' in price_raw.lower():
+                    skipped['no_price'] += 1
                     continue
 
                 # Get price — try multiple fields
