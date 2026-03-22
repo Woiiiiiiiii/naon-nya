@@ -159,7 +159,7 @@ def enhance_with_cf(img_path, category='home', account_index=None, strength=0.20
         payload = {
             "prompt": prompt,
             "negative_prompt": negative_prompt,
-            "image": img_b64,
+            "image_b64": img_b64,
             "strength": strength,   # LOW = subtle enhancement
             "num_steps": 15,        # Fewer steps = faster + subtler
             "seed": random.randint(1, 999999),

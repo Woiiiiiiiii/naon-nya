@@ -84,10 +84,10 @@ def inspect_image(img_path, category='home', account_id=None):
         img_small = img.copy()
         img_small.thumbnail((512, 512), Image.LANCZOS)
         
-        # Convert to base64
+        # Convert to byte list (Cloudflare Workers AI expects array of uint8)
         buffer = BytesIO()
         img_small.save(buffer, format='PNG')
-        img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        img_bytes = list(buffer.getvalue())
         
         prompt = """Analyze this product image for e-commerce video use. Rate on these criteria:
 1. Product visibility: Is the product clearly visible and prominent? (0-10)
@@ -110,7 +110,7 @@ Respond ONLY in this JSON format:
                     "content": prompt,
                 }
             ],
-            "image": img_b64,
+            "image": img_bytes,
             "max_tokens": 200,
         }
 
