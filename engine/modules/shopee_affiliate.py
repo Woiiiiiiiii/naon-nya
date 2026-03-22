@@ -753,19 +753,8 @@ def collect_affiliate_products(category, target=5):
                     })
                     print(f"      ✓ Product: {prod['name'][:40]}")
             else:
-                # Fallback: use shop as "product" (shop image + shop link)
-                # This works for video content (shows the shop brand)
-                all_products.append({
-                    'nama': shop_name[:80],
-                    'price': f"Komisi {commission}",
-                    'desc': f"Toko {shop_name} - Komisi affiliate {commission}",
-                    'image_url': shop_image,
-                    'shopee_url': long_link,
-                    'source': 'shopee_affiliate_shop',
-                    'commission': commission,
-                    'shop_name': shop_name,
-                })
-                print(f"      ✓ Shop fallback: {shop_name}")
+                # No products found for this shop → skip (do NOT use shop as product)
+                print(f"      ✗ No products from shop '{shop_name}' — skipping")
 
     print(f"\n  → Affiliate API: {len(all_products)} products for {category}")
     return all_products
