@@ -131,7 +131,6 @@ jobs:
 
       - name: Commit Product Bank
         if: always()
-        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -139,8 +138,14 @@ jobs:
           if git diff --cached --quiet; then
             echo "No new products collected — nothing to commit"
             exit 0
-          else
-            git commit -m "🛍️ Product bank update: $(date +%Y-%m-%d)"
-            git push origin main || echo "Push failed (branch protection?) — products saved in cache"
-            echo "Product bank updated and pushed!"
           fi
+          git commit -m "🛍️ Product bank update: $(date +%Y-%m-%d)"
+          # Retry up to 3 times to handle branch protection + concurrent pushes
+          for i in 1 2 3; do
+            git fetch origin main
+            git rebase origin/main && git push origin main && echo "✅ Push OK on attempt $i" && exit 0
+            echo "⚠️ Push attempt $i failed, retrying..."
+            sleep 3
+          done
+          echo "❌ All push attempts failed! Products NOT saved to repo."
+          exit 1

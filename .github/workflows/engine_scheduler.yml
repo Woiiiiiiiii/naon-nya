@@ -99,14 +99,21 @@ jobs:
           key: music-library-v2
           restore-keys: music-library-
 
-      # Cache product bank so purged Pexels data stays gone + fresh Shopee products persist
-      - name: Restore product bank cache
-        uses: actions/cache@v4
-        with:
-          path: engine/data/product_bank
-          key: product-bank-v2
-          restore-keys: product-bank-
-
+      # Product bank comes from git checkout — NO cache needed
+      # Collector commits bank to repo, engine just reads it
+      - name: Check product stock
+        run: |
+          echo "=== Product Stock Check ==="
+          TOTAL=0
+          for cat in fashion gadget beauty home wellness; do
+            count=$(find "engine/data/product_bank/$cat" -name "image.jpg" 2>/dev/null | wc -l)
+            echo "  $cat: $count products"
+            TOTAL=$((TOTAL + count))
+          done
+          echo "  TOTAL: $TOTAL products in stock"
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "⚠️ WARNING: No product stock! Run Product Collector first."
+          fi
 
       # Cache CF SD generated backgrounds
       - name: Restore backgrounds cache
@@ -117,14 +124,12 @@ jobs:
           restore-keys: cf-backgrounds-
 
       # Remove corrupt music files (images/HTML saved as .mp3/.ogg)
-      # AND remove old synth tracks to force API re-download
       - name: Clean corrupt & synth music files
         run: |
           echo "=== Cleaning corrupt music files ==="
           CORRUPT=0
           for f in $(find engine/assets/music/ -name "*.mp3" -o -name "*.ogg" 2>/dev/null); do
             HEADER=$(xxd -l 4 -p "$f" 2>/dev/null || echo "")
-            # Check for JPEG (ffd8ff), PNG (89504e47), GIF (47494638), HTML (3c21444f or 3c68746d)
             if echo "$HEADER" | grep -qiE "^ffd8ff|^89504e47|^47494638|^3c21444f|^3c68746d"; then
               echo "  [CORRUPT] $f (magic: $HEADER) → DELETED"
               rm -f "$f"
@@ -132,7 +137,6 @@ jobs:
             fi
           done
           echo "Deleted $CORRUPT corrupt files"
-          # Only remove synth tracks if API-downloaded tracks exist for that category
           for cat in fashion gadget beauty home wellness; do
             API_COUNT=$(find "engine/assets/music/$cat" -name "*.mp3" -o -name "*.ogg" 2>/dev/null | grep -v "_synth_" | wc -l)
             if [ "$API_COUNT" -gt 0 ]; then
@@ -143,27 +147,6 @@ jobs:
             fi
           done
           echo "Music cleanup done."
-
-      # Purge garbage bank data (Pexels/Pixabay images, Rp0 prices)
-      - name: Purge garbage bank data
-        run: |
-          echo "=== Purging garbage product bank entries ==="
-          PURGED=0
-          for pj in $(find engine/data/product_bank -name "product.json" 2>/dev/null); do
-            # Check if image_url contains Pexels/Pixabay/Unsplash
-            if grep -qiE "pexels\.com|pixabay\.com|unsplash\.com" "$pj" 2>/dev/null; then
-              DIR=$(dirname "$pj")
-              echo "  [PURGE] $DIR (non-Shopee image)"
-              rm -rf "$DIR"
-              PURGED=$((PURGED+1))
-            fi
-          done
-          echo "Purged $PURGED garbage entries"
-          # Show remaining bank stats
-          for cat in fashion gadget beauty home wellness; do
-            count=$(find "engine/data/product_bank/$cat" -name "image.jpg" 2>/dev/null | wc -l)
-            echo "  $cat: $count valid products"
-          done
 
       # Cache music library so API downloads persist between runs
       - name: Cache music library
@@ -373,6 +356,8 @@ jobs:
           for f in engine/state/video_state.csv engine/state/hook_metrics.csv engine/state/cta_metrics.csv engine/state/used_products.json; do
             [ -f "$f" ] && git add -f "$f"
           done
+          # Also commit bank changes (used images cleaned up by dedup_tracker)
+          git add engine/data/product_bank/ engine/data/produk.csv engine/data/images/ 2>/dev/null || true
           if git diff --staged --quiet; then
             echo "No state changes to commit"
           else

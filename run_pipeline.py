@@ -37,12 +37,10 @@ def main():
         
     mode = sys.argv[1].lower()
     
-    # V1: Data Prep (bank export → validate → inspect → extract → storyboard)
-    # Product Collector --export is NOT critical: if it fails but produk.csv
-    # already exists from a previous run, pipeline uses existing stock.
-    # Collector runs separately (manual) to ADD stock — video engine is independent.
+    # V1: Data Prep (validate → inspect → extract → storyboard)
+    # Engine reads stock from git checkout — produk.csv + images/ committed by collector
+    # NO collector call here — engine is 100% independent from collector
     v1_steps = [
-        "python engine/modules/product_collector.py --export",   # Export bank → produk.csv + images/
         "python engine/modules/product_validator.py",
         # AI Vision: inspect + score downloaded images (auto-detect category per image)
         "python engine/modules/cf_vision_inspector.py --image engine/data/images",
@@ -51,12 +49,12 @@ def main():
     ]
 
     # DATA CHECKPOINT: warn if produk.csv has no products
-    # NOT fatal — pipeline checks for 0 videos at the end
+    # NOT fatal — pipeline will catch 0-video at end and exit with proper message
     v1_checkpoint = {
         'file': 'engine/data/produk.csv',
         'min_lines': 2,  # header + at least 1 product
-        'msg': 'Stok produk kosong — produk.csv tidak ada atau kosong. Jalankan product collector untuk menambah stok.',
-        'fatal': False,  # WARNING only — pipeline will catch 0-video at end
+        'msg': 'Stok produk kosong — jalankan Product Collector untuk menambah stok.',
+        'fatal': False,
     }
     
     # V2: Batch Manager (select products → assign to accounts → random schedule)
