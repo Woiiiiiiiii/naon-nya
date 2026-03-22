@@ -1013,7 +1013,7 @@ def export_bank_to_csv(output_file=None):
     fallback_prices = {}
 
     all_products = []
-    skipped = {'no_price': 0, 'pexels': 0, 'no_image': 0, 'used': 0}
+    skipped = {'no_price': 0, 'pexels': 0, 'no_image': 0, 'used': 0, 'shop_garbage': 0}
 
     for category in CATEGORIES:
         cat_dir = os.path.join(BANK_DIR, category)
@@ -1047,7 +1047,7 @@ def export_bank_to_csv(output_file=None):
                 # SKIP garbage: shop logos (not real products)
                 source = info.get('source', '')
                 if source == 'shopee_affiliate_shop':
-                    skipped['pexels'] += 1  # reuse counter
+                    skipped['shop_garbage'] += 1
                     continue
 
                 # SKIP garbage: "Komisi" prices (shop data, not product data)
@@ -1089,9 +1089,10 @@ def export_bank_to_csv(output_file=None):
             except Exception:
                 continue
 
-    if skipped['pexels'] or skipped['no_price'] or skipped['used']:
-        print(f"  Skipped: {skipped['used']} used, {skipped['pexels']} Pexels images, "
-              f"{skipped['no_price']} Rp0 prices, {skipped['no_image']} no image")
+    if skipped['pexels'] or skipped['no_price'] or skipped['used'] or skipped['shop_garbage']:
+        print(f"  Skipped: {skipped['used']} used, {skipped['shop_garbage']} shop garbage, "
+              f"{skipped['pexels']} stock photos, {skipped['no_price']} bad price, "
+              f"{skipped['no_image']} no image")
 
     if not all_products:
         print("No valid products in bank after filtering!")
