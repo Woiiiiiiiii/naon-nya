@@ -996,10 +996,12 @@ def collect_products(categories=None, target=None):
     return stats
 
 
-def export_bank_to_csv(output_file='engine/data/produk.csv'):
+def export_bank_to_csv(output_file=None):
     """Export AVAILABLE product bank to CSV for the video pipeline.
     Column names match scrape_produk.py format for pipeline compatibility.
     Skips: garbage data (Rp0, Pexels) AND already-used products (dedup)."""
+    if output_file is None:
+        output_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'produk.csv')
     import csv
 
     # Load used product IDs from dedup tracker — these are permanently excluded
@@ -1102,8 +1104,10 @@ def export_bank_to_csv(output_file='engine/data/produk.csv'):
     return len(all_products)
 
 
-def copy_bank_images_to_pipeline(images_dir='engine/data/images'):
+def copy_bank_images_to_pipeline(images_dir=None):
     """Copy product bank images to pipeline images directory."""
+    if images_dir is None:
+        images_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'images')
     import shutil
     os.makedirs(images_dir, exist_ok=True)
     copied = 0
