@@ -992,8 +992,7 @@ def collect_products(categories=None, target=None):
 
 def export_bank_to_csv(output_file=None):
     """Export AVAILABLE product bank to CSV for the video pipeline.
-    Column names match scrape_produk.py format for pipeline compatibility.
-    Skips: garbage data (Rp0, Pexels) AND already-used products (dedup)."""
+    Skips: already-used products (dedup). Rp0 prices use 'Lihat di Shopee' fallback."""
     if output_file is None:
         output_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'produk.csv')
     import csv
@@ -1010,10 +1009,10 @@ def export_bank_to_csv(output_file=None):
     if used_ids:
         print(f"  [EXPORT] Filtering out {len(used_ids)} already-used products")
 
-    fallback_prices = {}
+
 
     all_products = []
-    skipped = {'no_price': 0, 'pexels': 0, 'no_image': 0, 'used': 0, 'shop_garbage': 0}
+    skipped = {'no_image': 0, 'used': 0, 'no_price': 0}
 
     for category in CATEGORIES:
         cat_dir = os.path.join(BANK_DIR, category)
@@ -1038,39 +1037,16 @@ def export_bank_to_csv(output_file=None):
                 with open(info_file, 'r', encoding='utf-8') as f:
                     info = json.load(f)
 
-                # SKIP garbage: Pexels/Pixabay/Unsplash images
                 img_url = info.get('image_url', '')
-                if any(x in img_url for x in ['pexels.com', 'pixabay.com', 'unsplash.com']):
-                    skipped['pexels'] += 1
-                    continue
-
-                # SKIP garbage: shop logos (not real products)
-                source = info.get('source', '')
-                if source == 'shopee_affiliate_shop':
-                    skipped['shop_garbage'] += 1
-                    continue
-
-                # SKIP garbage: "Komisi" prices (shop data, not product data)
-                price_raw = info.get('price', '')
-                if isinstance(price_raw, str) and 'komisi' in price_raw.lower():
-                    skipped['no_price'] += 1
-                    continue
 
                 # Get price — try multiple fields
                 price_str = info.get('harga', info.get('price', ''))
                 if isinstance(price_str, (int, float)):
                     price_str = f"Rp{int(price_str):,}".replace(',', '.')
 
-                # SKIP garbage: Rp0 price
-                if price_str in ('Rp0', 'Rp0.0', '', '0'):
-                    # Try to recover price from fallback
-                    nama_key = info.get('nama', '').lower().strip()
-                    recovered = fallback_prices.get(nama_key, '')
-                    if recovered:
-                        price_str = recovered
-                    else:
-                        skipped['no_price'] += 1
-                        continue
+                # Rp0 or empty → use fallback text (do NOT skip the product)
+                if price_str in ('Rp0', 'Rp0.0', '', '0', 'Rp0.0.0'):
+                    price_str = 'Lihat di Shopee'
 
                 # Map to pipeline-compatible column names
                 product = {
@@ -1086,13 +1062,14 @@ def export_bank_to_csv(output_file=None):
                     'category': info.get('category', category),
                 }
                 all_products.append(product)
-            except Exception:
+            except Exception as e:
+                print(f"  [EXPORT] Error reading {pid_dir}: {e}")
                 continue
 
-    if skipped['pexels'] or skipped['no_price'] or skipped['used'] or skipped['shop_garbage']:
-        print(f"  Skipped: {skipped['used']} used, {skipped['shop_garbage']} shop garbage, "
-              f"{skipped['pexels']} stock photos, {skipped['no_price']} bad price, "
-              f"{skipped['no_image']} no image")
+    if any(skipped.values()):
+        print(f"  Skipped: {skipped['used']} used, "
+              f"{skipped['no_image']} no image, "
+              f"{skipped['no_price']} bad price")
 
     if not all_products:
         print("No valid products in bank after filtering!")
