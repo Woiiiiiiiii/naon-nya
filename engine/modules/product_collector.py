@@ -632,6 +632,16 @@ def _to_affiliate_url(url):
 
 def _save_product(product, category, image_path):
     """Save product info + image to product bank."""
+    # ── PERMANENT VALIDATION: reject shop garbage at save time ──
+    price = product.get('price', '')
+    if isinstance(price, str) and 'komisi' in price.lower():
+        print(f"    ✗ REJECTED: '{product.get('nama', '')[:30]}' — Komisi price is shop data")
+        return None, False
+    source = product.get('source', '')
+    if source == 'shopee_affiliate_shop':
+        print(f"    ✗ REJECTED: '{product.get('nama', '')[:30]}' — shop data, not product")
+        return None, False
+
     pid = _generate_product_id(product['nama'], category)
     product_dir = os.path.join(BANK_DIR, category, pid)
     os.makedirs(product_dir, exist_ok=True)
