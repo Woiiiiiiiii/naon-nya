@@ -11,7 +11,7 @@ on:
       target:
         description: 'Target products per category'
         required: false
-        default: '20'
+        default: '50'
 
 # IMPORTANT: workflow-level permissions for git push
 permissions:

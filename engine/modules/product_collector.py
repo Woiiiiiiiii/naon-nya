@@ -117,7 +117,7 @@ SEARCH_KEYWORDS = {
     ],
 }
 
-TARGET_PER_CATEGORY = 25  # 25 × 5 categories = 125 products (covers ~12 days at 10/day)
+TARGET_PER_CATEGORY = 50  # 50 × 5 categories = 250 products max per run
 MIN_IMAGE_SIZE = 300      # Minimum image dimension
 
 USER_AGENTS = [
@@ -904,7 +904,7 @@ def collect_products(categories=None, target=None):
                 print(f"\n  [Layer5] HTML scraper (no cookies needed)...")
                 category_keywords = SEARCH_KEYWORDS.get(category, [category])
                 random.shuffle(category_keywords)  # randomize to get variety
-                for kw in category_keywords[:15]:   # try up to 15 keywords
+                for kw in category_keywords[:30]:   # try up to 30 keywords (of 40)
                     if collected >= need:
                         break
                     scraped = scrape_search(kw, limit=10)  # 10 per keyword
