@@ -608,11 +608,36 @@ def _generate_product_id(name, category):
     return f"{prefix}{h}"
 
 
+def _to_affiliate_url(url):
+    """Convert any Shopee URL to affiliate link using AFFILIATE_ID_SHOPEE."""
+    aff_id = os.environ.get('AFFILIATE_ID_SHOPEE', '')
+    if not aff_id or not url:
+        return url  # keep original if no affiliate ID
+
+    # Already an affiliate link? keep it
+    if 'utm_source=an_' in url or 'affiliate' in url:
+        return url
+
+    # Extract shop_id and item_id from regular product URL
+    import re
+    m = re.search(r'/product/(\d+)/(\d+)', url)
+    if m:
+        shop_id, item_id = m.group(1), m.group(2)
+        return (f"https://shopee.co.id/universal-link/product/{shop_id}/{item_id}"
+                f"?utm_source=an_{aff_id}&utm_medium=affiliates"
+                f"&utm_campaign=-&utm_content=----")
+
+    return url  # can't parse → keep original
+
+
 def _save_product(product, category, image_path):
     """Save product info + image to product bank."""
     pid = _generate_product_id(product['nama'], category)
     product_dir = os.path.join(BANK_DIR, category, pid)
     os.makedirs(product_dir, exist_ok=True)
+
+    # Convert URL to affiliate link
+    shopee_url = _to_affiliate_url(product.get('shopee_url', ''))
 
     # Save product info
     info = {
@@ -620,7 +645,7 @@ def _save_product(product, category, image_path):
         'nama': product['nama'],
         'price': product['price'],
         'desc': product['desc'],
-        'shopee_url': product.get('shopee_url', ''),
+        'shopee_url': shopee_url,
         'image_url': product.get('image_url', ''),
         'category': category,
         'source': product.get('source', 'unknown'),
