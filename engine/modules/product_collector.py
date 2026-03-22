@@ -632,14 +632,36 @@ def _to_affiliate_url(url):
 
 def _save_product(product, category, image_path):
     """Save product info + image to product bank."""
-    # ── PERMANENT VALIDATION: reject shop garbage at save time ──
+    # ── PERMANENT VALIDATION: reject garbage at save time ──
+    nama = product.get('nama', '')
     price = product.get('price', '')
-    if isinstance(price, str) and 'komisi' in price.lower():
-        print(f"    ✗ REJECTED: '{product.get('nama', '')[:30]}' — Komisi price is shop data")
-        return None, False
     source = product.get('source', '')
+    image_url = product.get('image_url', '')
+    shopee_url = product.get('shopee_url', '')
+
+    # 1. Reject Komisi prices (shop data masquerading as product)
+    if isinstance(price, str) and 'komisi' in price.lower():
+        print(f"    ✗ REJECTED: '{nama[:30]}' — Komisi price is shop data")
+        return None, False
+
+    # 2. Reject shopee_affiliate_shop source
     if source == 'shopee_affiliate_shop':
-        print(f"    ✗ REJECTED: '{product.get('nama', '')[:30]}' — shop data, not product")
+        print(f"    ✗ REJECTED: '{nama[:30]}' — shop source, not product")
+        return None, False
+
+    # 3. Reject products with no name or too-short names
+    if not nama or len(nama.strip()) < 3:
+        print(f"    ✗ REJECTED: empty or too-short product name")
+        return None, False
+
+    # 4. Reject shop-level URLs (no product/item ID)
+    if shopee_url and '/shop/' in shopee_url and '/product/' not in shopee_url:
+        print(f"    ✗ REJECTED: '{nama[:30]}' — shop URL, not product URL")
+        return None, False
+
+    # 5. Reject if image URL is empty
+    if not image_url:
+        print(f"    ✗ REJECTED: '{nama[:30]}' — no image URL")
         return None, False
 
     pid = _generate_product_id(product['nama'], category)
