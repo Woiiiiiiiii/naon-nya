@@ -398,6 +398,14 @@ def get_affiliate_product_offers(keyword, session=None, limit=20):
         products = data.get('data', {}).get('list', [])
         total = data.get('data', {}).get('total_count', 0)
         print(f"    [ProductOffer] '{keyword}' → {len(products)} products (total {total})")
+        # Debug: show response structure
+        if products:
+            sample = products[0]
+            print(f"    [DEBUG] ProductOffer keys: {list(sample.keys())}")
+            # Show nested item card if present
+            nested = sample.get('batch_item_for_item_card_full', {})
+            if isinstance(nested, dict) and nested:
+                print(f"    [DEBUG] Nested item_card keys: {list(nested.keys())}")
         return products
 
     except Exception as e:
@@ -697,6 +705,7 @@ def collect_affiliate_products(category, target=5):
 
         # ───────────────────────────────────────────────────────
         #  STEP B: Shop Offer API (Komisi XTRA — shop→products)
+        #  Extract product data DIRECTLY from shop response
         # ───────────────────────────────────────────────────────
         print(f"\n  [B] Shop offers: '{keyword}'...")
         time.sleep(random.uniform(1.0, 2.0))
@@ -705,14 +714,19 @@ def collect_affiliate_products(category, target=5):
         if not shops:
             continue
 
-        # Pick top 3 shops (highest commission first)
+        # Debug: show what fields the shop response contains
+        if shops:
+            sample = shops[0]
+            print(f"    [DEBUG] Shop response keys: {list(sample.keys())}")
+
+        # Pick top 5 shops (highest commission first)
         def _commission_sort(s):
             rate = s.get('commission_rate', '0%').replace('%', '').replace(',', '.')
             try:
                 return float(rate)
             except ValueError:
                 return 0
-        shops_sorted = sorted(shops, key=_commission_sort, reverse=True)[:3]
+        shops_sorted = sorted(shops, key=_commission_sort, reverse=True)[:5]
 
         for shop in shops_sorted:
             if len(all_products) >= target:
@@ -720,18 +734,74 @@ def collect_affiliate_products(category, target=5):
 
             shop_id = shop.get('shop_id', '')
             shop_name = shop.get('shop_name', '')
-            shop_image = shop.get('shop_image', '')
             long_link = shop.get('long_link', '')
             commission = shop.get('commission_rate', '0%')
 
             print(f"    Shop: {shop_name} (commission={commission})")
-            time.sleep(random.uniform(1.5, 3.0))
 
-            # Get products from this shop
+            # ── Try 1: Extract embedded product data from shop response ──
+            embedded_products = []
+
+            # Check for batch_item_for_item_card_full (featured product)
+            item_card = shop.get('batch_item_for_item_card_full', {})
+            if isinstance(item_card, dict) and item_card.get('name'):
+                embedded_products.append(item_card)
+
+            # Check for item_list (list of products)
+            item_list = shop.get('item_list', shop.get('items', []))
+            if isinstance(item_list, list):
+                for item in item_list:
+                    if isinstance(item, dict) and item.get('name'):
+                        embedded_products.append(item)
+
+            # Check for product_list
+            product_list = shop.get('product_list', [])
+            if isinstance(product_list, list):
+                for item in product_list:
+                    if isinstance(item, dict) and (item.get('name') or item.get('product_name')):
+                        embedded_products.append(item)
+
+            if embedded_products:
+                print(f"      [DEBUG] Found {len(embedded_products)} embedded products in shop response")
+                for ep in embedded_products:
+                    if len(all_products) >= target:
+                        break
+                    ep_name = ep.get('name', ep.get('product_name', ''))
+                    ep_image = ep.get('image', ep.get('product_image', ''))
+                    ep_price = ep.get('price', ep.get('price_min', 0))
+                    ep_item_id = ep.get('itemid', ep.get('item_id', 0))
+                    ep_shop_id = ep.get('shopid', shop_id)
+
+                    if not ep_name or not ep_image:
+                        continue
+
+                    if isinstance(ep_price, (int, float)) and ep_price > 100000:
+                        ep_price = ep_price // 100000
+
+                    if ep_image and not ep_image.startswith('http'):
+                        ep_image = f"https://down-id.img.susercontent.com/file/{ep_image}"
+
+                    aff_link = build_product_affiliate_link(
+                        ep_shop_id, ep_item_id, long_link) if ep_item_id else long_link
+
+                    all_products.append({
+                        'nama': ep_name[:80],
+                        'price': f"Rp{ep_price:,}".replace(',', '.') if isinstance(ep_price, (int, float)) and ep_price > 0 else 'Lihat harga',
+                        'desc': ep_name,
+                        'image_url': ep_image,
+                        'shopee_url': aff_link,
+                        'source': 'shopee_affiliate',
+                        'commission': commission,
+                        'shop_name': shop_name,
+                    })
+                    print(f"      ✓ Embedded: {ep_name[:40]}")
+                continue  # Got data from embedded, skip get_shop_products
+
+            # ── Try 2: Call get_shop_products (may fail from GH Actions) ──
+            time.sleep(random.uniform(1.5, 3.0))
             shop_products = get_shop_products(shop_id, limit=4)
 
             if shop_products:
-                # We got product-level data → use it
                 for prod in shop_products:
                     if len(all_products) >= target:
                         break
@@ -753,7 +823,6 @@ def collect_affiliate_products(category, target=5):
                     })
                     print(f"      ✓ Product: {prod['name'][:40]}")
             else:
-                # No products found for this shop → skip (do NOT use shop as product)
                 print(f"      ✗ No products from shop '{shop_name}' — skipping")
 
     print(f"\n  → Affiliate API: {len(all_products)} products for {category}")
