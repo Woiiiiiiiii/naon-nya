@@ -421,6 +421,9 @@ def get_affiliate_product_offers(keyword, session=None, limit=20):
 def get_shop_products(shop_id, limit=6):
     """Get products from a specific Shopee shop using recommend API.
     Uses shop page recommendation — different from blocked search endpoint."""
+    # Build cookie string from env for authenticated requests
+    cookies_str = _build_cookie_string()
+
     headers = {
         'User-Agent': random.choice(USER_AGENTS),
         'Accept': 'application/json',
@@ -443,14 +446,20 @@ def get_shop_products(shop_id, limit=6):
             from shopee_proxy import proxy_get_json, is_proxy_available
             if is_proxy_available():
                 full_url = f"{url}?{urlencode(params)}"
-                status, data = proxy_get_json(full_url, headers=headers)
+                status, data = proxy_get_json(full_url, headers=headers,
+                                               cookies_str=cookies_str)
+                print(f"      [ShopProducts] Proxy: status={status}")
                 if status != 200:
                     data = None
         except ImportError:
             pass
 
         if data is None:
-            resp = requests.get(url, params=params, headers=headers, timeout=15)
+            req_headers = headers.copy()
+            if cookies_str:
+                req_headers['Cookie'] = cookies_str
+            resp = requests.get(url, params=params, headers=req_headers, timeout=15)
+            print(f"      [ShopProducts] Direct: status={resp.status_code}")
             if resp.status_code == 200:
                 data = resp.json()
 
@@ -487,7 +496,10 @@ def get_shop_products(shop_id, limit=6):
             url2 = f"{SHOPEE_BASE}/api/v4/shop/rcmd_items"
             params2 = {'shopid': shop_id, 'limit': limit}
             try:
-                resp2 = requests.get(url2, params=params2, headers=headers, timeout=15)
+                req_headers2 = headers.copy()
+                if cookies_str:
+                    req_headers2['Cookie'] = cookies_str
+                resp2 = requests.get(url2, params=params2, headers=req_headers2, timeout=15)
                 if resp2.status_code == 200:
                     data2 = resp2.json()
                     for item in data2.get('items', [])[:limit]:
