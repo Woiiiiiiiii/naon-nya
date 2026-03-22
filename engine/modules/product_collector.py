@@ -38,6 +38,14 @@ SEARCH_KEYWORDS = {
         'topi baseball', 'anting titanium set', 'sweater rajut',
         'celana jogger', 'kemeja flannel', 'rok mini plisket',
         'sandal slide', 'scarf satin',
+        # Tambahan
+        'dress casual wanita', 'cardigan rajut', 'sepatu kets wanita',
+        'clutch bag pesta', 'jaket bomber', 'celana chino pria',
+        'tas ransel pria', 'kalung titanium', 'sepatu loafers',
+        'belt gesper otomatis', 'tote bag kanvas', 'celana kulot',
+        'kemeja linen', 'tas pinggang waist bag', 'baju polo shirt',
+        'flat shoes wanita', 'jaket parasut', 'set perhiasan wanita',
+        'sepatu pantofel', 'kaus kaki invisible',
     ],
     'gadget': [
         'earphone TWS bluetooth', 'powerbank 10000mAh', 'tripod HP',
@@ -47,6 +55,14 @@ SEARCH_KEYWORDS = {
         'headphone gaming', 'flash drive 64GB', 'mousepad gaming XL',
         'smartwatch murah', 'card reader USB', 'cooling pad laptop',
         'mic condenser USB', 'stylus pen tablet',
+        # Tambahan
+        'action camera mini', 'gimbal stabilizer HP', 'monitor portable',
+        'projector mini LED', 'dongle HDMI wireless', 'docking station USB C',
+        'lampu klip baca LED', 'earbuds noise cancelling', 'gamepad bluetooth',
+        'smart plug WiFi', 'kamera CCTV WiFi', 'tablet grafis drawing',
+        'router WiFi extender', 'power strip USB', 'adaptor charger GaN',
+        'portable SSD 256GB', 'VR box headset', 'drone mini murah',
+        'smart TV box Android', 'kabel HDMI 4K',
     ],
     'beauty': [
         'serum vitamin C', 'sunscreen SPF 50', 'sheet mask Korea',
@@ -56,6 +72,14 @@ SEARCH_KEYWORDS = {
         'cleansing balm', 'blush on powder', 'mascara waterproof',
         'lip balm tinted', 'face wash gentle', 'sleeping mask',
         'concealer stick', 'beauty blender sponge',
+        # Tambahan
+        'body lotion whitening', 'hair serum vitamin', 'nail art set lengkap',
+        'parfum EDT wanita', 'eyebrow pencil', 'eyeliner waterproof',
+        'contour palette', 'makeup brush set', 'face mist spray',
+        'konjac sponge', 'peeling gel wajah', 'lip liner matte',
+        'BB cream SPF', 'hair mask keratin', 'sabun muka charcoal',
+        'lash serum', 'dry shampoo spray', 'body scrub coffee',
+        'hand cream moisturizer', 'makeup remover balm',
     ],
     'home': [
         'rak organizer serbaguna', 'lampu LED strip USB', 'vacuum cleaner mini',
@@ -65,6 +89,14 @@ SEARCH_KEYWORDS = {
         'lampu tidur sensor', 'bantal memory foam', 'kotak tissue kayu',
         'tempat sampah sensor', 'aroma diffuser', 'cermin LED makeup',
         'rak sepatu portable', 'organizer laci',
+        # Tambahan
+        'panci set anti lengket', 'air fryer mini', 'blender portable USB',
+        'pisau dapur set chef', 'talenan bambu', 'gelas ukur pyrex',
+        'tempat bumbu kaca', 'cetakan es batu silikon', 'sarung bantal sofa',
+        'karpet bulu halus', 'jam dinding minimalis', 'pot tanaman aesthetic',
+        'rak dinding floating', 'kotak penyimpanan lipat', 'gantungan kunci dinding',
+        'sprei fitted sheet', 'lilin aromaterapi', 'hook tempel dinding',
+        'pemotong sayur mandoline', 'tempat sendok stainless',
     ],
     'wellness': [
         'botol minum 2 liter', 'resistance band set', 'matras yoga',
@@ -74,6 +106,14 @@ SEARCH_KEYWORDS = {
         'hand grip strengthener', 'masker olahraga', 'ankle weight',
         'pull up bar', 'ab roller wheel', 'massage gun mini',
         'yoga block busa', 'gym gloves',
+        # Tambahan
+        'posture corrector', 'acupressure mat', 'smart scale digital',
+        'wrist wrap fitness', 'tumbler stainless 1L', 'sauna belt pembakar lemak',
+        'alat terapi kaki refleksi', 'kaos olahraga dri-fit', 'dumbell set',
+        'tali yoga strap', 'eye mask sleep', 'alat cukur elektrik',
+        'sikat gigi elektrik', 'air purifier mini', 'heating pad elektrik',
+        'koyo hangat', 'alat akupuntur pen', 'suplemen vitamin C tablet',
+        'compression socks', 'elbow support brace',
     ],
 }
 
