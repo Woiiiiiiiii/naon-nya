@@ -241,11 +241,42 @@ def _build_cookie_string():
     return ''
 
 
+def _get_security_headers():
+    """Get Shopee anti-bot security headers from env var.
+    
+    SHOPEE_AF_HEADERS should be a JSON object with these keys:
+      af-ac-enc-dat, af-ac-enc-sz-token, x-sap-ri, x-sap-sec
+    
+    User captures these from browser Network tab alongside cookies.
+    """
+    raw = os.environ.get('SHOPEE_AF_HEADERS', '')
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {}
+
+
+def _get_sz_token_from_cookies():
+    """Try to extract af-ac-enc-sz-token from shopee_webUnique_ccd cookie."""
+    try:
+        cookies = json.loads(os.environ.get('SHOPEE_AFFILIATE_COOKIES', '[]'))
+        if isinstance(cookies, list):
+            for c in cookies:
+                if c.get('name') == 'shopee_webUnique_ccd':
+                    from urllib.parse import unquote
+                    return unquote(c.get('value', ''))
+    except Exception:
+        pass
+    return ''
+
+
 def _make_affiliate_request(url, params=None, session=None, label='API'):
     """Centralized request helper for affiliate.shopee.co.id.
     
-    Strategy: Try DIRECT first (auto-login proves GitHub Actions 
-    can reach affiliate.shopee.co.id), proxy as fallback.
+    Includes Shopee anti-bot security headers (af-ac-enc-dat, x-sap-sec, etc.)
+    which are REQUIRED for product list API but optional for shop list API.
     
     Returns: parsed JSON data or None
     """
@@ -254,21 +285,26 @@ def _make_affiliate_request(url, params=None, session=None, label='API'):
     cookies_str = _build_cookie_string()
     full_url = f"{url}?{urlencode(params)}" if params else url
     
+    # Base headers (matching real Chrome browser)
     headers = {
-        'User-Agent': random.choice(USER_AGENTS),
-        'Accept': 'application/json',
-        'Accept-Language': 'id-ID,id;q=0.9,en;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8,id;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br, zstd',
         'Referer': f'{AFFILIATE_BASE}/offer/brand_offer',
         'Origin': AFFILIATE_BASE,
-        'X-Requested-With': 'XMLHttpRequest',
-        'sec-ch-ua': '"Not A(Brand";v="99", "Chromium";v="121"',
+        'sec-ch-ua': '"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"',
+        'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"Windows"',
         'Sec-Fetch-Dest': 'empty',
         'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Site': 'same-origin',
+        'affiliate-program-type': '1',
+        'x-sz-sdk-version': '1.12.21',
+        'priority': 'u=1, i',
     }
     
-    # Extract csrftoken from cookies if available
+    # Add CSRF token from cookies
     try:
         cookies = json.loads(os.environ.get('SHOPEE_AFFILIATE_COOKIES', '[]'))
         if isinstance(cookies, list):
@@ -279,59 +315,58 @@ def _make_affiliate_request(url, params=None, session=None, label='API'):
     except Exception:
         pass
     
+    # Add anti-bot security headers from SHOPEE_AF_HEADERS env var
+    security = _get_security_headers()
+    if security:
+        for key in ['af-ac-enc-dat', 'af-ac-enc-sz-token', 'x-sap-ri', 'x-sap-sec']:
+            if key in security:
+                headers[key] = security[key]
+        print(f"    [{label}] Security headers: ✅ loaded ({len(security)} keys)")
+    else:
+        # Try to derive af-ac-enc-sz-token from cookie
+        sz_token = _get_sz_token_from_cookies()
+        if sz_token:
+            headers['af-ac-enc-sz-token'] = sz_token
+            print(f"    [{label}] Security headers: ⚠️ partial (sz-token from cookie)")
+        else:
+            print(f"    [{label}] Security headers: ❌ SHOPEE_AF_HEADERS not set")
+    
     data = None
     
-    # ── Method 1: Direct with session (if available) ──
-    if session and data is None:
-        try:
-            resp = session.get(url, params=params, headers=headers, timeout=15)
-            print(f"    [{label}] Direct(session): HTTP {resp.status_code}")
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get('code') == 0:
-                    print(f"    [{label}] ✅ Direct(session) succeeded!")
-                    return data
-                else:
-                    print(f"    [{label}] API code={data.get('code')}, msg={data.get('msg','?')}")
-                    data = None
-        except Exception as e:
-            print(f"    [{label}] Direct(session) error: {e}")
-    
-    # ── Method 2: Direct with Cookie header ──
+    # ── Direct request with Cookie header ──
     if cookies_str and data is None:
         try:
             req_headers = headers.copy()
             req_headers['Cookie'] = cookies_str
             resp = requests.get(full_url, headers=req_headers, timeout=15)
-            print(f"    [{label}] Direct(cookie): HTTP {resp.status_code}")
+            print(f"    [{label}] Direct: HTTP {resp.status_code}")
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get('code') == 0:
-                    print(f"    [{label}] ✅ Direct(cookie) succeeded!")
+                    print(f"    [{label}] ✅ Success!")
                     return data
                 else:
-                    print(f"    [{label}] API code={data.get('code')}, msg={data.get('msg','?')}")
+                    err = data.get('error', data.get('code', '?'))
+                    print(f"    [{label}] API error={err}, msg={data.get('msg','?')}")
                     data = None
             else:
-                print(f"    [{label}] Response: {resp.text[:200]}")
+                print(f"    [{label}] Response: {resp.text[:300]}")
         except Exception as e:
-            print(f"    [{label}] Direct(cookie) error: {e}")
+            print(f"    [{label}] Direct error: {e}")
     
-    # ── Method 3: Proxy fallback ──
+    # ── Proxy fallback ──
     if data is None:
         try:
             from shopee_proxy import proxy_get_json, is_proxy_available
             if is_proxy_available():
-                print(f"    [{label}] Trying proxy...")
-                status, data = proxy_get_json(full_url, headers=headers,
+                proxy_headers = headers.copy()
+                status, data = proxy_get_json(full_url, headers=proxy_headers,
                                               cookies_str=cookies_str)
                 print(f"    [{label}] Proxy: HTTP {status}")
                 if status == 200 and data and data.get('code') == 0:
                     print(f"    [{label}] ✅ Proxy succeeded!")
                     return data
                 else:
-                    preview = str(data)[:200] if data else 'empty'
-                    print(f"    [{label}] Proxy response: {preview}")
                     data = None
         except ImportError:
             pass
@@ -377,32 +412,44 @@ def get_affiliate_shops(keyword, session=None, limit=20):
 # ═══════════════════════════════════════════════════════════════════
 #  STEP 1B: GET PRODUCT OFFERS (Penawaran Produk tab)
 # ═══════════════════════════════════════════════════════════════════
-def get_affiliate_product_offers(keyword, session=None, limit=20):
+def get_affiliate_product_offers(keyword=None, session=None, limit=20,
+                                   page_offset=0, list_type=5, sort_type=5):
     """Fetch product offers from Shopee Affiliate Dashboard API.
-    Endpoint: /api/v3/offer/product/list (Penawaran Produk tab)"""
+    Endpoint: /api/v3/offer/product/list (Penawaran Produk tab)
+    
+    Params match exact browser request:
+      list_type=5   : product list type
+      sort_type=5   : sort order
+      client_type=1 : web client
+      page_offset   : pagination offset
+      page_limit    : items per page
+    """
     url = f"{AFFILIATE_BASE}/api/v3/offer/product/list"
     params = {
-        'sort_type': 1,
-        'page_offset': 0,
+        'list_type': list_type,
+        'sort_type': sort_type,
+        'page_offset': page_offset,
         'page_limit': limit,
-        'keyword': keyword,
+        'client_type': 1,
     }
+    # Only add keyword if provided (some requests don't use it)
+    if keyword:
+        params['keyword'] = keyword
 
     try:
-        data = _make_affiliate_request(url, params, session=session,
-                                        label=f'ProductOffer/{keyword}')
+        label = f'ProductOffer/{keyword or "all"}'
+        data = _make_affiliate_request(url, params, session=session, label=label)
         if not data:
-            print(f"    [ProductOffer] No data for '{keyword}'")
+            print(f"    [ProductOffer] No data (offset={page_offset})")
             return []
 
         products = data.get('data', {}).get('list', [])
         total = data.get('data', {}).get('total_count', 0)
-        print(f"    [ProductOffer] '{keyword}' → {len(products)} products (total {total})")
-        # Debug: show response structure
-        if products:
+        print(f"    [ProductOffer] → {len(products)} products (total {total}, offset={page_offset})")
+        # Debug: show response structure on first call
+        if products and page_offset == 0:
             sample = products[0]
             print(f"    [DEBUG] ProductOffer keys: {list(sample.keys())}")
-            # Show nested item card if present
             nested = sample.get('batch_item_for_item_card_full', {})
             if isinstance(nested, dict) and nested:
                 print(f"    [DEBUG] Nested item_card keys: {list(nested.keys())}")

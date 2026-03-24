@@ -110,6 +110,7 @@ jobs:
       - name: Collect Products
         env:
           SHOPEE_AFFILIATE_COOKIES: ${{ env.SHOPEE_AFFILIATE_COOKIES || secrets.SHOPEE_AFFILIATE_COOKIES }}
+          SHOPEE_AF_HEADERS: ${{ secrets.SHOPEE_AF_HEADERS }}
           CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
           CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
           AFFILIATE_ID_SHOPEE: ${{ secrets.AFFILIATE_ID_SHOPEE }}
