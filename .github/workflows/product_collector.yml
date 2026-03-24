@@ -110,16 +110,13 @@ jobs:
       - name: Collect Products
         env:
           SHOPEE_AFFILIATE_COOKIES: ${{ env.SHOPEE_AFFILIATE_COOKIES || secrets.SHOPEE_AFFILIATE_COOKIES }}
-          SHOPEE_AF_HEADERS: ${{ secrets.SHOPEE_AF_HEADERS }}
-          CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
-          CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
           AFFILIATE_ID_SHOPEE: ${{ secrets.AFFILIATE_ID_SHOPEE }}
         run: |
           cd engine/modules
           if [ -n "${{ github.event.inputs.category }}" ]; then
-            python product_collector.py --category "${{ github.event.inputs.category }}" --target ${{ github.event.inputs.target || '20' }}
+            python shopee_collector_v2.py --category "${{ github.event.inputs.category }}" --target ${{ github.event.inputs.target || '25' }}
           else
-            python product_collector.py --target ${{ github.event.inputs.target || '20' }}
+            python shopee_collector_v2.py --target ${{ github.event.inputs.target || '25' }}
           fi
 
       - name: Show Bank Status
