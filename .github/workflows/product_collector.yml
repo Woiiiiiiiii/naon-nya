@@ -36,7 +36,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests Pillow
+          pip install requests Pillow playwright
+          python -m playwright install chromium --with-deps
 
       # ── Restore cached cookies (PRIVATE, not in public repo) ──
       - name: Restore Shopee Cookies Cache
@@ -106,6 +107,15 @@ jobs:
               break
             fi
           done
+
+      # ── Pre-fetch products via headless browser (bypasses anti-bot) ──
+      - name: Pre-fetch Products via Browser
+        env:
+          SHOPEE_AFFILIATE_COOKIES: ${{ env.SHOPEE_AFFILIATE_COOKIES || secrets.SHOPEE_AFFILIATE_COOKIES }}
+        run: |
+          cd engine/modules
+          python prefetch_browser.py
+        continue-on-error: true
 
       - name: Collect Products
         env:

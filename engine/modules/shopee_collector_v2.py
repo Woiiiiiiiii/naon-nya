@@ -406,8 +406,34 @@ def _to_affiliate_url(url):
 # ═══════════════════════════════════════════════════════════════════
 #  STEP 8: MAIN — COMBINE ALL
 # ═══════════════════════════════════════════════════════════════════
+PREFETCH_FILE = '/tmp/affiliate_products.json'
+
+
+def _load_prefetched():
+    """Load pre-fetched products from browser step.
+    Returns: dict {category: [offers]} or None
+    """
+    if not os.path.exists(PREFETCH_FILE):
+        return None
+    try:
+        with open(PREFETCH_FILE, 'r') as f:
+            data = json.load(f)
+        if isinstance(data, dict) and any(data.values()):
+            total = sum(len(v) for v in data.values())
+            print(f"  ✅ Pre-fetched data found: {total} products from browser")
+            return data
+    except Exception as e:
+        print(f"  ⚠️ Pre-fetch read error: {e}")
+    return None
+
+
 def collect_products(categories=None, target=None):
-    """Main: 1 API call + image download per product."""
+    """Main collection with 3 data sources (in priority order):
+    
+    1. Pre-fetch file (from Playwright browser — bypasses anti-bot)
+    2. Direct API call (works from local PC)
+    3. CF Proxy fallback (for GitHub Actions)
+    """
     print("=" * 60)
     print("  PRODUCT COLLECTOR v2 — Simple Approach")
     print("=" * 60)
@@ -434,10 +460,27 @@ def collect_products(categories=None, target=None):
     except ImportError:
         print("  ⚠️ shopee_proxy.py not found")
 
-    # STEP 3-5: Fetch all products (one big batch)
-    total_needed = target * len(categories) * 3
-    print(f"\n  Fetching product list...")
-    all_offers = get_affiliate_products(headers, cookie_str, target=min(total_needed, 200))
+    # ── SOURCE 1: Pre-fetched data from browser ──
+    all_offers = []
+    prefetched = _load_prefetched()
+
+    if prefetched:
+        # Pre-fetch data is organized by category
+        for cat in categories:
+            cat_offers = prefetched.get(cat, [])
+            all_offers.extend(cat_offers)
+        # Also include offers from non-requested categories
+        for cat, offers in prefetched.items():
+            if cat not in categories:
+                all_offers.extend(offers)
+        print(f"  Using {len(all_offers)} pre-fetched products")
+
+    # ── SOURCE 2+3: Direct API + CF Proxy fallback ──
+    if not all_offers:
+        print("\n  No pre-fetch data, trying HTTP API...")
+        total_needed = target * len(categories) * 3
+        all_offers = get_affiliate_products(headers, cookie_str,
+                                            target=min(total_needed, 200))
 
     if not all_offers:
         print("  ❌ No products from affiliate API!")
