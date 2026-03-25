@@ -145,9 +145,57 @@ def _build_cookies_and_headers():
 # ═══════════════════════════════════════════════════════════════════
 #  STEP 3-5: GET PRODUCT LIST + PAGINATION
 # ═══════════════════════════════════════════════════════════════════
-def get_affiliate_products(headers, target=100):
+def _api_request(url, params, headers, cookie_str):
+    """Make API request: try direct first, then CF Proxy fallback.
+    Returns parsed JSON data or None.
+    """
+    from urllib.parse import urlencode
+    full_url = f"{url}?{urlencode(params)}" if params else url
+
+    # ── Try 1: Direct ──
+    try:
+        req_headers = headers.copy()
+        resp = requests.get(full_url, headers=req_headers, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get('code') == 0:
+                print(f"    ✅ Direct: OK")
+                return data
+            else:
+                err = data.get('error', data.get('code', '?'))
+                print(f"    Direct: API error {err}")
+        else:
+            print(f"    Direct: HTTP {resp.status_code}")
+    except Exception as e:
+        print(f"    Direct: {e}")
+
+    # ── Try 2: CF Proxy ──
+    try:
+        from shopee_proxy import proxy_get_json, is_proxy_available
+        if is_proxy_available():
+            # Pass headers WITHOUT Cookie (proxy handles it separately)
+            proxy_headers = {k: v for k, v in headers.items() if k != 'Cookie'}
+            status, data = proxy_get_json(full_url, headers=proxy_headers,
+                                          cookies_str=cookie_str)
+            if status == 200 and data and data.get('code') == 0:
+                print(f"    ✅ Proxy: OK")
+                return data
+            else:
+                err = data.get('error', '?') if data else '?'
+                print(f"    Proxy: HTTP {status}, error={err}")
+        else:
+            print(f"    Proxy: not configured")
+    except ImportError:
+        print(f"    Proxy: shopee_proxy.py not found")
+    except Exception as e:
+        print(f"    Proxy: {e}")
+
+    return None
+
+
+def get_affiliate_products(headers, cookie_str, target=100):
     """Fetch product list from affiliate API with pagination.
-    Response already contains full product data in nested fields.
+    Uses direct request first, CF Proxy as fallback.
     """
     url = f"{AFFILIATE_BASE}/api/v3/offer/product/list"
     products = []
@@ -164,42 +212,30 @@ def get_affiliate_products(headers, target=100):
             'client_type': 1,
         }
 
-        try:
-            resp = requests.get(url, params=params, headers=headers, timeout=15)
+        print(f"    [Page {page+1}]")
+        data = _api_request(url, params, headers, cookie_str)
 
-            if resp.status_code != 200:
-                print(f"    [Page {page+1}] HTTP {resp.status_code}")
-                print(f"    → {resp.text[:300]}")
-                break
-
-            data = resp.json()
-            if data.get('code') != 0:
-                err = data.get('error', data.get('code', '?'))
-                print(f"    [Page {page+1}] API error: {err}")
-                break
-
-            items = data.get('data', {}).get('list', [])
-            total = data.get('data', {}).get('total_count', 0)
-
-            if not items:
-                break
-
-            if page == 0:
-                print(f"    Total available: {total}")
-                sample_keys = list(items[0].keys())
-                print(f"    Item keys: {sample_keys}")
-                nested = items[0].get('batch_item_for_item_card_full', {})
-                if isinstance(nested, dict) and nested:
-                    print(f"    Nested keys: {list(nested.keys())}")
-
-            products.extend(items)
-            print(f"    [Page {page+1}] +{len(items)} items (total: {len(products)}/{total})")
-            page += 1
-            time.sleep(random.uniform(0.5, 1.5))
-
-        except Exception as e:
-            print(f"    [Page {page+1}] Error: {e}")
+        if not data:
+            print(f"    ❌ Failed to get page {page+1}")
             break
+
+        items = data.get('data', {}).get('list', [])
+        total = data.get('data', {}).get('total_count', 0)
+
+        if not items:
+            break
+
+        if page == 0:
+            print(f"    Total available: {total}")
+            print(f"    Item keys: {list(items[0].keys())}")
+            nested = items[0].get('batch_item_for_item_card_full', {})
+            if isinstance(nested, dict) and nested:
+                print(f"    Nested keys: {list(nested.keys())}")
+
+        products.extend(items)
+        print(f"    +{len(items)} items (collected: {len(products)})")
+        page += 1
+        time.sleep(random.uniform(0.5, 1.5))
 
     return products
 
@@ -324,20 +360,33 @@ def _generate_product_id(name, category):
 
 
 def _download_image(url, filepath):
+    """Download image: try direct, then CF Proxy fallback."""
+    # Try 1: Direct
     try:
         resp = requests.get(url, timeout=15, headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/146.0.0.0'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/146.0.0.0',
+            'Referer': 'https://shopee.co.id/',
         })
-        if resp.status_code != 200 or len(resp.content) < 1000:
-            return False
-        content_type = resp.headers.get('content-type', '')
-        if 'image' not in content_type and 'octet' not in content_type:
-            return False
-        with open(filepath, 'wb') as f:
-            f.write(resp.content)
-        return True
+        if resp.status_code == 200 and len(resp.content) >= 1000:
+            content_type = resp.headers.get('content-type', '')
+            if 'image' in content_type or 'octet' in content_type:
+                with open(filepath, 'wb') as f:
+                    f.write(resp.content)
+                return True
     except Exception:
-        return False
+        pass
+
+    # Try 2: CF Proxy
+    try:
+        from shopee_proxy import proxy_download_image, is_proxy_available
+        if is_proxy_available():
+            return proxy_download_image(url, filepath, min_size=1000)
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    return False
 
 
 def _to_affiliate_url(url):
@@ -375,14 +424,24 @@ def collect_products(categories=None, target=None):
         sys.exit(1)
     print(f"\n  ✅ Cookies loaded ({len(cookie_str)} chars)")
 
+    # Check proxy availability
+    try:
+        from shopee_proxy import is_proxy_available
+        if is_proxy_available():
+            print("  ✅ CF Proxy available (fallback enabled)")
+        else:
+            print("  ⚠️ CF Proxy not configured (direct only)")
+    except ImportError:
+        print("  ⚠️ shopee_proxy.py not found")
+
     # STEP 3-5: Fetch all products (one big batch)
-    total_needed = target * len(categories) * 3  # 3x buffer for category filtering
+    total_needed = target * len(categories) * 3
     print(f"\n  Fetching product list...")
-    all_offers = get_affiliate_products(headers, target=min(total_needed, 200))
+    all_offers = get_affiliate_products(headers, cookie_str, target=min(total_needed, 200))
 
     if not all_offers:
         print("  ❌ No products from affiliate API!")
-        print("  Tip: update SHOPEE_AFFILIATE_COOKIES and run locally")
+        print("  Check: SHOPEE_AFFILIATE_COOKIES, CF_PROXY_URL, CF_PROXY_KEY")
         sys.exit(1)
 
     print(f"\n  ✅ Got {len(all_offers)} product offers")
