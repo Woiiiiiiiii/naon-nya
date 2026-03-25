@@ -106,12 +106,46 @@ def build_headers():
 
 # ═══════════════════════════════════════════════════════════════════
 #  STEP 2-5: HIT AFFILIATE API + PAGINATION + KEYWORD
+#  Transport: direct → CF Proxy fallback
 # ═══════════════════════════════════════════════════════════════════
-def get_products_by_keyword(headers, keyword, target=25):
-    """STEP 2-5: Hit affiliate API with keyword, paginate sampai target.
-    
-    Returns list of raw offer dicts.
-    """
+def _api_get(url, params, headers, cookie_str):
+    """Hit API: direct dulu, kalau gagal lewat CF Proxy."""
+    from urllib.parse import urlencode
+    full_url = f"{url}?{urlencode(params)}"
+
+    # Direct
+    try:
+        resp = requests.get(full_url, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get('code') == 0:
+                return data
+            print(f"      Direct: error {data.get('error', data.get('code'))}")
+        else:
+            print(f"      Direct: HTTP {resp.status_code}")
+    except Exception as e:
+        print(f"      Direct: {e}")
+
+    # CF Proxy fallback
+    try:
+        from shopee_proxy import proxy_get_json, is_proxy_available
+        if is_proxy_available():
+            proxy_h = {k: v for k, v in headers.items() if k != 'Cookie'}
+            status, data = proxy_get_json(full_url, headers=proxy_h, cookies_str=cookie_str)
+            if status == 200 and data and data.get('code') == 0:
+                return data
+            err = data.get('error', '?') if data else '?'
+            print(f"      Proxy: HTTP {status}, error={err}")
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"      Proxy: {e}")
+
+    return None
+
+
+def get_products_by_keyword(headers, cookie_str, keyword, target=25):
+    """STEP 2-5: Hit affiliate API with keyword, paginate sampai target."""
     url = f"{AFFILIATE_BASE}/api/v3/offer/product/list"
     products = []
     page = 0
@@ -127,28 +161,17 @@ def get_products_by_keyword(headers, keyword, target=25):
             'keyword': keyword,
         }
 
-        try:
-            resp = requests.get(url, params=params, headers=headers, timeout=15)
-            if resp.status_code != 200:
-                print(f"      HTTP {resp.status_code}")
-                break
-
-            data = resp.json()
-            if data.get('code') != 0:
-                print(f"      API error: {data.get('error', data.get('code'))}")
-                break
-
-            items = data.get('data', {}).get('list', [])
-            if not items:
-                break
-
-            products.extend(items)
-            page += 1
-            time.sleep(random.uniform(0.5, 1.0))
-
-        except Exception as e:
-            print(f"      Error: {e}")
+        data = _api_get(url, params, headers, cookie_str)
+        if not data:
             break
+
+        items = data.get('data', {}).get('list', [])
+        if not items:
+            break
+
+        products.extend(items)
+        page += 1
+        time.sleep(random.uniform(0.5, 1.0))
 
     return products[:target]
 
@@ -299,6 +322,16 @@ def collect(categories=None, target=None):
         sys.exit(1)
     print(f"\n✅ Cookies loaded ({len(cookie_str)} chars)")
 
+    # Check CF Proxy
+    try:
+        from shopee_proxy import is_proxy_available
+        if is_proxy_available():
+            print("✅ CF Proxy ready (fallback jika direct gagal)")
+        else:
+            print("⚠️ CF Proxy not configured")
+    except ImportError:
+        print("⚠️ shopee_proxy.py not found")
+
     total_new = 0
 
     for cat, keywords in categories.items():
@@ -313,7 +346,7 @@ def collect(categories=None, target=None):
 
             # STEP 2-5: Hit affiliate API with keyword + pagination
             print(f"\n    Keyword: '{kw}'")
-            offers = get_products_by_keyword(headers, kw, target=target - collected)
+            offers = get_products_by_keyword(headers, cookie_str, kw, target=target - collected)
             print(f"    → {len(offers)} offers")
 
             for offer in offers:
