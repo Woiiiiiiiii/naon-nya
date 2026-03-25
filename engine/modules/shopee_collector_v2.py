@@ -116,11 +116,16 @@ def build_headers():
 # ═══════════════════════════════════════════════════════════════════
 _browser_ctx = None  # Playwright browser context (reused)
 _browser_page = None
+_pw_instance = None
 
 
 def _init_browser(cookie_str):
-    """Buka browser + inject cookies (sekali, reused untuk semua keyword)."""
-    global _browser_ctx, _browser_page
+    """Buka browser + inject cookies.
+    
+    Strategy: inject cookies → navigate ke affiliate page minimal
+    → block resources berat → kalau captcha, langsung test API endpoint.
+    """
+    global _browser_ctx, _browser_page, _pw_instance
     if _browser_page:
         return True
 
@@ -128,10 +133,14 @@ def _init_browser(cookie_str):
         return False
 
     try:
-        pw = sync_playwright().start()
-        browser = pw.chromium.launch(
+        _pw_instance = sync_playwright().start()
+        browser = _pw_instance.chromium.launch(
             headless=True,
-            args=['--no-sandbox', '--disable-blink-features=AutomationControlled']
+            args=[
+                '--no-sandbox',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-dev-shm-usage',
+            ]
         )
         _browser_ctx = browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
@@ -143,30 +152,68 @@ def _init_browser(cookie_str):
             'Object.defineProperty(navigator, "webdriver", {get: () => undefined});'
         )
 
-        # Parse cookies string → Playwright format
+        # Inject cookies for BOTH domains
         pw_cookies = []
         for pair in cookie_str.split('; '):
             if '=' in pair:
                 name, _, value = pair.partition('=')
-                pw_cookies.append({
-                    'name': name, 'value': value,
-                    'domain': '.shopee.co.id', 'path': '/'
-                })
+                if name and value:
+                    # Parent domain (covers all shopee subdomains)
+                    pw_cookies.append({
+                        'name': name, 'value': value,
+                        'domain': '.shopee.co.id', 'path': '/'
+                    })
         _browser_ctx.add_cookies(pw_cookies)
+        print(f"      Browser: {len(pw_cookies)} cookies injected")
 
-        _browser_page = _browser_ctx.new_page()
-        _browser_page.goto('https://affiliate.shopee.co.id/offer/brand_offer',
-                           timeout=30000, wait_until='networkidle')
-        time.sleep(2)
+        page = _browser_ctx.new_page()
 
-        if 'affiliate.shopee.co.id' not in _browser_page.url:
-            print("      Browser: redirect — cookies mungkin expired")
-            _browser_page = None
+        # Block heavy resources to reduce detection
+        page.route("**/*.{png,jpg,jpeg,gif,svg,woff,woff2,css}", lambda route: route.abort())
+
+        # Try navigating to affiliate — with short timeout
+        try:
+            page.goto('https://affiliate.shopee.co.id/',
+                      timeout=15000, wait_until='domcontentloaded')
+            time.sleep(1)
+        except Exception as e:
+            print(f"      Browser: nav timeout (expected): {str(e)[:60]}")
+
+        current_url = page.url
+        print(f"      Browser: landed on {current_url[:80]}")
+
+        # Check if we got redirected to captcha
+        if 'captcha' in current_url or 'verify' in current_url:
+            print("      Browser: captcha detected — trying direct API via browser...")
+            # Navigate directly to the API endpoint with minimal params
+            try:
+                page.goto(
+                    'https://affiliate.shopee.co.id/api/v3/offer/product/list?'
+                    'list_type=5&page_limit=1&page_offset=0&client_type=1&keyword=test',
+                    timeout=10000, wait_until='domcontentloaded'
+                )
+                body = page.inner_text('body')
+                if '"code":0' in body or '"code": 0' in body:
+                    print("      Browser: API direct access OK!")
+                    _browser_page = page
+                    return True
+                else:
+                    print(f"      Browser: API blocked too: {body[:100]}")
+            except Exception as e:
+                print(f"      Browser: API direct failed: {str(e)[:60]}")
+
+            # Captcha blocks everything — can't use browser
+            print("      Browser: GH Actions IP fully blocked by Shopee captcha")
             browser.close()
+            _pw_instance.stop()
+            _browser_page = None
             return False
 
-        print(f"      Browser: OK — {_browser_page.url[:60]}")
+        # No captcha — we're on affiliate domain
+        _browser_page = page
+        print("      Browser: OK — on affiliate domain")
         return True
+
     except Exception as e:
         print(f"      Browser init error: {e}")
         _browser_page = None
