@@ -36,7 +36,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests Pillow
+          pip install requests Pillow playwright
+          python -m playwright install chromium --with-deps
 
       # ── Restore cached cookies (PRIVATE, not in public repo) ──
       - name: Restore Shopee Cookies Cache
