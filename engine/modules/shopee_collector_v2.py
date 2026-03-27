@@ -386,13 +386,59 @@ def extract_ids(offer):
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  STEP 7: HIT /api/v4/item/get → name, price, images
+#  STEP 7: GET product detail — name, price, images
+#  Priority: extract from offer → CF Proxy → Direct HTTP
 # ═══════════════════════════════════════════════════════════════════
-def get_product_detail(item_id, shop_id):
-    """STEP 7: Hit product API, ambil name + price + images.
+def _extract_from_offer(offer):
+    """Try to extract product detail directly from affiliate API response.
     
-    Endpoint public — tanpa cookies juga bisa.
+    The affiliate API already returns `batch_item_for_item_card_full`
+    which contains name, price, and image hash — no need for second request!
     """
+    nested = offer.get('batch_item_for_item_card_full', {})
+    if not isinstance(nested, dict):
+        return None
+
+    name = nested.get('name', '')
+    if not name:
+        return None
+
+    # Price
+    price = nested.get('price', 0)
+    price_max = nested.get('price_max', 0)
+    price = price_max or price
+    if price > 100000:
+        price = price // 100000
+
+    # Image
+    image = nested.get('image', '')
+    images = nested.get('images', [])
+    img_hash = images[0] if images else image
+    if not img_hash:
+        return None
+
+    return {
+        'name': name,
+        'price': price,
+        'image_hash': img_hash,
+        'image_url': f"https://cf.shopee.co.id/file/{img_hash}",
+    }
+
+
+def get_product_detail(item_id, shop_id, offer=None):
+    """STEP 7: Get name + price + images.
+    
+    Priority:
+    1. Extract from offer response (no extra request needed!)
+    2. CF Proxy → shopee.co.id/api/v4/item/get
+    3. Direct HTTP (will fail from GH Actions)
+    """
+    # 1. Try from offer data first
+    if offer:
+        detail = _extract_from_offer(offer)
+        if detail:
+            return detail
+
     url = f"{SHOPEE_BASE}/api/v4/item/get"
     params = {'itemid': item_id, 'shopid': shop_id}
     headers = {
@@ -403,38 +449,53 @@ def get_product_detail(item_id, shop_id):
         'X-Shopee-Language': 'id',
     }
 
+    # 2. Try CF Proxy
+    try:
+        from shopee_proxy import proxy_get_json, is_proxy_available
+        if is_proxy_available():
+            full_url = f"{url}?itemid={item_id}&shopid={shop_id}"
+            status, data = proxy_get_json(full_url, headers=headers, cookies_str='')
+            if status == 200 and data:
+                item = data.get('data', data.get('item', {}))
+                if item and item.get('name'):
+                    return _parse_item_detail(item)
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    # 3. Direct HTTP (last resort)
     try:
         resp = requests.get(url, params=params, headers=headers, timeout=15)
-        if resp.status_code != 200:
-            return None
+        if resp.status_code == 200:
+            data = resp.json()
+            item = data.get('data', data.get('item', {}))
+            if item and item.get('name'):
+                return _parse_item_detail(item)
+    except Exception:
+        pass
 
-        data = resp.json()
-        item = data.get('data', data.get('item', {}))
-        if not item or not item.get('name'):
-            return None
+    return None
 
-        # Price (Shopee uses price * 100000)
-        price = item.get('price', 0)
-        if price > 100000:
-            price = price // 100000
 
-        # Images
-        images = item.get('images', [])
-        image = item.get('image', '')
-        img_hash = images[0] if images else image
-        if not img_hash:
-            return None
+def _parse_item_detail(item):
+    """Parse item from /api/v4/item/get response."""
+    price = item.get('price', 0)
+    if price > 100000:
+        price = price // 100000
 
-        return {
-            'name': item['name'],
-            'price': price,
-            'image_hash': img_hash,
-            'image_url': f"https://cf.shopee.co.id/file/{img_hash}",
-        }
-
-    except Exception as e:
-        print(f"      Detail error: {e}")
+    images = item.get('images', [])
+    image = item.get('image', '')
+    img_hash = images[0] if images else image
+    if not img_hash:
         return None
+
+    return {
+        'name': item['name'],
+        'price': price,
+        'image_hash': img_hash,
+        'image_url': f"https://cf.shopee.co.id/file/{img_hash}",
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -571,9 +632,9 @@ def collect(categories=None, target=None):
                 if os.path.exists(os.path.join(product_dir, 'image.jpg')):
                     continue
 
-                # STEP 7: Hit product API → name, price, images
-                time.sleep(random.uniform(0.3, 0.8))
-                detail = get_product_detail(item_id, shop_id)
+                # STEP 7: Get product detail (from offer data or API)
+                time.sleep(random.uniform(0.1, 0.3))
+                detail = get_product_detail(item_id, shop_id, offer=offer)
 
                 if not detail:
                     if collected == 0 and i < 5:
