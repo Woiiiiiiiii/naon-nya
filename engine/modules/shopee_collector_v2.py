@@ -114,17 +114,28 @@ def build_headers():
 #  STEP 2-5: HIT AFFILIATE API + PAGINATION + KEYWORD
 #  Priority: Browser fetch → Direct → CF Proxy
 # ═══════════════════════════════════════════════════════════════════
-_browser_ctx = None  # Playwright browser context (reused)
+_browser_ctx = None
 _browser_page = None
 _pw_instance = None
 
+# Full stealth init script
+STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+window.chrome = { runtime: {}, loadTimes: () => {}, csi: () => {} };
+const origQuery = window.navigator.permissions.query;
+window.navigator.permissions.query = (params) =>
+  params.name === 'notifications'
+    ? Promise.resolve({state: Notification.permission})
+    : origQuery(params);
+Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+Object.defineProperty(navigator, 'languages', {get: () => ['id-ID','id','en-US','en']});
+Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});
+Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8});
+"""
+
 
 def _init_browser(cookie_str):
-    """Buka browser + inject cookies.
-    
-    Strategy: navigate ke halaman offer yang sebenarnya + tunggu networkidle
-    supaya anti-bot JS Shopee selesai generate token.
-    """
+    """Buka browser stealth + inject cookies + auto-export fresh cookies."""
     global _browser_ctx, _browser_page, _pw_instance
     if _browser_page:
         return True
@@ -140,17 +151,24 @@ def _init_browser(cookie_str):
                 '--no-sandbox',
                 '--disable-blink-features=AutomationControlled',
                 '--disable-dev-shm-usage',
+                '--disable-infobars',
+                '--window-size=1366,768',
             ]
         )
         _browser_ctx = browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
                        '(KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
-            viewport={'width': 1280, 'height': 720},
-            locale='id-ID'
+            viewport={'width': 1366, 'height': 768},
+            locale='id-ID',
+            timezone_id='Asia/Jakarta',
+            extra_http_headers={
+                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+                'sec-ch-ua': '"Chromium";v="146", "Google Chrome";v="146"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+            }
         )
-        _browser_ctx.add_init_script(
-            'Object.defineProperty(navigator, "webdriver", {get: () => undefined});'
-        )
+        _browser_ctx.add_init_script(STEALTH_JS)
 
         # Inject cookies
         pw_cookies = []
@@ -167,26 +185,19 @@ def _init_browser(cookie_str):
 
         page = _browser_ctx.new_page()
 
-        # Block ONLY images (NOT CSS/JS — anti-bot depends on these!)
-        page.route("**/*.{png,jpg,jpeg,gif,svg,webp,ico}", lambda route: route.abort())
-
-        # Navigate to ACTUAL offer page (not root!)
-        # This loads Shopee's JS which generates anti-bot tokens
+        # Navigate to offer page
         print("      Browser: navigating to offer page...")
         try:
             page.goto('https://affiliate.shopee.co.id/offer/brand_offer',
                       timeout=30000, wait_until='networkidle')
         except Exception as e:
             print(f"      Browser: nav issue: {str(e)[:80]}")
-            # Even if timeout, page might have loaded enough
 
-        # Wait for anti-bot JS to fully initialize
         time.sleep(5)
 
         current_url = page.url
         print(f"      Browser: on {current_url[:80]}")
 
-        # Captcha check
         if 'captcha' in current_url or 'verify' in current_url:
             print("      Browser: CAPTCHA — IP blocked")
             browser.close()
@@ -194,8 +205,11 @@ def _init_browser(cookie_str):
             _browser_page = None
             return False
 
-        # Test with a small API call to verify anti-bot tokens work
-        print("      Browser: testing API call...")
+        # Auto-export refreshed cookies
+        _export_browser_cookies()
+
+        # Test API
+        print("      Browser: testing API...")
         test = page.evaluate("""
             async () => {
                 try {
@@ -204,26 +218,80 @@ def _init_browser(cookie_str):
                         {headers: {"Accept": "application/json"}}
                     );
                     const data = await r.json();
-                    return {status: r.status, code: data.code, error: data.error, count: (data.data && data.data.list) ? data.data.list.length : 0};
+                    return {status: r.status, code: data.code, error: data.error,
+                            count: (data.data && data.data.list) ? data.data.list.length : 0};
                 } catch(e) { return {error: e.message}; }
             }
         """)
-        print(f"      Browser: test result = {test}")
+        print(f"      Browser: test = {test}")
 
+        _browser_page = page
         if test and test.get('code') == 0:
             print("      Browser: ✅ API works!")
-            _browser_page = page
-            return True
         else:
-            print("      Browser: ❌ API still blocked after page load")
-            # Keep page alive anyway — maybe specific requests will work
-            _browser_page = page
-            return True  # Still try, might work for some queries
+            print("      Browser: ⚠️ API test failed, will try anyway")
+        return True
 
     except Exception as e:
         print(f"      Browser init error: {e}")
         _browser_page = None
         return False
+
+
+def _export_browser_cookies():
+    """Export cookies from browser → cache + GH secret.
+    Browser auto-refreshes session tokens on navigation.
+    """
+    if not _browser_ctx:
+        return
+    try:
+        cookies = _browser_ctx.cookies()
+        shopee_cookies = [
+            {'name': c['name'], 'value': c['value'],
+             'domain': c.get('domain', '.shopee.co.id'),
+             'path': c.get('path', '/')}
+            for c in cookies if 'shopee' in c.get('domain', '')
+        ]
+        if not shopee_cookies:
+            return
+
+        refreshed_json = json.dumps(shopee_cookies, ensure_ascii=False)
+        print(f"      Browser: exported {len(shopee_cookies)} cookies")
+
+        # Save to cache
+        try:
+            with open('/tmp/.shopee_cookies.json', 'w') as f:
+                f.write(refreshed_json)
+            with open('/tmp/.cookies_session_valid', 'w') as f:
+                f.write('1')
+        except Exception:
+            pass
+
+        # Update GITHUB_ENV
+        github_env = os.environ.get('GITHUB_ENV', '')
+        if github_env:
+            try:
+                with open(github_env, 'a') as f:
+                    f.write(f"SHOPEE_AFFILIATE_COOKIES<<EOF\n{refreshed_json}\nEOF\n")
+                print("      Browser: cookies → GITHUB_ENV")
+            except Exception:
+                pass
+
+        # Update GH secret
+        import subprocess
+        gh_token = os.environ.get('GH_TOKEN', '')
+        if gh_token:
+            try:
+                result = subprocess.run(
+                    ['gh', 'secret', 'set', 'SHOPEE_AFFILIATE_COOKIES'],
+                    input=refreshed_json, capture_output=True, text=True, timeout=30
+                )
+                if result.returncode == 0:
+                    print("      Browser: ✅ GH secret updated!")
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"      Browser: cookie export error: {e}")
 
 
 def _browser_fetch(keyword, page_offset=0, page_limit=20):
