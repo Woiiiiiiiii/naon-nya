@@ -122,8 +122,8 @@ _pw_instance = None
 def _init_browser(cookie_str):
     """Buka browser + inject cookies.
     
-    Strategy: inject cookies → navigate ke affiliate page minimal
-    → block resources berat → kalau captcha, langsung test API endpoint.
+    Strategy: navigate ke halaman offer yang sebenarnya + tunggu networkidle
+    supaya anti-bot JS Shopee selesai generate token.
     """
     global _browser_ctx, _browser_page, _pw_instance
     if _browser_page:
@@ -152,13 +152,12 @@ def _init_browser(cookie_str):
             'Object.defineProperty(navigator, "webdriver", {get: () => undefined});'
         )
 
-        # Inject cookies for BOTH domains
+        # Inject cookies
         pw_cookies = []
         for pair in cookie_str.split('; '):
             if '=' in pair:
                 name, _, value = pair.partition('=')
                 if name and value:
-                    # Parent domain (covers all shopee subdomains)
                     pw_cookies.append({
                         'name': name, 'value': value,
                         'domain': '.shopee.co.id', 'path': '/'
@@ -168,51 +167,58 @@ def _init_browser(cookie_str):
 
         page = _browser_ctx.new_page()
 
-        # Block heavy resources to reduce detection
-        page.route("**/*.{png,jpg,jpeg,gif,svg,woff,woff2,css}", lambda route: route.abort())
+        # Block ONLY images (NOT CSS/JS — anti-bot depends on these!)
+        page.route("**/*.{png,jpg,jpeg,gif,svg,webp,ico}", lambda route: route.abort())
 
-        # Try navigating to affiliate — with short timeout
+        # Navigate to ACTUAL offer page (not root!)
+        # This loads Shopee's JS which generates anti-bot tokens
+        print("      Browser: navigating to offer page...")
         try:
-            page.goto('https://affiliate.shopee.co.id/',
-                      timeout=15000, wait_until='domcontentloaded')
-            time.sleep(1)
+            page.goto('https://affiliate.shopee.co.id/offer/brand_offer',
+                      timeout=30000, wait_until='networkidle')
         except Exception as e:
-            print(f"      Browser: nav timeout (expected): {str(e)[:60]}")
+            print(f"      Browser: nav issue: {str(e)[:80]}")
+            # Even if timeout, page might have loaded enough
+
+        # Wait for anti-bot JS to fully initialize
+        time.sleep(5)
 
         current_url = page.url
-        print(f"      Browser: landed on {current_url[:80]}")
+        print(f"      Browser: on {current_url[:80]}")
 
-        # Check if we got redirected to captcha
+        # Captcha check
         if 'captcha' in current_url or 'verify' in current_url:
-            print("      Browser: captcha detected — trying direct API via browser...")
-            # Navigate directly to the API endpoint with minimal params
-            try:
-                page.goto(
-                    'https://affiliate.shopee.co.id/api/v3/offer/product/list?'
-                    'list_type=5&page_limit=1&page_offset=0&client_type=1&keyword=test',
-                    timeout=10000, wait_until='domcontentloaded'
-                )
-                body = page.inner_text('body')
-                if '"code":0' in body or '"code": 0' in body:
-                    print("      Browser: API direct access OK!")
-                    _browser_page = page
-                    return True
-                else:
-                    print(f"      Browser: API blocked too: {body[:100]}")
-            except Exception as e:
-                print(f"      Browser: API direct failed: {str(e)[:60]}")
-
-            # Captcha blocks everything — can't use browser
-            print("      Browser: GH Actions IP fully blocked by Shopee captcha")
+            print("      Browser: CAPTCHA — IP blocked")
             browser.close()
             _pw_instance.stop()
             _browser_page = None
             return False
 
-        # No captcha — we're on affiliate domain
-        _browser_page = page
-        print("      Browser: OK — on affiliate domain")
-        return True
+        # Test with a small API call to verify anti-bot tokens work
+        print("      Browser: testing API call...")
+        test = page.evaluate("""
+            async () => {
+                try {
+                    const r = await fetch(
+                        "/api/v3/offer/product/list?list_type=5&sort_type=5&page_offset=0&page_limit=1&client_type=1",
+                        {headers: {"Accept": "application/json"}}
+                    );
+                    const data = await r.json();
+                    return {status: r.status, code: data.code, error: data.error, count: (data.data && data.data.list) ? data.data.list.length : 0};
+                } catch(e) { return {error: e.message}; }
+            }
+        """)
+        print(f"      Browser: test result = {test}")
+
+        if test and test.get('code') == 0:
+            print("      Browser: ✅ API works!")
+            _browser_page = page
+            return True
+        else:
+            print("      Browser: ❌ API still blocked after page load")
+            # Keep page alive anyway — maybe specific requests will work
+            _browser_page = page
+            return True  # Still try, might work for some queries
 
     except Exception as e:
         print(f"      Browser init error: {e}")
