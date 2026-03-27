@@ -837,12 +837,16 @@ def _export_csv():
         return
 
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-    fields = ['nama', 'price', 'desc', 'shopee_url', 'image_url', 'category', 'source']
+    fields = ['produk_id', 'nama', 'price', 'deskripsi_singkat', 'shopee_url', 'image_url', 'category', 'source']
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         for p in products:
-            w.writerow({k: p.get(k, '') for k in fields})
+            row = {k: p.get(k, '') for k in fields}
+            # Map 'desc' → 'deskripsi_singkat' for backward compat
+            if not row.get('deskripsi_singkat'):
+                row['deskripsi_singkat'] = p.get('desc', '')
+            w.writerow(row)
     print(f"\n✅ CSV: {len(products)} products exported")
 
 
