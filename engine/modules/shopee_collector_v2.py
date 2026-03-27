@@ -346,26 +346,41 @@ def get_products_by_keyword(headers, cookie_str, keyword, target=25, use_browser
 # ═══════════════════════════════════════════════════════════════════
 def extract_ids(offer):
     """STEP 6: Ambil item_id + shop_id dari response."""
-    item_id = offer.get('item_id', 0)
-    shop_id = offer.get('shop_id', 0)
+    item_id = (
+        offer.get('item_id') or offer.get('itemid') or
+        offer.get('product_id') or offer.get('id') or 0
+    )
+    shop_id = (
+        offer.get('shop_id') or offer.get('shopid') or 0
+    )
 
     # Coba dari nested
-    nested = offer.get('batch_item_for_item_card_full', {})
-    if isinstance(nested, dict):
-        item_id = item_id or nested.get('itemid', 0)
-        shop_id = shop_id or nested.get('shopid', 0)
+    for nested_key in ['batch_item_for_item_card_full', 'item', 'product']:
+        nested = offer.get(nested_key, {})
+        if isinstance(nested, dict):
+            item_id = item_id or nested.get('itemid', 0) or nested.get('item_id', 0)
+            shop_id = shop_id or nested.get('shopid', 0) or nested.get('shop_id', 0)
 
-    # Coba dari product_link
+    # Coba dari product_link / long_link / offer_link
     if not item_id or not shop_id:
-        link = offer.get('product_link', offer.get('long_link', ''))
-        if '/product/' in link:
-            parts = link.split('/product/')[-1].split('?')[0].split('/')
-            if len(parts) >= 2:
-                try:
-                    shop_id = shop_id or int(parts[0])
-                    item_id = item_id or int(parts[1])
-                except ValueError:
-                    pass
+        for link_key in ['product_link', 'long_link', 'offer_link', 'link']:
+            link = offer.get(link_key, '')
+            if '/product/' in str(link):
+                parts = str(link).split('/product/')[-1].split('?')[0].split('/')
+                if len(parts) >= 2:
+                    try:
+                        shop_id = shop_id or int(parts[0])
+                        item_id = item_id or int(parts[1])
+                    except ValueError:
+                        pass
+                break
+
+    # Convert to int
+    try:
+        item_id = int(item_id) if item_id else 0
+        shop_id = int(shop_id) if shop_id else 0
+    except (ValueError, TypeError):
+        item_id, shop_id = 0, 0
 
     return item_id, shop_id
 
@@ -528,17 +543,23 @@ def collect(categories=None, target=None):
                                              use_browser=use_browser)
             print(f"    → {len(offers)} offers")
 
-            for offer in offers:
+            for i, offer in enumerate(offers):
                 if collected >= target:
                     break
+
+                # Log first offer's structure for debugging
+                if i == 0:
+                    keys = list(offer.keys())[:15]
+                    print(f"    [DEBUG] First offer keys: {keys}")
 
                 # STEP 6: Extract item_id + shop_id
                 item_id, shop_id = extract_ids(offer)
                 if not item_id or not shop_id:
+                    if i < 3:  # Log first few failures
+                        print(f"    [SKIP] No IDs: item={item_id} shop={shop_id}")
                     continue
 
                 # Skip kalau sudah ada
-                # Pakai nama sementara dari offer untuk generate ID
                 nested = offer.get('batch_item_for_item_card_full', {})
                 tmp_name = ''
                 if isinstance(nested, dict):
@@ -555,6 +576,8 @@ def collect(categories=None, target=None):
                 detail = get_product_detail(item_id, shop_id)
 
                 if not detail:
+                    if collected == 0 and i < 5:
+                        print(f"    [SKIP] No detail for {item_id}/{shop_id}")
                     continue
 
                 # Re-generate ID with real name
