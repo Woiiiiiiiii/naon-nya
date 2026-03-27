@@ -90,10 +90,11 @@ def main():
     force_render = skip_upload  # QC mode = selalu render untuk review
     
     v5_steps = [
-        # Pre-production: Fonts + SFX cache + backgrounds (photos + videos) + music library
+        # Pre-production: Fonts + SFX cache + backgrounds (photos + videos)
+        # NOTE: music_downloader.py REMOVED — generate_music.py picks from
+        #       existing library or generates on-demand (no bulk restock)
         "python engine/modules/font_helper.py",
         "python engine/modules/sound_manager.py",
-        "python engine/modules/music_downloader.py",
         # Visual pipeline: composite product images → enhance/beautify
         "python engine/modules/image_enhancer.py",
         "python engine/modules/image_compositor.py",

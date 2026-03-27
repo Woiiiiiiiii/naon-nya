@@ -557,12 +557,17 @@ def restock_all():
 
 
 def restock_category(category):
-    """Restock a single category WITH ROTATION.
+    """Restock a single category ONLY if stock is below MIN_STOCK.
+    If stock >= MIN_STOCK → immediately return (no API calls, no rotation).
     Tries APIs in order: Freesound → Pixabay → YouTube Audio.
-    SHORT-CIRCUIT: if Tier 1 gets enough tracks, skip Tier 2/3.
     Synth is LAST RESORT only (when ALL API tiers failed)."""
     d = get_music_dir(category)
     local = count_local(category)
+    
+    # FAST PATH: if we already have enough tracks, skip everything
+    if local >= MIN_STOCK:
+        print(f"    [{category}] Stock OK: {local} tracks (min={MIN_STOCK}), skipping restock")
+        return local
     
     # Count existing API vs synth files
     api_count = sum(1 for f in os.listdir(d)
@@ -570,27 +575,9 @@ def restock_category(category):
                     and '_synth_' not in f)
     synth_count = sum(1 for f in os.listdir(d) if '_synth_' in f)
     
-    print(f"    [{category}] Current: {api_count} API, {synth_count} synth")
+    print(f"    [{category}] Current: {api_count} API, {synth_count} synth (need {MIN_STOCK - local} more)")
     
-    # ROTATION: delete oldest API tracks to force fresh variety
-    if api_count >= ROTATE_COUNT:
-        api_files = sorted(
-            [f for f in os.listdir(d)
-             if f.lower().endswith(('.mp3', '.ogg', '.m4a'))
-             and '_synth_' not in f],
-            key=lambda f: os.path.getmtime(os.path.join(d, f))
-        )
-        to_delete = api_files[:ROTATE_COUNT]
-        for f in to_delete:
-            try:
-                os.remove(os.path.join(d, f))
-                print(f"    [ROTATE] Deleted old: {f}")
-            except Exception:
-                pass
-        api_count -= len(to_delete)
-    
-    # Calculate how many tracks we need
-    need = max(MIN_STOCK - count_local(category), ROTATE_COUNT)
+    need = MIN_STOCK - local
     api_total = 0
 
     # -- TIER 1: Freesound API --
@@ -616,21 +603,11 @@ def restock_category(category):
         if yt_got > 0:
             print(f"    [+] YouTube Audio: +{yt_got} tracks")
     
-    # If we got API music, DELETE old synth files (they're inferior)
-    if api_total > 0 and synth_count > 0:
-        for f in os.listdir(d):
-            if '_synth_' in f:
-                try:
-                    os.remove(os.path.join(d, f))
-                    print(f"    [CLEANUP] Deleted old synth: {f}")
-                except Exception:
-                    pass
-    
-    # Only generate synth if ZERO music available (ALL tiers failed)
+    # Only generate synth if we STILL don't have enough
     new_local = count_local(category)
-    if new_local < MIN_STOCK and api_total == 0:
+    if new_local < MIN_STOCK:
         still_need = MIN_STOCK - new_local
-        print(f"    [SYNTH] All 3 tiers failed, generating {still_need} procedural tracks...")
+        print(f"    [SYNTH] Generating {still_need} procedural tracks...")
         for i in range(still_need):
             track_num = new_local + i + 1
             filepath = os.path.join(d, f"{category}_synth_{track_num:02d}.wav")

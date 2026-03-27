@@ -425,17 +425,15 @@ def _generate_procedural_track(output_path, produk_id, account_id, category='hom
 
 def generate_all_music(queue_dir, output_dir):
     """Generate music for every video in the queue.
-    Auto-downloads from Freesound/Pixabay/YouTube if stock is low.
+    OPTIMIZED: NO force-restock. Uses existing library first.
+    Only generates procedural track on-demand if library is empty.
     Each track used ONCE per run — no duplicates across channels."""
     # Reset dedup tracker for fresh pipeline run
     _reset_used_tracks()
 
-    print("=== Music Generator (4 Tiers + Dedup) ===")
+    print("=== Music Generator (Library-First + Dedup) ===")
     print(f"  Music library: {os.path.abspath(MUSIC_DIR)}")
     print(f"  Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
-
-    # Auto-restock ALL categories before processing
-    categories_needed = set()
 
     platforms = {
         'yt': os.path.join(queue_dir, 'yt_queue.jsonl'),
@@ -443,7 +441,8 @@ def generate_all_music(queue_dir, output_dir):
         'fb': os.path.join(queue_dir, 'fb_queue.jsonl'),
     }
 
-    # Collect which categories we need
+    # Show library status (NO restock — use what we have)
+    categories_seen = set()
     for platform, queue_file in platforms.items():
         if not os.path.exists(queue_file):
             continue
@@ -454,29 +453,11 @@ def generate_all_music(queue_dir, output_dir):
                     acct_id = job.get('account_id', f'{platform}_1')
                     cat = get_category(acct_id)
                     mapped = CATEGORY_MUSIC_MAP.get(cat, cat)
-                    categories_needed.add(mapped)
+                    categories_seen.add(mapped)
 
-    # ALWAYS try to restock from APIs (don't trust synth-based stock count)
-    if HAS_DOWNLOADER and categories_needed:
-        print("  Force-restocking music from APIs (Freesound + Pixabay)...")
-        for cat in sorted(categories_needed):
-            print(f"    [{cat}] Forcing API download...")
-            _restock(cat)
-            new_stock = _count(cat)
-            # Show API vs synth breakdown
-            folder = _get_music_folder(cat)
-            api_count = sum(1 for f in os.listdir(folder)
-                          if f.lower().endswith(('.mp3', '.ogg', '.m4a'))
-                          and '_synth_' not in f)
-            synth_count = sum(1 for f in os.listdir(folder)
-                            if '_synth_' in f)
-            print(f"    [{cat}] Stock: {new_stock} total ({api_count} API, {synth_count} synth)")
-        print()
-
-    # Show library status after restock
-    for cat in sorted(categories_needed):
+    for cat in sorted(categories_seen):
         files = _list_music_files(cat)
-        status = f"{len(files)} files" if files else "EMPTY (will use procedural)"
+        status = f"{len(files)} files" if files else "EMPTY (will use procedural on-demand)"
         print(f"  [{cat}] {status}")
     print()
 
@@ -506,13 +487,19 @@ def generate_all_music(queue_dir, output_dir):
 
             music_file = os.path.join(platform_dir, f"MUSIC_{produk_id}_{acct_id}.mp3")
 
+            # Skip if already generated this run
+            if os.path.exists(music_file) and os.path.getsize(music_file) > 1000:
+                print(f"    [SKIP] Already exists: {os.path.basename(music_file)}")
+                total_lib += 1
+                continue
+
             # Determine target duration
             if platform == 'yt' and video_type == 'long':
                 target_dur = MUSIC_DURATIONS.get('yt_long', 120)
             else:
                 target_dur = MUSIC_DURATIONS.get(platform, 50)
 
-            # PRIORITY 1: Auto-downloaded library files
+            # PRIORITY 1: Pick from existing library
             library_file = _select_music_from_library(category, produk_id, acct_id)
 
             if library_file:
@@ -524,7 +511,7 @@ def generate_all_music(queue_dir, output_dir):
                     total_lib += 1
                     continue
 
-            # PRIORITY 2: Procedural fallback (last resort)
+            # PRIORITY 2: Procedural fallback (generates ONE track on-demand)
             info = _generate_procedural_track(
                 music_file, produk_id, acct_id, category, duration=target_dur
             )
