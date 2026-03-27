@@ -570,6 +570,26 @@ def _parse_item_detail(item):
 # ═══════════════════════════════════════════════════════════════════
 #  HELPERS
 # ═══════════════════════════════════════════════════════════════════
+def _load_used_ids():
+    """Load product IDs already used in videos from used_products.json.
+    Products here will NEVER be re-downloaded — saves bandwidth & storage.
+    """
+    used_file = os.path.join(os.path.dirname(__file__), '..', 'state', 'used_products.json')
+    if not os.path.exists(used_file):
+        return set()
+    try:
+        with open(used_file, 'r', encoding='utf-8-sig') as f:
+            data = json.load(f)
+        # Collect all product IDs across all accounts
+        used = set()
+        for acct_data in data.values():
+            if isinstance(acct_data, dict):
+                used.update(acct_data.keys())
+        return used
+    except Exception:
+        return set()
+
+
 def _gen_id(name, cat):
     return hashlib.md5(f"{cat}_{name}".lower().encode()).hexdigest()[:12]
 
@@ -654,6 +674,12 @@ def collect(categories=None, target=None):
     except ImportError:
         print("  ⚠️ shopee_proxy.py not found")
 
+    # Load used products — skip re-downloading products already used in videos
+    used_ids = _load_used_ids()
+    if used_ids:
+        print(f"  ✅ Dedup: {len(used_ids)} products already used in videos — will skip")
+    skipped_used = 0
+
     total_new = 0
 
     for cat, keywords in categories.items():
@@ -697,6 +723,9 @@ def collect(categories=None, target=None):
                 tmp_name = tmp_name or offer.get('product_name', str(item_id))
 
                 pid = _gen_id(tmp_name, cat)
+                if pid in used_ids:
+                    skipped_used += 1
+                    continue
                 product_dir = os.path.join(BANK_DIR, cat, pid)
                 if os.path.exists(os.path.join(product_dir, 'image.jpg')):
                     continue
@@ -712,6 +741,9 @@ def collect(categories=None, target=None):
 
                 # Re-generate ID with real name
                 pid = _gen_id(detail['name'], cat)
+                if pid in used_ids:
+                    skipped_used += 1
+                    continue
                 product_dir = os.path.join(BANK_DIR, cat, pid)
                 if os.path.exists(os.path.join(product_dir, 'image.jpg')):
                     continue
@@ -771,6 +803,8 @@ def collect(categories=None, target=None):
     # Summary
     print(f"\n{'=' * 60}")
     print(f"  TOTAL: {total_new} produk baru")
+    if skipped_used:
+        print(f"  SKIPPED: {skipped_used} produk sudah dipakai video (dedup)")
     print("=" * 60)
 
     # Export CSV
