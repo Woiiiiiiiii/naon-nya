@@ -243,37 +243,103 @@ def _load_product_category_map():
     return mapping
 
 
+def _load_queued_product_ids():
+    """Load product IDs from queue files — ONLY these need enhancing."""
+    queued = set()
+    queue_files = [
+        os.path.join(os.path.dirname(__file__), '..', 'queue', 'yt_queue.jsonl'),
+        os.path.join(os.path.dirname(__file__), '..', 'queue', 'tt_queue.jsonl'),
+        os.path.join(os.path.dirname(__file__), '..', 'queue', 'fb_queue.jsonl'),
+    ]
+    for qf in queue_files:
+        if os.path.exists(qf):
+            with open(qf, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            job = json.loads(line)
+                            pid = job.get('produk_id', '')
+                            if pid:
+                                queued.add(pid)
+                        except Exception:
+                            pass
+    return queued
+
+
 def enhance_all_composites(composites_dir, category=None, account_index=None):
-    """Enhance all composite images in a directory.
+    """Enhance composite images — ONLY for products in the queue.
     
-    Auto-detects category per composite from produk.csv so each uses
-    its OWN dedicated CF key. Falls back to category arg if provided.
+    Queue-aware: reads yt/tt/fb queue files to determine which products
+    actually need enhancing. Skips all others to save API quota and time.
+    Also bails out of CF enhance after 3 consecutive failures.
     """
     if not os.path.exists(composites_dir):
         print(f"  [ENHANCE] Dir not found: {composites_dir}")
         return
 
-    files = [f for f in os.listdir(composites_dir) 
-             if f.endswith('.png') and 'composite' in f]
+    all_files = [f for f in os.listdir(composites_dir) 
+                 if f.endswith('.png') and 'composite' in f]
     
-    if not files:
+    if not all_files:
         print(f"  [ENHANCE] No composites found in {composites_dir}")
+        return
+
+    # QUEUE FILTER: only enhance products that are actually queued for video
+    queued_ids = _load_queued_product_ids()
+    if queued_ids:
+        files = []
+        for f in all_files:
+            # Extract product_id from filename (e.g. "PRODID_composite_001.png")
+            pid = f.split('_composite_')[0] if '_composite_' in f else f.replace('.png', '')
+            if pid in queued_ids:
+                files.append(f)
+        print(f"  [ENHANCE] Queue filter: {len(files)}/{len(all_files)} composites "
+              f"(only {len(queued_ids)} queued products)")
+    else:
+        # No queue files found — fallback to all (shouldn't happen in normal pipeline)
+        files = all_files
+        print(f"  [ENHANCE] No queue found — enhancing all {len(files)} composites")
+
+    if not files:
+        print(f"  [ENHANCE] No composites match queued products — skipping")
         return
 
     # Load product→category map for per-image key routing
     prod_cat_map = _load_product_category_map()
-    print(f"  [ENHANCE] Loaded {len(prod_cat_map)} product→category mappings")
     print(f"  [ENHANCE] Enhancing {len(files)} composites (per-category CF keys)...")
+
+    cf_consecutive_fails = 0
+    cf_disabled = False
 
     for f in files:
         fpath = os.path.join(composites_dir, f)
-        # Extract product_id from composite filename (e.g. "composite_PRODID_v1.png")
-        parts = f.replace('composite_', '').replace('.png', '').split('_')
-        pid = parts[0] if parts else ''
-        # Auto-detect category, or use override
+        pid = f.split('_composite_')[0] if '_composite_' in f else f.replace('.png', '')
         img_cat = category or prod_cat_map.get(pid, 'home')
         img_account_index = account_index or ACCOUNT_CF_MAP.get(img_cat)
-        enhance_composite(fpath, img_cat, img_account_index)
+
+        # Step 1: Local enhance (always works, fast)
+        enhanced = enhance_local(fpath, img_cat)
+        if enhanced is None:
+            continue
+        enhanced.save(fpath, 'PNG', quality=95)
+
+        # Step 2: CF enhance (skip if disabled after consecutive failures)
+        if cf_disabled:
+            print(f"    [ENHANCE] Local only → {os.path.basename(fpath)} (CF disabled)")
+            continue
+
+        cf_result = enhance_with_cf(fpath, img_cat, img_account_index, strength=0.20)
+        if cf_result is not None:
+            cf_result.save(fpath, 'PNG', quality=95)
+            cf_consecutive_fails = 0
+            print(f"    [ENHANCE] CF + Local → {os.path.basename(fpath)}")
+        else:
+            cf_consecutive_fails += 1
+            print(f"    [ENHANCE] Local only → {os.path.basename(fpath)} (CF fail {cf_consecutive_fails}/3)")
+            if cf_consecutive_fails >= 3:
+                cf_disabled = True
+                print(f"    [ENHANCE] ⚠️ CF disabled — 3 consecutive failures. Using local only for rest.")
 
     print(f"  [ENHANCE] Done — {len(files)} images enhanced")
 
@@ -282,7 +348,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', type=str, required=True, help='Composites directory')
-    parser.add_argument('--category', type=str, default=None, help='Override category (default: auto-detect from produk.csv)')
+    parser.add_argument('--category', type=str, default=None)
     parser.add_argument('--account', type=int, default=None)
     args = parser.parse_args()
 
