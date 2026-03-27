@@ -403,10 +403,11 @@ def _extract_from_offer(offer):
     if not name:
         return None
 
-    # Price
-    price = nested.get('price', 0)
-    price_max = nested.get('price_max', 0)
-    price = price_max or price
+    # Price (may be string from API)
+    try:
+        price = int(nested.get('price_max', 0) or nested.get('price', 0) or 0)
+    except (ValueError, TypeError):
+        price = 0
     if price > 100000:
         price = price // 100000
 
