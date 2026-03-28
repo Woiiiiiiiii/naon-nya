@@ -1,4 +1,4 @@
-﻿"""
+"""
 extract_masalah.py
 Extract "masalah" (pain points) for each product.
 Sources (in priority order):
@@ -76,7 +76,11 @@ def extract_masalah(produk_file, review_file, output_file):
 
 
 if __name__ == "__main__":
+    # Try produk_valid.csv first, fallback to produk.csv if empty/missing
     produk_path = "engine/data/produk_valid.csv"
+    if not os.path.exists(produk_path) or os.path.getsize(produk_path) < 50:
+        produk_path = "engine/data/produk.csv"
+        print(f"  [INFO] produk_valid.csv empty/missing, using {produk_path}")
     review_path = "engine/data/review_raw.csv"
     output_path = "engine/data/masalah.csv"
     extract_masalah(produk_path, review_path, output_path)

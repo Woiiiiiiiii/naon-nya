@@ -423,16 +423,87 @@ def _generate_procedural_track(output_path, produk_id, account_id, category='hom
 #  MAIN: Generate Music for All Videos
 # ═══════════════════════════════════════════════════════════════════
 
+def _ensure_category_has_music(category):
+    """On-demand restock: if a category has NO music, try tiers to get some.
+    Tier 1: Freesound API → Tier 2: YouTube Audio → Tier 3: Procedural Synth.
+    Only called when library is EMPTY for this category.
+    Returns: number of tracks available after restock."""
+    files = _list_music_files(category)
+    if files:
+        return len(files)  # Already have music, skip restock
+
+    print(f"      [RESTOCK] {category} library empty, trying tiers...")
+
+    if HAS_DOWNLOADER:
+        # Tier 1: Freesound (try to get just 3 tracks)
+        try:
+            from engine.modules.music_downloader import fetch_freesound, count_local
+            got = fetch_freesound(category, count=3)
+            if got > 0:
+                print(f"      [TIER 1] Freesound: +{got} tracks for {category}")
+                return count_local(category)
+        except Exception as e:
+            print(f"      [TIER 1] Freesound failed: {e}")
+
+        # Tier 2: YouTube Audio (skip Pixabay — dead code)
+        try:
+            from engine.modules.music_downloader import fetch_youtube_audio_library
+            got = fetch_youtube_audio_library(category, count=3)
+            if got > 0:
+                print(f"      [TIER 2] YouTube Audio: +{got} tracks for {category}")
+                return count_local(category)
+        except Exception as e:
+            print(f"      [TIER 2] YouTube Audio failed: {e}")
+
+    # Tier 3: Procedural synth (always works, generate 3 tracks)
+    print(f"      [TIER 3] Generating 3 procedural tracks for {category}...")
+    folder = _get_music_folder(category)
+    for i in range(3):
+        mp3_path = os.path.join(folder, f"{category}_synth_{i+1:02d}.mp3")
+        if not os.path.exists(mp3_path):
+            _generate_procedural_track(
+                mp3_path, f"restock_{i}", f"lib_{category}",
+                category=category, duration=random.randint(25, 45)
+            )
+    return len(_list_music_files(category))
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  MUSIC DEDUP: Track which music files have been used globally
+# ═══════════════════════════════════════════════════════════════════
+USED_MUSIC_FILE = os.path.join(os.path.dirname(__file__), '..', 'state', 'used_music.json')
+
+
+def _load_used_music():
+    """Load set of music filenames that have been used in previous runs."""
+    if os.path.exists(USED_MUSIC_FILE):
+        try:
+            with open(USED_MUSIC_FILE, 'r') as f:
+                return set(json.load(f))
+        except Exception:
+            pass
+    return set()
+
+
+def _save_used_music(used_set):
+    """Save used music tracking."""
+    os.makedirs(os.path.dirname(USED_MUSIC_FILE), exist_ok=True)
+    with open(USED_MUSIC_FILE, 'w') as f:
+        json.dump(sorted(used_set), f, indent=2)
+
+
 def generate_all_music(queue_dir, output_dir):
     """Generate music for every video in the queue.
-    OPTIMIZED: NO force-restock. Uses existing library first.
-    Only generates procedural track on-demand if library is empty.
-    Each track used ONCE per run — no duplicates across channels."""
-    # Reset dedup tracker for fresh pipeline run
+    TIER SYSTEM: Library first → Restock on-demand (Freesound → YT → Synth).
+    Each track used ONCE per run — no duplicates across channels.
+    Global dedup via used_music.json — tracks not reused across runs."""
     _reset_used_tracks()
 
-    print("=== Music Generator (Library-First + Dedup) ===")
+    globally_used = _load_used_music()
+
+    print("=== Music Generator (Tier System + Dedup) ===")
     print(f"  Music library: {os.path.abspath(MUSIC_DIR)}")
+    print(f"  Previously used tracks: {len(globally_used)}")
     print(f"  Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
 
     platforms = {
@@ -441,7 +512,7 @@ def generate_all_music(queue_dir, output_dir):
         'fb': os.path.join(queue_dir, 'fb_queue.jsonl'),
     }
 
-    # Show library status (NO restock — use what we have)
+    # Show library status
     categories_seen = set()
     for platform, queue_file in platforms.items():
         if not os.path.exists(queue_file):
@@ -457,7 +528,7 @@ def generate_all_music(queue_dir, output_dir):
 
     for cat in sorted(categories_seen):
         files = _list_music_files(cat)
-        status = f"{len(files)} files" if files else "EMPTY (will use procedural on-demand)"
+        status = f"{len(files)} files" if files else "EMPTY (will restock via tiers)"
         print(f"  [{cat}] {status}")
     print()
 
@@ -499,7 +570,7 @@ def generate_all_music(queue_dir, output_dir):
             else:
                 target_dur = MUSIC_DURATIONS.get(platform, 50)
 
-            # PRIORITY 1: Pick from existing library
+            # STEP 1: Try existing library
             library_file = _select_music_from_library(category, produk_id, acct_id)
 
             if library_file:
@@ -507,20 +578,41 @@ def generate_all_music(queue_dir, output_dir):
                     library_file, music_file, target_dur, produk_id, acct_id
                 )
                 if success:
-                    print(f"    [LIBRARY] {os.path.basename(music_file)} <- {os.path.basename(library_file)} ({target_dur}s)")
+                    basename = os.path.basename(library_file)
+                    globally_used.add(basename)
+                    print(f"    [LIBRARY] {os.path.basename(music_file)} <- {basename} ({target_dur}s)")
                     total_lib += 1
                     continue
 
-            # PRIORITY 2: Procedural fallback (generates ONE track on-demand)
+            # STEP 2: Library empty → restock via tier system (on-demand)
+            _ensure_category_has_music(category)
+            # Try library again after restock
+            library_file = _select_music_from_library(category, produk_id, acct_id)
+            if library_file:
+                success = _process_music_file(
+                    library_file, music_file, target_dur, produk_id, acct_id
+                )
+                if success:
+                    basename = os.path.basename(library_file)
+                    globally_used.add(basename)
+                    print(f"    [RESTOCKED] {os.path.basename(music_file)} <- {basename} ({target_dur}s)")
+                    total_lib += 1
+                    continue
+
+            # STEP 3: Last resort — procedural on-demand (1 track)
             info = _generate_procedural_track(
                 music_file, produk_id, acct_id, category, duration=target_dur
             )
             print(f"    [SYNTH] {os.path.basename(music_file)} | {info} ({target_dur}s)")
             total_proc += 1
 
-    print(f"\n=== Music Complete: {total_lib} from library, {total_proc} procedural ===")
+    # Save global used music tracking
+    _save_used_music(globally_used)
+
+    print(f"\n=== Music Complete: {total_lib} library, {total_proc} procedural ===")
 
 
 if __name__ == "__main__":
     generate_all_music("engine/queue", "engine/output")
+
 

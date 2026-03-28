@@ -1,4 +1,4 @@
-﻿import pandas as pd
+import pandas as pd
 import json
 import os
 import sys
@@ -47,10 +47,29 @@ def generate_storyboard(produk_file, masalah_file, output_file):
         return
         
     produk_df = pd.read_csv(produk_file)
-    masalah_df = pd.read_csv(masalah_file)
     
-    # Merge on produk_id
-    merged = pd.merge(produk_df, masalah_df, on='produk_id')
+    # Load masalah — if file doesn't exist or is empty, create empty DataFrame
+    if os.path.exists(masalah_file) and os.path.getsize(masalah_file) > 10:
+        masalah_df = pd.read_csv(masalah_file)
+    else:
+        masalah_df = pd.DataFrame(columns=['produk_id', 'masalah'])
+        print(f"  [INFO] masalah.csv empty/missing, will auto-generate all masalah")
+    
+    # LEFT merge so all products get a storyboard even without masalah
+    merged = pd.merge(produk_df, masalah_df, on='produk_id', how='left')
+    
+    # Auto-fill missing masalah from product nama
+    MASALAH_FALLBACK = [
+        "Sering bingung cari {nama} yang berkualitas tapi harga terjangkau?",
+        "Capek pakai {nama} murahan yang cepat rusak?",
+        "Udah coba berbagai {nama} tapi belum puas?",
+        "Butuh {nama} yang tahan lama dan gak mahal?",
+    ]
+    for idx, row in merged.iterrows():
+        if pd.isna(row.get('masalah')) or str(row.get('masalah', '')).strip() == '':
+            nama = str(row.get('nama', 'produk ini'))
+            template = random.choice(MASALAH_FALLBACK)
+            merged.at[idx, 'masalah'] = template.format(nama=nama[:30].lower())
     
     storyboards = []
     for _, row in merged.iterrows():
@@ -105,7 +124,11 @@ def generate_storyboard(produk_file, masalah_file, output_file):
         print(f"  {sb['produk_id']} ({sb['category']}): {sb['nama'][:40]}")
 
 if __name__ == "__main__":
+    # Try produk_valid.csv first, fallback to produk.csv if empty/missing
     produk_path = "engine/data/produk_valid.csv"
+    if not os.path.exists(produk_path) or os.path.getsize(produk_path) < 50:
+        produk_path = "engine/data/produk.csv"
+        print(f"  [INFO] produk_valid.csv empty/missing, using {produk_path}")
     masalah_path = "engine/data/masalah.csv"
     output_path = "engine/queue/storyboard_queue.jsonl"
     generate_storyboard(produk_path, masalah_path, output_path)

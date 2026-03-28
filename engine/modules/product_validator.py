@@ -225,16 +225,18 @@ def validate_products(input_file, output_file):
 
     df = pd.read_csv(input_file)
 
-    # Required columns
-    required = ['produk_id', 'nama', 'deskripsi_singkat', 'shopee_url']
+    # Required columns (hard fail if missing)
+    required = ['produk_id', 'nama']
     for col in required:
         if col not in df.columns:
-            # Add tokopedia_url if missing (optional)
-            if col == 'tokopedia_url':
-                df[col] = ''
-                continue
             print(f"Error: Missing column {col}")
             return
+    
+    # Optional columns — add with empty values if missing
+    for col in ['deskripsi_singkat', 'shopee_url', 'image_url', 'category', 'source']:
+        if col not in df.columns:
+            df[col] = ''
+            print(f"  [INFO] Added missing optional column: {col}")
 
     # Drop rows with missing crucial data
     clean_df = df.dropna(subset=['produk_id', 'nama'])
