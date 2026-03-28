@@ -137,12 +137,20 @@ def _select_music_from_library(category, produk_id, account_id):
     available_api = [f for f in api_files if os.path.abspath(f) not in _used_tracks]
     available_synth = [f for f in synth_files if os.path.abspath(f) not in _used_tracks]
 
-    # If ALL tracks exhausted, reset and reuse (safety valve)
+    # If ALL tracks exhausted in this session, restock 1 new track (don't reuse)
     if not available_api and not available_synth:
-        print(f"      [WARN] All {len(files)} tracks used, resetting dedup pool")
-        _used_tracks.clear()
-        available_api = api_files
-        available_synth = synth_files
+        print(f"      [WARN] All {len(files)} tracks used in session, restocking 1 new...")
+        _ensure_category_has_music(category, force=True)
+        # Re-check after restock
+        files = _list_music_files(category)
+        available_api = [f for f in files if '_synth_' not in os.path.basename(f) and os.path.abspath(f) not in _used_tracks]
+        available_synth = [f for f in files if '_synth_' in os.path.basename(f) and os.path.abspath(f) not in _used_tracks]
+        if not available_api and not available_synth:
+            # Last resort: reset dedup and reuse
+            print(f"      [WARN] Restock failed, resetting dedup pool")
+            _used_tracks.clear()
+            available_api = [f for f in files if '_synth_' not in os.path.basename(f)]
+            available_synth = [f for f in files if '_synth_' in os.path.basename(f)]
 
     if available_api:
         rng.shuffle(available_api)
@@ -423,24 +431,26 @@ def _generate_procedural_track(output_path, produk_id, account_id, category='hom
 #  MAIN: Generate Music for All Videos
 # ═══════════════════════════════════════════════════════════════════
 
-def _ensure_category_has_music(category):
-    """On-demand restock: if a category has NO music, try tiers to get some.
+def _ensure_category_has_music(category, force=False):
+    """On-demand restock: get 1 track for a category via tier system.
     Tier 1: Freesound API → Tier 2: YouTube Audio → Tier 3: Procedural Synth.
-    Only called when library is EMPTY for this category.
+    Only generates what's needed (1 track at a time).
+    force=True: always generate even if library has files (for dedup exhaustion).
     Returns: number of tracks available after restock."""
     files = _list_music_files(category)
-    if files:
+    if files and not force:
         return len(files)  # Already have music, skip restock
 
-    print(f"      [RESTOCK] {category} library empty, trying tiers...")
+    count_needed = 1  # Only get 1 track at a time
+    print(f"      [RESTOCK] {category}: getting {count_needed} track via tiers...")
 
     if HAS_DOWNLOADER:
-        # Tier 1: Freesound (try to get just 3 tracks)
+        # Tier 1: Freesound (try to get 1 track)
         try:
             from engine.modules.music_downloader import fetch_freesound, count_local
-            got = fetch_freesound(category, count=3)
+            got = fetch_freesound(category, count=count_needed)
             if got > 0:
-                print(f"      [TIER 1] Freesound: +{got} tracks for {category}")
+                print(f"      [TIER 1] Freesound: +{got} track for {category}")
                 return count_local(category)
         except Exception as e:
             print(f"      [TIER 1] Freesound failed: {e}")
@@ -448,23 +458,22 @@ def _ensure_category_has_music(category):
         # Tier 2: YouTube Audio (skip Pixabay — dead code)
         try:
             from engine.modules.music_downloader import fetch_youtube_audio_library
-            got = fetch_youtube_audio_library(category, count=3)
+            got = fetch_youtube_audio_library(category, count=count_needed)
             if got > 0:
-                print(f"      [TIER 2] YouTube Audio: +{got} tracks for {category}")
+                print(f"      [TIER 2] YouTube Audio: +{got} track for {category}")
                 return count_local(category)
         except Exception as e:
             print(f"      [TIER 2] YouTube Audio failed: {e}")
 
-    # Tier 3: Procedural synth (always works, generate 3 tracks)
-    print(f"      [TIER 3] Generating 3 procedural tracks for {category}...")
+    # Tier 3: Procedural synth (always works, generate 1 track)
+    print(f"      [TIER 3] Generating 1 procedural track for {category}...")
     folder = _get_music_folder(category)
-    for i in range(3):
-        mp3_path = os.path.join(folder, f"{category}_synth_{i+1:02d}.mp3")
-        if not os.path.exists(mp3_path):
-            _generate_procedural_track(
-                mp3_path, f"restock_{i}", f"lib_{category}",
-                category=category, duration=random.randint(25, 45)
-            )
+    existing = len(_list_music_files(category))
+    mp3_path = os.path.join(folder, f"{category}_synth_{existing+1:02d}.mp3")
+    _generate_procedural_track(
+        mp3_path, f"restock_{existing}", f"lib_{category}",
+        category=category, duration=random.randint(25, 45)
+    )
     return len(_list_music_files(category))
 
 

@@ -607,20 +607,13 @@ def restock_category(category):
             print(f"    [+] Freesound: +{fs_got} tracks")
         need -= fs_got
 
-    # -- TIER 2: Pixabay (only if Tier 1 didn't get enough) --
-    if need > 0:
-        px_got = fetch_pixabay_music(category, count=need)
-        api_total += px_got
-        if px_got > 0:
-            print(f"    [+] Pixabay: +{px_got} tracks")
-        need -= px_got
-    
-    # -- TIER 3: YouTube Audio Library (only if Tier 1+2 didn't get enough) --
+    # -- TIER 2: YouTube Audio Library (only if Tier 1 didn't get enough) --
     if need > 0:
         yt_got = fetch_youtube_audio_library(category, count=need)
         api_total += yt_got
         if yt_got > 0:
             print(f"    [+] YouTube Audio: +{yt_got} tracks")
+        need -= yt_got
     
     # Only generate synth if we STILL don't have enough
     new_local = count_local(category)
