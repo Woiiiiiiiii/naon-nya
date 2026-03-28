@@ -132,7 +132,23 @@ def fetch_freesound(category, count=3):
         }
 
         print(f"    [FREESOUND] Searching: '{query}'...")
-        resp = requests.get(url, params=params, timeout=30)
+        
+        # Retry once on timeout (GitHub Actions has high latency to freesound.org)
+        resp = None
+        for attempt in range(2):
+            try:
+                resp = requests.get(url, params=params, timeout=60)
+                break
+            except requests.exceptions.Timeout:
+                if attempt == 0:
+                    print(f"    [FREESOUND] Timeout (attempt 1/2), retrying...")
+                    continue
+                else:
+                    print(f"    [FREESOUND] Timeout after 2 attempts")
+                    return 0
+        
+        if resp is None:
+            return 0
 
         if resp.status_code == 200:
             data = resp.json()
@@ -282,17 +298,20 @@ def fetch_youtube_audio_library(category, count=3):
                 '--extract-audio',
                 '--audio-format', 'mp3',
                 '--audio-quality', '5',
-                '--match-filter', 'duration >= 30 & duration <= 300',
+                '--match-filter', 'duration >= 20 & duration <= 600',
                 '--max-downloads', '1',
                 '-o', filepath.replace('.mp3', '.%(ext)s'),
                 '--no-overwrites',
-                '--quiet',
-                '--no-warnings',
                 search_query,
             ]
 
             try:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+
+                if result.returncode != 0 and result.stderr:
+                    # Show first line of error for debugging
+                    err_line = result.stderr.strip().split('\n')[0][:100]
+                    print(f"    [WARN] yt-dlp error: {err_line}")
 
                 # yt-dlp may save with different extension, find the actual file
                 base = filepath.replace('.mp3', '')
