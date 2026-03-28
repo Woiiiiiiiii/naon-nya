@@ -123,8 +123,23 @@ def cleanup_used_images():
                     except Exception:
                         pass
 
-    if deleted_images or deleted_bank:
-        print(f"  [CLEANUP] Deleted {deleted_images} images, {deleted_bank} bank entries (already used)")
+    # Clean up produk.csv — remove used products so they don't appear in future runs
+    csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'produk.csv')
+    removed_csv = 0
+    if os.path.exists(csv_path):
+        try:
+            import pandas as pd
+            df = pd.read_csv(csv_path)
+            before = len(df)
+            df = df[~df['produk_id'].astype(str).isin(all_used_ids)]
+            if len(df) < before:
+                removed_csv = before - len(df)
+                df.to_csv(csv_path, index=False)
+        except Exception:
+            pass
+
+    if deleted_images or deleted_bank or removed_csv:
+        print(f"  [CLEANUP] Deleted {deleted_images} images, {deleted_bank} bank entries, {removed_csv} CSV rows (already used)")
 
 
 def filter_queue(jobs, account_id):

@@ -836,36 +836,48 @@ def _export_csv():
         print("\n⚠️ No products for CSV")
         return
 
+    # Filter out products already used in videos
+    used_ids = _load_used_ids()
+    fresh_products = [p for p in products if p.get('produk_id', '') not in used_ids]
+    skipped = len(products) - len(fresh_products)
+    if skipped > 0:
+        print(f"  [DEDUP] Skipped {skipped} used products from CSV export")
+
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     fields = ['produk_id', 'nama', 'price', 'deskripsi_singkat', 'shopee_url', 'image_url', 'category', 'source']
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
-        for p in products:
+        for p in fresh_products:
             row = {k: p.get(k, '') for k in fields}
-            # Map 'desc' → 'deskripsi_singkat' for backward compat
             if not row.get('deskripsi_singkat'):
                 row['deskripsi_singkat'] = p.get('desc', '')
             w.writerow(row)
-    print(f"\n✅ CSV: {len(products)} products exported")
+    print(f"\n✅ CSV: {len(fresh_products)} products exported ({skipped} used excluded)")
 
 
 def _copy_images():
     import shutil
     dst_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'images')
     os.makedirs(dst_dir, exist_ok=True)
+    # Skip products already used in videos
+    used_ids = _load_used_ids()
     count = 0
+    skipped = 0
     for cat in CATEGORIES:
         cat_dir = os.path.join(BANK_DIR, cat)
         if not os.path.exists(cat_dir):
             continue
         for d in os.listdir(cat_dir):
+            if d in used_ids:
+                skipped += 1
+                continue
             src = os.path.join(cat_dir, d, 'image.jpg')
             dst = os.path.join(dst_dir, f"{d}.jpg")
             if os.path.exists(src) and not os.path.exists(dst):
                 shutil.copy2(src, dst)
                 count += 1
-    print(f"✅ Images: {count} copied")
+    print(f"✅ Images: {count} copied ({skipped} used skipped)")
 
 
 # ═══════════════════════════════════════════════════════════════════
