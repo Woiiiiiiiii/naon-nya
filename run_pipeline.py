@@ -37,19 +37,13 @@ def main():
         
     mode = sys.argv[1].lower()
     
-    # V1: Data Prep (validate → inspect → extract → storyboard)
-    # Engine reads stock from git checkout — produk.csv + images/ committed by collector
-    # NO collector call here — engine is 100% independent from collector
-    v1_steps = [
-        "python engine/modules/product_validator.py",
-        # AI Vision: inspect + score downloaded images (auto-detect category per image)
-        "python engine/modules/cf_vision_inspector.py --image engine/data/images",
-        "python engine/modules/extract_masalah.py",
-        "python engine/modules/generate_storyboard.py"
-    ]
+    # V1: Data Prep — REMOVED
+    # batch_manager.py now reads produk.csv directly,
+    # validates image inline (1 per category), retries on QC failure.
+    # No need to validate/inspect/storyboard ALL 270 products.
+    v1_steps = []
 
     # DATA CHECKPOINT: warn if produk.csv has no products
-    # NOT fatal — pipeline will catch 0-video at end and exit with proper message
     v1_checkpoint = {
         'file': 'engine/data/produk.csv',
         'min_lines': 2,  # header + at least 1 product
@@ -57,7 +51,7 @@ def main():
         'fatal': False,
     }
     
-    # V2: Batch Manager (select products → assign to accounts → random schedule)
+    # V2: Batch Manager (select 1 per category → validate image → generate storyboard inline)
     v2_steps = [
         "python engine/modules/batch_manager.py"
     ]

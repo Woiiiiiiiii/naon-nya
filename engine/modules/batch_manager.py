@@ -1,14 +1,13 @@
-﻿"""
+"""
 batch_manager.py
 Assigns products to accounts based on their CATEGORY.
 
 Each YouTube account has a fixed category (from category_router.py):
   yt_1 = fashion, yt_2 = gadget, yt_3 = beauty, yt_4 = home, yt_5 = wellness
 
-Each slot (pagi/siang/sore/malam), the batch manager:
-1. Reads storyboard_queue.jsonl (products with category tags)
-2. Assigns each account a product matching its category
-3. Writes per-platform queues (yt_queue, tt_queue, fb_queue)
+OPTIMIZED: Reads directly from produk.csv (not storyboard_queue.jsonl).
+Picks 1 product per category, validates image inline, retries on QC failure.
+Only selected products (5-7) get processed — NOT all 270.
 """
 import json
 import os
@@ -37,11 +36,106 @@ except ImportError:
     def filter_queue(jobs, account_id): return jobs
     def mark_product_used(product_id, account_id, product_name='', url=''): pass
 
+try:
+    from product_validator import validate_product_image
+except ImportError:
+    def validate_product_image(produk_id, images_dir='engine/data/images'):
+        return 'pass', None
 
-def manage_batch(storyboard_queue, yt_queue, tt_queue, fb_queue, state_file, config, slot_override=None):
+
+# Masalah templates (inline — no need for separate extract_masalah step)
+MASALAH_TEMPLATES = [
+    "Sering bingung cari {nama} yang berkualitas tapi harga terjangkau?",
+    "Capek pakai {nama} murahan yang cepat rusak?",
+    "Udah coba berbagai {nama} tapi belum puas?",
+    "Butuh {nama} yang tahan lama dan gak mahal?",
+    "Males ribet? {nama} ini bikin hidupmu lebih simpel!",
+    "Jangan buang uang buat {nama} abal-abal, mending yang ini!",
+]
+
+# Hook/CTA templates (inline)
+HOOK_TEMPLATES = [
+    "Kamu masih pakai yang biasa?",
+    "STOP! Jangan scroll dulu!",
+    "Wajib tau sebelum beli {nama}!",
+    "Ini yang lagi viral!",
+    "Review jujur {nama}!",
+]
+CTA_TEMPLATES = [
+    "Klik link di bio untuk beli!",
+    "Cek harga spesial di link bio!",
+    "Stok terbatas! Grab sekarang!",
+    "Link pembelian ada di bio!",
+]
+
+
+def _select_and_validate_product(products_df, category, account_id, rng, images_dir='engine/data/images'):
+    """Pick 1 product from category, validate image.
+    If QC fails, try next product. Returns (product_dict, image_path) or (None, None)."""
+    cat_products = products_df[products_df['category'] == category].copy()
+    if cat_products.empty:
+        print(f"    [WARN] No products in category '{category}'")
+        return None, None
+
+    # Convert to list of dicts for dedup filter
+    cat_jobs = cat_products.to_dict('records')
+    cat_jobs = filter_queue(cat_jobs, account_id)
+
+    if not cat_jobs:
+        print(f"    [WARN] No NEW products for {account_id} (category={category}), ALL used up")
+        return None, None
+
+    # Shuffle for variety
+    rng.shuffle(cat_jobs)
+
+    # Try each product until one passes image QC
+    for product in cat_jobs:
+        pid = product['produk_id']
+        status, valid_path = validate_product_image(pid, images_dir)
+
+        if status == 'hard_reject':
+            print(f"    [{account_id}] {pid} image REJECTED, trying next...")
+            continue
+
+        # pass or soft_reject = OK to use
+        print(f"    [{account_id}] {pid} image OK (status={status})")
+        return product, valid_path
+
+    print(f"    [WARN] All products in '{category}' failed image QC for {account_id}")
+    return None, None
+
+
+def _make_storyboard_entry(product, rng):
+    """Create a storyboard entry for a selected product."""
+    nama = str(product.get('nama', ''))
+
+    template = rng.choice(MASALAH_TEMPLATES)
+    masalah = template.format(nama=nama[:30].lower())
+
+    hook_template = rng.choice(HOOK_TEMPLATES)
+    hook = hook_template.format(nama=nama[:20]) if '{nama}' in hook_template else hook_template
+    cta = rng.choice(CTA_TEMPLATES)
+
+    return {
+        "produk_id": product['produk_id'],
+        "nama": nama,
+        "category": product.get('category', 'fashion'),
+        "harga": str(product.get('price', product.get('harga', ''))),
+        "shopee_url": str(product.get('shopee_url', '')),
+        "image_url": str(product.get('image_url', '')),
+        "hook": hook,
+        "masalah": masalah,
+        "solusi": f"Pakai {nama[:30]} aja!",
+        "cta": cta,
+        "scene_order": ["hook", "masalah", "solusi", "cta"],
+    }
+
+
+def manage_batch(produk_csv, yt_queue, tt_queue, fb_queue, state_file, config, slot_override=None):
     """
     Assigns products to accounts based on category.
-    Each account gets a DIFFERENT product matching its category.
+    READS DIRECTLY from produk.csv — picks 1 per category, validates image inline.
+    Only 5-7 products processed per run (not 270).
     """
     yt_accounts = config.get('accounts', {}).get('youtube', 5)
     schedule = config.get('schedule', {}).get('slots', {})
@@ -60,43 +154,30 @@ def manage_batch(storyboard_queue, yt_queue, tt_queue, fb_queue, state_file, con
         else:
             slot = "malam"
 
-    print(f"=== Batch Manager v3.0 (Category-Based) ===")
+    print(f"=== Batch Manager v4.0 (Direct CSV + Inline QC) ===")
     print(f"Slot: {slot}")
 
-    if not os.path.exists(storyboard_queue):
-        print(f"Error: {storyboard_queue} not found.")
+    # Read produk.csv directly
+    if not os.path.exists(produk_csv):
+        print(f"Error: {produk_csv} not found.")
         return
 
-    # Load all jobs from storyboard queue
-    all_jobs = []
-    with open(storyboard_queue, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                all_jobs.append(json.loads(line))
+    products_df = pd.read_csv(produk_csv)
+    if 'category' not in products_df.columns:
+        products_df['category'] = 'fashion'
 
-    if not all_jobs:
-        print("No jobs found in storyboard queue.")
-        return
+    print(f"Stock: {len(products_df)} products")
+    cat_counts = products_df['category'].value_counts()
+    for cat, cnt in cat_counts.items():
+        print(f"  {cat}: {cnt} products")
 
-    # Group jobs by category
-    jobs_by_category = {}
-    for job in all_jobs:
-        cat = job.get('category', 'unknown')
-        if cat not in jobs_by_category:
-            jobs_by_category[cat] = []
-        jobs_by_category[cat].append(job)
-
-    print(f"Products available: {', '.join(f'{k}={len(v)}' for k, v in jobs_by_category.items())}")
-
-    # Get slot config
+    # Slot config
     today_str = datetime.datetime.now().strftime("%Y%m%d")
     slot_config = schedule.get(slot, {})
     slot_range = slot_config.get('range', ['08:00', '10:00'])
     scheduled_time = _random_time_in_range(slot_range[0], slot_range[1])
     video_type = slot_config.get('video_type', 'long' if slot in ('pagi', 'sore') else 'short')
 
-    # Shorts scheduled time for long slots
     shorts_scheduled_time = None
     shorts_target = slot_config.get('shorts_target', None)
     if video_type == 'long' and shorts_target:
@@ -106,96 +187,102 @@ def manage_batch(storyboard_queue, yt_queue, tt_queue, fb_queue, state_file, con
 
     print(f"Time: {scheduled_time} | Type: {video_type}")
 
-    # --- Use day+slot as seed for deterministic but rotating selection ---
     slot_idx = {"pagi": 0, "siang": 1, "sore": 2, "malam": 3}[slot]
-    random.seed(f"{today_str}_{slot_idx}")
+    storyboard_entries = []
 
-    # --- YOUTUBE: Each account gets a product from its OWN category ---
+    # --- YOUTUBE: Each account gets 1 product from its category ---
     yt_jobs = []
     for acct_num in range(1, yt_accounts + 1):
         acct_id = f"yt_{acct_num}"
         acct_config = YOUTUBE_CATEGORIES.get(acct_id, {})
         category = acct_config.get('category', 'fashion')
 
-        # Find a product matching this account's category
-        cat_jobs = jobs_by_category.get(category, [])
+        rng = random.Random(f"{today_str}_{slot_idx}_{acct_id}")
+        product, valid_path = _select_and_validate_product(products_df, category, acct_id, rng)
 
-        # DEDUP: filter out products already used on this account
-        cat_jobs = filter_queue(cat_jobs, acct_id)
-
-        if not cat_jobs:
-            print(f"  [WARN] No NEW products for {acct_id} (category={category}), ALL used up — skipping")
+        if product is None:
+            print(f"  [SKIP] {acct_id}: no valid product for '{category}'")
             continue
 
-        print(f"    {acct_id}: {len(cat_jobs)} new products available in '{category}'")
+        sb_entry = _make_storyboard_entry(product, rng)
+        storyboard_entries.append(sb_entry)
 
-        # Pick product — use unique seed per account+day+slot for variety
-        random.seed(f"{today_str}_{slot_idx}_{acct_id}")
-        selected_job = random.choice(cat_jobs).copy()
-
-        selected_job['account_id'] = acct_id
-        selected_job['variant_id'] = acct_num
-        selected_job['platform'] = 'youtube'
-        selected_job['slot'] = slot
-        selected_job['scheduled_time'] = scheduled_time
-        selected_job['video_type'] = video_type
-        selected_job['date'] = today_str
+        job = sb_entry.copy()
+        job['account_id'] = acct_id
+        job['variant_id'] = acct_num
+        job['platform'] = 'youtube'
+        job['slot'] = slot
+        job['scheduled_time'] = scheduled_time
+        job['video_type'] = video_type
+        job['date'] = today_str
         if shorts_scheduled_time:
-            selected_job['shorts_scheduled_time'] = shorts_scheduled_time
+            job['shorts_scheduled_time'] = shorts_scheduled_time
 
-        yt_jobs.append(selected_job)
-        # DEDUP: mark product as used on this account
-        mark_product_used(selected_job['produk_id'], acct_id,
-                          selected_job.get('nama', ''), selected_job.get('shopee_url', ''))
-        print(f"  {acct_id} ({category}): {selected_job['produk_id']} - {selected_job.get('nama', '?')[:40]}")
+        yt_jobs.append(job)
+        mark_product_used(product['produk_id'], acct_id,
+                          product.get('nama', ''), product.get('shopee_url', ''))
+        print(f"  {acct_id} ({category}): {product['produk_id']} - {str(product.get('nama', '?'))[:40]}")
 
-    # --- TIKTOK: Gets product from its alternating category ---
+    # --- TIKTOK ---
     tt_category = TIKTOK_ACCOUNT.get('category', 'fashion')
     tt_jobs = []
-    tt_cat_jobs = filter_queue(jobs_by_category.get(tt_category, []), 'tt_1')
-    if tt_cat_jobs:
-        random.seed(f"{today_str}_{slot_idx}_tt_1")
-        selected = random.choice(tt_cat_jobs).copy()
-        selected['account_id'] = 'tt_1'
-        selected['variant_id'] = 1
-        selected['platform'] = 'tiktok'
-        selected['slot'] = slot
-        selected['scheduled_time'] = scheduled_time
-        selected['video_type'] = video_type
-        selected['date'] = today_str
+    rng_tt = random.Random(f"{today_str}_{slot_idx}_tt_1")
+    product, _ = _select_and_validate_product(products_df, tt_category, 'tt_1', rng_tt)
+    if product is not None:
+        sb_entry = _make_storyboard_entry(product, rng_tt)
+        storyboard_entries.append(sb_entry)
+        job = sb_entry.copy()
+        job['account_id'] = 'tt_1'
+        job['variant_id'] = 1
+        job['platform'] = 'tiktok'
+        job['slot'] = slot
+        job['scheduled_time'] = scheduled_time
+        job['video_type'] = video_type
+        job['date'] = today_str
         if shorts_scheduled_time:
-            selected['shorts_scheduled_time'] = shorts_scheduled_time
-        tt_jobs.append(selected)
-        mark_product_used(selected['produk_id'], 'tt_1',
-                          selected.get('nama', ''), selected.get('shopee_url', ''))
-        print(f"  tt_1 ({tt_category}): {selected['produk_id']} - {selected.get('nama', '?')[:40]}")
+            job['shorts_scheduled_time'] = shorts_scheduled_time
+        tt_jobs.append(job)
+        mark_product_used(product['produk_id'], 'tt_1',
+                          product.get('nama', ''), product.get('shopee_url', ''))
+        print(f"  tt_1 ({tt_category}): {product['produk_id']} - {str(product.get('nama', '?'))[:40]}")
     else:
-        print(f"  [WARN] No products for tt_1 (category={tt_category})")
+        print(f"  [WARN] No valid product for tt_1 (category={tt_category})")
 
-    # --- FACEBOOK: Gets product from its alternating category ---
+    # --- FACEBOOK ---
     fb_category = FACEBOOK_ACCOUNT.get('category', 'home')
     fb_jobs = []
-    fb_cat_jobs = filter_queue(jobs_by_category.get(fb_category, []), 'fb_1')
-    if fb_cat_jobs:
-        random.seed(f"{today_str}_{slot_idx}_fb_1")
-        selected = random.choice(fb_cat_jobs).copy()
-        selected['account_id'] = 'fb_1'
-        selected['variant_id'] = 1
-        selected['platform'] = 'facebook'
-        selected['slot'] = slot
-        selected['scheduled_time'] = scheduled_time
-        selected['video_type'] = video_type
-        selected['date'] = today_str
+    rng_fb = random.Random(f"{today_str}_{slot_idx}_fb_1")
+    product, _ = _select_and_validate_product(products_df, fb_category, 'fb_1', rng_fb)
+    if product is not None:
+        sb_entry = _make_storyboard_entry(product, rng_fb)
+        storyboard_entries.append(sb_entry)
+        job = sb_entry.copy()
+        job['account_id'] = 'fb_1'
+        job['variant_id'] = 1
+        job['platform'] = 'facebook'
+        job['slot'] = slot
+        job['scheduled_time'] = scheduled_time
+        job['video_type'] = video_type
+        job['date'] = today_str
         if shorts_scheduled_time:
-            selected['shorts_scheduled_time'] = shorts_scheduled_time
-        fb_jobs.append(selected)
-        mark_product_used(selected['produk_id'], 'fb_1',
-                          selected.get('nama', ''), selected.get('shopee_url', ''))
-        print(f"  fb_1 ({fb_category}): {selected['produk_id']} - {selected.get('nama', '?')[:40]}")
+            job['shorts_scheduled_time'] = shorts_scheduled_time
+        fb_jobs.append(job)
+        mark_product_used(product['produk_id'], 'fb_1',
+                          product.get('nama', ''), product.get('shopee_url', ''))
+        print(f"  fb_1 ({fb_category}): {product['produk_id']} - {str(product.get('nama', '?'))[:40]}")
     else:
-        print(f"  [WARN] No products for fb_1 (category={fb_category})")
+        print(f"  [WARN] No valid product for fb_1 (category={fb_category})")
 
-    # Write to queues
+    # Write storyboard for selected products ONLY
+    sb_path = os.path.join(os.path.dirname(yt_queue), 'storyboard_queue.jsonl')
+    os.makedirs(os.path.dirname(sb_path), exist_ok=True)
+    with open(sb_path, 'w', encoding='utf-8') as f:
+        for entry in storyboard_entries:
+            f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    print(f"\n  Storyboard: {len(storyboard_entries)} entries (selected only)")
+
+    # Write platform queues
+    os.makedirs(os.path.dirname(yt_queue), exist_ok=True)
     with open(yt_queue, 'w', encoding='utf-8') as f:
         for job in yt_jobs:
             f.write(json.dumps(job, ensure_ascii=False) + '\n')
@@ -230,10 +317,10 @@ def manage_batch(storyboard_queue, yt_queue, tt_queue, fb_queue, state_file, con
         state_df.to_csv(state_file, index=False)
 
     print(f"\n=== Batch Summary ===")
-    print(f"  YT: {len(yt_jobs)} videos (each different category)")
-    print(f"  TT: {len(tt_jobs)} videos ({tt_category})")
-    print(f"  FB: {len(fb_jobs)} videos ({fb_category})")
-    print(f"  Queues written: {yt_queue}, {tt_queue}, {fb_queue}")
+    print(f"  YT: {len(yt_jobs)} videos")
+    print(f"  TT: {len(tt_jobs)} videos")
+    print(f"  FB: {len(fb_jobs)} videos")
+    print(f"  Total products processed: {len(storyboard_entries)} (NOT {len(products_df)})")
 
 
 def _random_time_in_range(start_str, end_str):
@@ -258,7 +345,7 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     manage_batch(
-        "engine/queue/storyboard_queue.jsonl",
+        "engine/data/produk.csv",
         "engine/queue/yt_queue.jsonl",
         "engine/queue/tt_queue.jsonl",
         "engine/queue/fb_queue.jsonl",
