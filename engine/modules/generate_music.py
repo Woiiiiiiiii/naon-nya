@@ -593,8 +593,8 @@ def generate_all_music(queue_dir, output_dir):
                     total_lib += 1
                     continue
 
-            # STEP 2: Library empty → restock via tier system (on-demand)
-            _ensure_category_has_music(category)
+            # STEP 2: Library exhausted → force restock via tier system (on-demand, 1 track)
+            _ensure_category_has_music(category, force=True)
             # Try library again after restock
             library_file = _select_music_from_library(category, produk_id, acct_id)
             if library_file:
