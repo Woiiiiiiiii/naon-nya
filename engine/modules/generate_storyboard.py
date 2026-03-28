@@ -39,6 +39,19 @@ CTA_TEMPLATES = [
 def generate_storyboard(produk_file, masalah_file, output_file):
     print("=== Generating Storyboard ===")
     
+    # CACHE CHECK: skip if storyboard already exists with entries
+    if os.path.exists(output_file) and os.path.getsize(output_file) > 50:
+        with open(output_file, 'r', encoding='utf-8') as f:
+            lines = [l for l in f if l.strip()]
+        if lines:
+            # Check first entry has real product ID (not dummy p001)
+            first = json.loads(lines[0])
+            pid = first.get('produk_id', '')
+            if len(pid) > 5 and pid != 'p001':  # Real MD5 hash IDs are 12+ chars
+                print(f"  CACHED: {len(lines)} storyboard entries (IDs look valid: {pid})")
+                return
+            else:
+                print(f"  Stale storyboard detected (dummy ID: {pid}), regenerating...")
     if not os.path.exists(produk_file):
         print(f"Error: {produk_file} not found.")
         return

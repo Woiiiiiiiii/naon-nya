@@ -27,7 +27,20 @@ MASALAH_TEMPLATES = [
 
 
 def extract_masalah(produk_file, review_file, output_file):
-    """Extract masalah from reviews or auto-generate from product data."""
+    """Extract masalah from reviews or auto-generate from product data.
+    CACHED: skip if output already exists with matching product count."""
+    # CACHE CHECK
+    if os.path.exists(output_file) and os.path.getsize(output_file) > 50:
+        if os.path.exists(produk_file):
+            try:
+                existing = pd.read_csv(output_file)
+                produk_df_check = pd.read_csv(produk_file)
+                if len(existing) >= len(produk_df_check):
+                    print(f"=== Extract Masalah: CACHED ({len(existing)} entries) ===")
+                    return
+            except Exception:
+                pass
+    
     print(f"Extracting masalah...")
     
     if not os.path.exists(produk_file):

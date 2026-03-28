@@ -285,6 +285,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--image', required=True, help='Image file or directory to inspect')
     parser.add_argument('--category', default=None, help='Override category (default: auto-detect from produk.csv)')
+    parser.add_argument('--force', action='store_true', help='Force re-inspect (ignore cache)')
     args = parser.parse_args()
     
     target = args.image
@@ -293,25 +294,49 @@ if __name__ == "__main__":
     prod_cat_map = _load_product_category_map()
     print(f"[VISION] Loaded {len(prod_cat_map)} product→category mappings")
     
+    # CACHE: load previous inspection results
+    cache_file = os.path.join(os.path.dirname(__file__), '..', 'state', 'vision_cache.json')
+    cache = {}
+    if os.path.exists(cache_file) and not args.force:
+        try:
+            with open(cache_file, 'r') as f:
+                cache = json.load(f)
+        except Exception:
+            pass
+    
     if os.path.isdir(target):
         exts = ('.jpg', '.jpeg', '.png', '.webp')
         files = [f for f in os.listdir(target) if f.lower().endswith(exts)]
         if not files:
             print(f"[VISION] No images found in {target}")
         else:
-            print(f"[VISION] Inspecting {len(files)} images in {target}...")
-            for fname in files:
-                fpath = os.path.join(target, fname)
-                # Auto-detect category from filename (produk_id.ext)
-                pid = os.path.splitext(fname)[0]
-                cat = args.category or prod_cat_map.get(pid, 'home')
-                cf_idx = ACCOUNT_CF_MAP.get(cat)
-                result = inspect_image(fpath, cat)
-                print(f"  {fname}: cat={cat}, key={cf_idx}, score={result['score']}, rec={result['recommendation']}")
+            # Filter out already-inspected images
+            new_files = [f for f in files if f not in cache]
+            cached_count = len(files) - len(new_files)
+            
+            if new_files:
+                print(f"[VISION] Inspecting {len(new_files)} NEW images ({cached_count} cached, {len(files)} total)...")
+                for fname in new_files:
+                    fpath = os.path.join(target, fname)
+                    pid = os.path.splitext(fname)[0]
+                    cat = args.category or prod_cat_map.get(pid, 'home')
+                    cf_idx = ACCOUNT_CF_MAP.get(cat)
+                    result = inspect_image(fpath, cat)
+                    cache[fname] = {'score': result['score'], 'rec': result['recommendation'], 'cat': cat}
+                    print(f"  {fname}: cat={cat}, key={cf_idx}, score={result['score']}, rec={result['recommendation']}")
+                
+                # Save cache
+                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                with open(cache_file, 'w') as f:
+                    json.dump(cache, f, indent=2)
+                print(f"[VISION] Cache updated: {len(cache)} total entries")
+            else:
+                print(f"[VISION] ALL {len(files)} images already cached, skipping AI inspection")
     elif os.path.isfile(target):
         cat = args.category or 'home'
         result = inspect_image(target, cat)
         print(json.dumps(result, indent=2))
     else:
         print(f"[VISION] Not found: {target}")
+
 

@@ -216,7 +216,19 @@ def validate_product_image(produk_id, images_dir='engine/data/images'):
 
 
 def validate_products(input_file, output_file):
-    """Validate products from CSV â€” includes image QC."""
+    """Validate products from CSV — includes image QC.
+    CACHED: If output already exists with data, skip re-validation."""
+    # CACHE CHECK: skip if output already has validated products
+    if os.path.exists(output_file) and os.path.getsize(output_file) > 100:
+        try:
+            existing = pd.read_csv(output_file)
+            if len(existing) > 0:
+                print(f"=== Product Validator: CACHED ({len(existing)} products in {output_file}) ===")
+                print(f"  Skipping re-validation. Delete {output_file} to force re-run.")
+                return
+        except Exception:
+            pass
+    
     print(f"Validating products from {input_file}...")
 
     if not os.path.exists(input_file):
