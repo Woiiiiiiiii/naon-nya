@@ -29,7 +29,8 @@ from engine.modules.video_effects import (
     render_text_image, paste_overlay_on_frame,
     text_slide_up, ease_out_cubic, ease_out_back,
     create_rating_stars, create_blinking_label, create_count_up_text,
-    create_simple_price
+    create_simple_price,
+    draw_frame_border, slide_element_x, sway_x
 )
 from engine.modules.sound_manager import get_sfx_path, init_sounds
 from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params, find_music_file, get_voice_volumes
@@ -240,136 +241,178 @@ def generate_video_tt(queue_file, output_dir):
         sold_count = random.randint(500, 9999)
 
         total_dur = target_dur
-        scenes = [
-            {'id': 'hook',    's': 0,    'e': 3.5},
-            {'id': 'product', 's': 3.5,  'e': 10},
-            {'id': 'feature', 's': 10,   'e': 20},
-            {'id': 'cta',     's': 20,   'e': total_dur},
-        ]
-
-        kb_dirs = ['zoom_in', 'pan_left', 'pan_right', 'zoom_out']
-        random.shuffle(kb_dirs)
-        TRANS_DUR = 0.25
+        
+        # === DYNAMIC FLOW STAGES (TT 25-30s — FAST PACE) ===
+        S1_END = 4.0     # Nama + teaser (fast!)
+        S2_END = 6.0     # Gambar masuk
+        S3_END = 16.0    # Gambar goyang + info
+        S4_END = 18.0    # Gambar keluar
+        S5_END = 23.0    # Fitur text
+        S6_END = 24.5    # Transition
+        # S7 = 24.5 - total_dur: CTA
+        
+        SLIDE_DUR = 0.6  # FAST slides for TikTok
 
         try:
             composites = _load_composites(produk_id, category, count=4)
             print(f"  [OK] Loaded {len(composites)} composites")
 
-            scene_map = {
-                'hook': composites[0], 'product': composites[1],
-                'feature': composites[2], 'cta': composites[3],
-            }
+            prod_img_pil = None
+            for ext in ['png', 'jpg', 'webp']:
+                p = os.path.join(os.path.dirname(__file__), '..', 'data', 'images', f"{produk_id}.{ext}")
+                if os.path.exists(p):
+                    prod_img_pil = Image.open(p)
+                    break
+            
+            if prod_img_pil:
+                from engine.modules.image_utils import auto_trim_whitespace
+                is_transp = prod_img_pil.mode == 'RGBA'
+                if not is_transp:
+                    prod_img_pil = prod_img_pil.convert('RGB')
+                prod_img_pil = auto_trim_whitespace(prod_img_pil, is_transp)
+                pw, ph = prod_img_pil.size
+                prod_scale = min(W / pw, H / ph) * 0.65
+                prod_w = int(pw * prod_scale)
+                prod_h = int(ph * prod_scale)
+                prod_img_pil = prod_img_pil.resize((prod_w, prod_h), Image.LANCZOS)
+                if not is_transp:
+                    prod_img_pil = prod_img_pil.convert('RGBA')
+            
+            border_color = tuple(min(255, c + 40) for c in TT_ACCENT)
 
-            txt_w = W - 80
-            hook_img = render_text_image(hook_text, font_bold or font_path,
-                                        64, (255, 255, 255), (*TT_ACCENT, 240), txt_w, 28)
-            product_img = render_text_image(f"{nama}\n{harga}", font_bold or font_path,
-                                           52, (255, 255, 255), (0, 0, 0, 220), txt_w, 24)
+            txt_w = W - 100
+            
+            nama_img = render_text_image(f" {nama} ", font_bold or font_path,
+                                         58, (255, 255, 255), (*TT_ACCENT, 240), txt_w, 28,
+                                         style='gradient_pill')
+            teaser_img = render_text_image(hook_text, font_path or "arial.ttf",
+                                          46, (255, 255, 255), (0, 0, 0, 210), txt_w, 22,
+                                          style='glass')
+            
+            top_nama_img = render_text_image(nama, font_bold or font_path,
+                                            44, (255, 255, 255), (*TT_ACCENT, 230), txt_w, 16,
+                                            style='clean')
+            top_harga_img = None
+            if harga:
+                top_harga_img = create_simple_price(harga, font_bold or font_path or "arial.ttf",
+                                                    50, TT_ACCENT)
+            
             feat_text = f"{desc[:60]}" if desc else "Fitur terbaik"
             feat_img = render_text_image(feat_text, font_path or "arial.ttf",
-                                        44, (255, 255, 255), (40, 167, 69, 230), txt_w, 20)
+                                         44, (255, 255, 255), (40, 167, 69, 230), txt_w, 20,
+                                         style='glass')
+            
+            verdict_text = f"Rating {rating_val}/5 | {sold_count:,}+ Terjual"
+            verdict_img = render_text_image(verdict_text, font_bold or font_path,
+                                           42, (255, 255, 255), (40, 167, 69, 230), txt_w, 18,
+                                           style='glow')
+            
             cta_img = render_text_image(f" {cta_text}", font_bold or font_path,
-                                       56, (255, 255, 255), (220, 53, 69, 245), txt_w, 28)
-
-            # Pre-compute element heights for dynamic positioning
-            _stars_ref = create_rating_stars(rating_val, font_path or "arial.ttf", 40)
-            cached_stars_h = _stars_ref.height
+                                        54, (255, 255, 255), (220, 53, 69, 245), txt_w, 26,
+                                        style='gradient_pill')
 
             def make_frame(t):
-                scene_id = 'hook'
-                scene_t = t
-                prev_scene = None
-                for i, sc in enumerate(scenes):
-                    if sc['s'] <= t < sc['e']:
-                        scene_id = sc['id']
-                        scene_t = t - sc['s']
-                        if i > 0:
-                            prev_scene = scenes[i - 1]['id']
-                        break
-
-                scene_idx = next(i for i, sc in enumerate(scenes) if sc['id'] == scene_id)
-                scene_dur = scenes[scene_idx]['e'] - scenes[scene_idx]['s']
-                kb_dir = kb_dirs[scene_idx % len(kb_dirs)]
-
-                composite = scene_map[scene_id]
-
-                if scene_t < TRANS_DUR and prev_scene and prev_scene in scene_map:
-                    frame = _flash_cut(scene_map[prev_scene], composite, scene_t, TRANS_DUR)
-                else:
-                    frame = _ken_burns(composite, scene_t, scene_dur, kb_dir)
-
-                # ═══ ZONE LAYOUT: TOP title, CENTER product, BOTTOM scene text ═══
-
-                # === TOP ZONE: Product name + price (PERSISTENT) ===
-                title_label = create_blinking_label(
-                    f" {nama} ", font_bold or font_path or "arial.ttf",
-                    TT_ACCENT, t, 1.0, font_size=48
-                )
-                title_y = 130
-                frame = paste_overlay_on_frame(frame, title_label,
-                                               ((W - title_label.width) // 2, title_y))
-
-                if harga:
-                    price_label = create_simple_price(harga, font_bold or font_path or "arial.ttf",
-                                                      52, TT_ACCENT)
-                    price_y = title_y + title_label.height + 10
-                    frame = paste_overlay_on_frame(frame, price_label,
-                                                   ((W - price_label.width) // 2, price_y))
-
-                # === BOTTOM ZONE ===
-                BOTTOM_Y = 1580
-
-                if scene_id == 'hook' and scene_t > 0.2:
-                    ty = text_slide_up(hook_img, H, BOTTOM_Y, scene_t - 0.2, 0.25)
-                    frame = paste_overlay_on_frame(frame, hook_img,
-                                                   ((W - hook_img.width) // 2, ty))
-
-                elif scene_id == 'product' and scene_t > 0.3:
-                    ty = text_slide_up(product_img, H, BOTTOM_Y, scene_t - 0.3, 0.3)
-                    frame = paste_overlay_on_frame(frame, product_img,
-                                                   ((W - product_img.width) // 2, ty))
-
-                elif scene_id == 'feature':
-                    base_y = BOTTOM_Y
-                    if scene_t > 0.3:
-                        ty = text_slide_up(feat_img, H, base_y, scene_t - 0.3, 0.3)
+                bg_idx = int(t / 8) % len(composites)
+                bg = composites[bg_idx]
+                frame = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                frame = draw_frame_border(frame, accent_color=border_color, thickness=3, margin=22)
+                
+                center_x = W // 2
+                center_y = H // 2
+                
+                if t < S1_END:
+                    x_off = slide_element_x(t, SLIDE_DUR, 'in_left') if t < SLIDE_DUR else 0
+                    nama_y = center_y - nama_img.height // 2 - 60
+                    frame = paste_overlay_on_frame(frame, nama_img,
+                        (center_x - nama_img.width // 2 + x_off, nama_y))
+                    
+                    if t > 0.8:
+                        tt = t - 0.8
+                        tx_off = slide_element_x(tt, SLIDE_DUR, 'in_left') if tt < SLIDE_DUR else 0
+                        teaser_y = nama_y + nama_img.height + 25
+                        frame = paste_overlay_on_frame(frame, teaser_img,
+                            (center_x - teaser_img.width // 2 + tx_off, teaser_y))
+                    
+                    if t > S1_END - 1.0:
+                        exit_t = t - (S1_END - 1.0)
+                        x_out = slide_element_x(exit_t, 1.0, 'out_left')
+                        frame_temp = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                        frame_temp = draw_frame_border(frame_temp, accent_color=border_color, thickness=3, margin=22)
+                        frame_temp = paste_overlay_on_frame(frame_temp, nama_img,
+                            (center_x - nama_img.width // 2 + x_out, nama_y))
+                        if t > 0.8:
+                            frame_temp = paste_overlay_on_frame(frame_temp, teaser_img,
+                                (center_x - teaser_img.width // 2 + x_out, teaser_y))
+                        frame = frame_temp
+                
+                elif t < S4_END and prod_img_pil:
+                    prod_t = t - S1_END
+                    if prod_t < SLIDE_DUR:
+                        x_off = slide_element_x(prod_t, SLIDE_DUR, 'in_right')
+                    elif t > S3_END:
+                        x_off = slide_element_x(t - S3_END, S4_END - S3_END, 'out_right')
+                    else:
+                        x_off = sway_x(prod_t, amplitude=22, period=2.5)
+                    
+                    prod_x = center_x - prod_w // 2 + x_off
+                    prod_y = center_y - prod_h // 2 + 40
+                    frame = paste_overlay_on_frame(frame, prod_img_pil, (prod_x, prod_y))
+                    
+                    if t > S2_END + 1.5 and t < S3_END:
+                        info_opacity = min(1.0, (t - S2_END - 1.5) / 0.5)
+                        frame = paste_overlay_on_frame(frame, top_nama_img,
+                            (center_x - top_nama_img.width // 2, 80), opacity=info_opacity)
+                        if top_harga_img:
+                            frame = paste_overlay_on_frame(frame, top_harga_img,
+                                (center_x - top_harga_img.width // 2, 80 + top_nama_img.height + 8),
+                                opacity=info_opacity)
+                
+                elif t < S6_END:
+                    stage_t = t - S4_END
+                    
+                    if stage_t > 0.5:
+                        ft = stage_t - 0.5
+                        fx_off = slide_element_x(ft, SLIDE_DUR, 'in_right') if ft < SLIDE_DUR else 0
                         frame = paste_overlay_on_frame(frame, feat_img,
-                                                       ((W - feat_img.width) // 2, ty))
-                    if scene_t > 4.0:
-                        stars = create_rating_stars(rating_val, font_path or "arial.ttf",
-                                                   40, animated_t=scene_t - 4.0, total_dur=1.0)
-                        stars_y = base_y + feat_img.height + 12
-                        frame = paste_overlay_on_frame(frame, stars,
-                                                       ((W - stars.width) // 2, stars_y))
-                    if scene_t > 7.0:
-                        cnt_t = scene_t - 7.0
-                        current = int(min(cnt_t / 2.0, 1.0) * sold_count)
-                        cnt_img = create_count_up_text(current, "Terjual",
-                                                       font_path or "arial.ttf", accent)
-                        cnt_y = base_y + feat_img.height + 12 + cached_stars_h + 10
-                        frame = paste_overlay_on_frame(frame, cnt_img,
-                                                       ((W - cnt_img.width) // 2, cnt_y))
-
-                elif scene_id == 'cta':
-                    if scene_t > 0.3:
-                        ty = text_slide_up(cta_img, H, BOTTOM_Y, scene_t - 0.3, 0.3)
-                        frame = paste_overlay_on_frame(frame, cta_img,
-                                                       ((W - cta_img.width) // 2, ty))
-                    if scene_t > 2.0:
-                        stok_y = BOTTOM_Y + cta_img.height + 15
+                            (center_x - feat_img.width // 2 + fx_off, center_y - 150))
+                    
+                    if stage_t > 2.5:
+                        vt = stage_t - 2.5
+                        v_off = slide_element_x(vt, SLIDE_DUR, 'in_left') if vt < SLIDE_DUR else 0
+                        frame = paste_overlay_on_frame(frame, verdict_img,
+                            (center_x - verdict_img.width // 2 + v_off, center_y + 100))
+                    
+                    if t > S5_END:
+                        exit_t = t - S5_END
+                        x_out = slide_element_x(exit_t, S6_END - S5_END, 'out_right')
+                        frame2 = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                        frame2 = draw_frame_border(frame2, accent_color=border_color, thickness=3, margin=22)
+                        if stage_t > 0.5:
+                            frame2 = paste_overlay_on_frame(frame2, feat_img,
+                                (center_x - feat_img.width // 2 + x_out, center_y - 150))
+                        if stage_t > 2.5:
+                            frame2 = paste_overlay_on_frame(frame2, verdict_img,
+                                (center_x - verdict_img.width // 2 + x_out, center_y + 100))
+                        frame = frame2
+                
+                else:
+                    cta_t = t - S6_END
+                    cx_off = slide_element_x(cta_t, SLIDE_DUR, 'in_left') if cta_t < SLIDE_DUR else 0
+                    cta_y = center_y - 80
+                    frame = paste_overlay_on_frame(frame, cta_img,
+                        (center_x - cta_img.width // 2 + cx_off, cta_y))
+                    
+                    if cta_t > 1.5:
                         blink = create_blinking_label(" STOK TERBATAS!",
-                                                      font_bold or font_path or "arial.ttf",
-                                                      TT_ACCENT, scene_t, 0.5)
+                            font_bold or font_path or "arial.ttf", TT_ACCENT, cta_t, 0.5)
                         frame = paste_overlay_on_frame(frame, blink,
-                                                       ((W - blink.width) // 2, stok_y))
-
+                            (center_x - blink.width // 2, cta_y + cta_img.height + 25))
+                
                 return frame
 
             video = VideoClip(make_frame, duration=total_dur).with_fps(24)
 
-            # Audio (normalized)
             audio_clips = []
-            # Get per-gender volume levels
             vo_vol, music_vol = get_voice_volumes(acct_id)
 
             music_dir = os.path.join(output_dir, "tt")
@@ -378,26 +421,31 @@ def generate_video_tt(queue_file, output_dir):
                 music = prepare_music(AudioFileClip(music_path), total_dur, music_vol=music_vol)
                 audio_clips.append(music)
 
-            for sfx_name, sfx_time in [('swoosh', 0.2), ('pop', 2.0), ('swoosh', 10.0), ('bass_drop', 20.0)]:
-                sfx_path = get_sfx_path(sfx_name)
-                if sfx_path and os.path.exists(sfx_path) and sfx_time < total_dur:
+            for st_time in [S1_END, S2_END, S4_END, S6_END]:
+                sfx_path = get_sfx_path('swoosh')
+                if sfx_path and os.path.exists(sfx_path) and st_time < total_dur:
                     try:
-                        sfx = prepare_sfx(AudioFileClip(sfx_path), sfx_time)
-                        audio_clips.append(sfx)
+                        audio_clips.append(prepare_sfx(AudioFileClip(sfx_path), st_time))
                     except Exception:
                         pass
 
-            # === VOICEOVER: clip each VO to fit scene gap ===
+            sfx_path = get_sfx_path('bass_drop')
+            if sfx_path and os.path.exists(sfx_path) and S6_END + 0.3 < total_dur:
+                try:
+                    audio_clips.append(prepare_sfx(AudioFileClip(sfx_path), S6_END + 0.3))
+                except Exception:
+                    pass
+
+            # Voiceover
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'tt')
-            scene_starts_list = [('hook', 0.0), ('product', 3.5), ('feature', 10.5), ('cta', 21.0)]
-            for idx, (scene_id, start_time) in enumerate(scene_starts_list):
-                vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
+            vo_stages = [('hook', 0.0), ('product', S1_END), ('feature', S4_END), ('cta', S6_END)]
+            for idx, (stage_id, start_time) in enumerate(vo_stages):
+                vo_path = os.path.join(vo_dir, f"vo_{stage_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:
                     try:
                         vo = AudioFileClip(vo_path)
-                        # Clip VO so it doesn't overlap with next scene
-                        if idx + 1 < len(scene_starts_list):
-                            max_dur = scene_starts_list[idx + 1][1] - start_time - 0.3
+                        if idx + 1 < len(vo_stages):
+                            max_dur = vo_stages[idx + 1][1] - start_time - 0.3
                         else:
                             max_dur = total_dur - start_time - 0.2
                         if max_dur > 0.5 and vo.duration > max_dur:

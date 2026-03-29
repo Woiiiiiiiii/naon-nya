@@ -31,10 +31,10 @@ from engine.modules.category_router import (
 )
 from engine.modules.video_effects import (
     render_text_image, paste_overlay_on_frame,
-    text_slide_up, create_rating_stars,
-    create_price_display, create_chat_bubble, create_blinking_label,
-    create_count_up_text, ease_out_cubic, ease_out_back,
-    create_simple_price
+    text_slide_up, ease_out_back, ease_out_cubic,
+    create_rating_stars, create_price_display, create_chat_bubble,
+    create_count_up_text, create_blinking_label, create_simple_price,
+    draw_frame_border, slide_element_x, sway_x
 )
 from engine.modules.sound_manager import get_sfx_path, init_sounds
 from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params, find_music_file, get_voice_volumes
@@ -317,190 +317,201 @@ def generate_shorts(queue_file, output_dir):
         sold_count = random.randint(500, 9999)
 
         total_dur = target_dur
-        scenes = [
-            {'id': 'hook',    's': 0,  'e': 3},
-            {'id': 'hero',    's': 3,  'e': 12},
-            {'id': 'feature', 's': 12, 'e': 30},
-            {'id': 'proof',   's': 30, 'e': 40},
-            {'id': 'cta',     's': 40, 'e': total_dur},
-        ]
-
-        # Ken Burns directions per scene
-        kb_directions = ['zoom_in', 'pan_left', 'pan_right', 'zoom_out', 'pan_up']
-        random.shuffle(kb_directions)
+        
+        # === DYNAMIC FLOW STAGES (YT Short 45-50s) ===
+        S1_END = 5.0     # Nama + teaser
+        S2_END = 7.0     # Gambar masuk
+        S3_END = 25.0    # Gambar goyang + info
+        S4_END = 27.0    # Gambar keluar
+        S5_END = 38.0    # Fitur/review text
+        S6_END = 39.5    # Transition
+        # S7 = 39.5 - total_dur: CTA
+        
+        SLIDE_DUR = 0.8
 
         try:
-            # === LOAD COMPOSITE IMAGES ===
             composites = _load_composites(produk_id, category, count=5)
             print(f"  [OK] Loaded {len(composites)} composites")
 
-            # Scene-to-composite mapping:
-            # Each scene uses a different composite image
-            scene_composites = {
-                'hook': composites[0],
-                'hero': composites[1],
-                'feature': composites[2],
-                'proof': composites[3],
-                'cta': composites[4],
-            }
+            prod_img_pil = None
+            for ext in ['png', 'jpg', 'webp']:
+                p = os.path.join(os.path.dirname(__file__), '..', 'data', 'images', f"{produk_id}.{ext}")
+                if os.path.exists(p):
+                    prod_img_pil = Image.open(p)
+                    break
+            
+            if prod_img_pil:
+                from engine.modules.image_utils import auto_trim_whitespace
+                is_transp = prod_img_pil.mode == 'RGBA'
+                if not is_transp:
+                    prod_img_pil = prod_img_pil.convert('RGB')
+                prod_img_pil = auto_trim_whitespace(prod_img_pil, is_transp)
+                pw, ph = prod_img_pil.size
+                prod_scale = min(W / pw, H / ph) * 0.65
+                prod_w = int(pw * prod_scale)
+                prod_h = int(ph * prod_scale)
+                prod_img_pil = prod_img_pil.resize((prod_w, prod_h), Image.LANCZOS)
+                if not is_transp:
+                    prod_img_pil = prod_img_pil.convert('RGBA')
+            
+            border_color = tuple(min(255, c + 60) for c in accent)
 
-            # Pre-render text overlays
-            txt_w = W - 100
-
-            hook_img = render_text_image(hook_text, font_bold or font_path,
-                                        56, (255, 255, 255), (*accent, 235), txt_w, 24)
-            hero_text = f"{nama}"
+            txt_w = W - 120
+            
+            nama_img = render_text_image(f" {nama} ", font_bold or font_path,
+                                         54, (255, 255, 255), (*accent, 235), txt_w, 26,
+                                         style='gradient_pill')
+            teaser_img = render_text_image(hook_text, font_path or "arial.ttf",
+                                          44, (255, 255, 255), (0, 0, 0, 200), txt_w, 20,
+                                          style='glass')
+            
+            top_nama_img = render_text_image(nama, font_bold or font_path,
+                                            42, (255, 255, 255), (*accent, 220), txt_w, 14,
+                                            style='clean')
+            top_harga_img = None
             if harga:
-                hero_text += f"\nHarga: {harga}"
-            hero_img = render_text_image(hero_text, font_bold or font_path,
-                                        48, (255, 255, 255), (0, 0, 0, 210), txt_w, 22)
-
-            feat_text = f"{desc[:80]}" if desc else "Fitur unggulan produk ini"
+                top_harga_img = create_simple_price(harga, font_bold or font_path or "arial.ttf",
+                                                    48, accent)
+            
+            feat_text = f"{desc[:70]}" if desc else "Fitur unggulan produk ini"
             feat_img = render_text_image(feat_text, font_path or "arial.ttf",
-                                        42, (255, 255, 255), (40, 167, 69, 220), txt_w, 18)
-
+                                         42, (255, 255, 255), (40, 167, 69, 220), txt_w, 18,
+                                         style='glass')
+            
+            review_bubble = create_chat_bubble("Bagus banget, recommended!",
+                                               font_path or "arial.ttf", side='left',
+                                               accent_color=accent)
+            
+            verdict_text = f"Rating {rating_val}/5 | {sold_count:,}+ Terjual"
+            verdict_img = render_text_image(verdict_text, font_bold or font_path,
+                                           42, (255, 255, 255), (40, 167, 69, 225), txt_w, 18,
+                                           style='glow')
+            
             cta_img = render_text_image(f" {cta_text}", font_bold or font_path,
-                                       50, (255, 255, 255), (220, 53, 69, 240), txt_w, 24)
-
-            # Pre-compute element heights for dynamic positioning
-            _stars_ref = create_rating_stars(rating_val, font_path or "arial.ttf", 40)
-            cached_stars_h = _stars_ref.height
-            _bubble_ref = create_chat_bubble("Bagus banget, sesuai deskripsi! Recommended ",
-                                             font_path or "arial.ttf", side='left', accent_color=accent)
-            cached_bubble_h = _bubble_ref.height
-
-            # Transition timing (0.4s overlap between scenes)
-            TRANS_DUR = 0.4
+                                        50, (255, 255, 255), (220, 53, 69, 240), txt_w, 24,
+                                        style='gradient_pill')
 
             def make_frame(t):
-                # Determine current scene
-                scene_id = 'hook'
-                scene_t = t
-                prev_scene = None
-                for i, sc in enumerate(scenes):
-                    if sc['s'] <= t < sc['e']:
-                        scene_id = sc['id']
-                        scene_t = t - sc['s']
-                        if i > 0:
-                            prev_scene = scenes[i - 1]['id']
-                        break
-
-                scene_dur = next((sc['e'] - sc['s'] for sc in scenes if sc['id'] == scene_id), 5)
-                kb_dir = kb_directions[scenes.index(next(s for s in scenes if s['id'] == scene_id)) % len(kb_directions)]
-
-                # === COMPOSITE IMAGE ANIMATION ===
-                composite = scene_composites[scene_id]
-
-                # Transition between scenes (zoom punch)
-                if scene_t < TRANS_DUR and prev_scene and prev_scene in scene_composites:
-                    prev_comp = scene_composites[prev_scene]
-                    frame = _zoom_punch_transition(prev_comp, composite, scene_t, TRANS_DUR)
-                else:
-                    # Ken Burns on current composite
-                    anim_t = scene_t if scene_t >= TRANS_DUR else 0
-                    frame = _ken_burns(composite, anim_t, scene_dur, kb_dir)
-
-                # ═══════════════════════════════════════════
-                # ZONE LAYOUT (precise, no overlap):
-                #   TOP    Y=60-200:  Product name + price (persistent, blink)
-                #   CENTER Y=250-1420: Product image (untouched)
-                #   BOTTOM Y=1460+:   Scene-specific text
-                # ═══════════════════════════════════════════
-
-                # === TOP ZONE: Product name + price (PERSISTENT, all scenes) ===
-                title_label = create_blinking_label(
-                    f" {nama} ", font_bold or font_path or "arial.ttf",
-                    accent, t, 1.2, font_size=44
-                )
-                title_y = 130
-                frame = paste_overlay_on_frame(frame, title_label,
-                                               ((W - title_label.width) // 2, title_y))
-
-                if harga:
-                    price_label = create_simple_price(harga, font_bold or font_path or "arial.ttf",
-                                                      50, accent)
-                    price_y = title_y + title_label.height + 10
-                    frame = paste_overlay_on_frame(frame, price_label,
-                                                   ((W - price_label.width) // 2, price_y))
-
-                # === BOTTOM ZONE: Scene-specific text (Y=1460+) ===
-                BOTTOM_Y = 1580
-
-                if scene_id == 'hook' and scene_t > 0.3:
-                    ty = text_slide_up(hook_img, H, BOTTOM_Y, scene_t - 0.3, 0.4)
-                    frame = paste_overlay_on_frame(frame, hook_img,
-                                                   ((W - hook_img.width) // 2, ty))
-
-                elif scene_id == 'hero' and scene_t > 0.8:
-                    ty = text_slide_up(hero_img, H, BOTTOM_Y, scene_t - 0.8, 0.4)
-                    frame = paste_overlay_on_frame(frame, hero_img,
-                                                   ((W - hero_img.width) // 2, ty))
-
-                elif scene_id == 'feature':
-                    base_y = BOTTOM_Y
-                    if scene_t > 0.5:
-                        ty = text_slide_up(feat_img, H, base_y, scene_t - 0.5, 0.35)
+                bg_idx = int(t / 10) % len(composites)
+                bg = composites[bg_idx]
+                frame = _ken_burns(bg, t % 10, 10, 'zoom_in')
+                frame = draw_frame_border(frame, accent_color=border_color)
+                
+                center_x = W // 2
+                center_y = H // 2
+                
+                if t < S1_END:
+                    x_off = slide_element_x(t, SLIDE_DUR, 'in_left') if t < SLIDE_DUR else 0
+                    nama_y = center_y - nama_img.height // 2 - 60
+                    frame = paste_overlay_on_frame(frame, nama_img,
+                        (center_x - nama_img.width // 2 + x_off, nama_y))
+                    
+                    if t > 1.2:
+                        tt = t - 1.2
+                        tx_off = slide_element_x(tt, SLIDE_DUR, 'in_left') if tt < SLIDE_DUR else 0
+                        teaser_y = nama_y + nama_img.height + 28
+                        frame = paste_overlay_on_frame(frame, teaser_img,
+                            (center_x - teaser_img.width // 2 + tx_off, teaser_y))
+                    
+                    if t > S1_END - 1.2:
+                        exit_t = t - (S1_END - 1.2)
+                        x_out = slide_element_x(exit_t, 1.2, 'out_left')
+                        frame_temp = _ken_burns(bg, t % 10, 10, 'zoom_in')
+                        frame_temp = draw_frame_border(frame_temp, accent_color=border_color)
+                        frame_temp = paste_overlay_on_frame(frame_temp, nama_img,
+                            (center_x - nama_img.width // 2 + x_out, nama_y))
+                        if t > 1.2:
+                            frame_temp = paste_overlay_on_frame(frame_temp, teaser_img,
+                                (center_x - teaser_img.width // 2 + x_out, teaser_y))
+                        frame = frame_temp
+                
+                elif t < S4_END and prod_img_pil:
+                    prod_t = t - S1_END
+                    if prod_t < SLIDE_DUR:
+                        x_off = slide_element_x(prod_t, SLIDE_DUR, 'in_right')
+                    elif t > S3_END:
+                        x_off = slide_element_x(t - S3_END, S4_END - S3_END, 'out_right')
+                    else:
+                        x_off = sway_x(prod_t, amplitude=18, period=3.0)
+                    
+                    prod_x = center_x - prod_w // 2 + x_off
+                    prod_y = center_y - prod_h // 2 + 40
+                    frame = paste_overlay_on_frame(frame, prod_img_pil, (prod_x, prod_y))
+                    
+                    if t > S2_END + 2.0 and t < S3_END:
+                        info_opacity = min(1.0, (t - S2_END - 2.0) / 0.6)
+                        frame = paste_overlay_on_frame(frame, top_nama_img,
+                            (center_x - top_nama_img.width // 2, 80), opacity=info_opacity)
+                        if top_harga_img:
+                            frame = paste_overlay_on_frame(frame, top_harga_img,
+                                (center_x - top_harga_img.width // 2, 80 + top_nama_img.height + 8),
+                                opacity=info_opacity)
+                
+                elif t < S6_END:
+                    stage_t = t - S4_END
+                    
+                    if stage_t < SLIDE_DUR:
+                        x_off = slide_element_x(stage_t, SLIDE_DUR, 'out_left')
+                        frame = paste_overlay_on_frame(frame, top_nama_img,
+                            (center_x - top_nama_img.width // 2 + x_off, 80))
+                    
+                    if stage_t > 0.8:
+                        ft = stage_t - 0.8
+                        fx_off = slide_element_x(ft, SLIDE_DUR, 'in_right') if ft < SLIDE_DUR else 0
                         frame = paste_overlay_on_frame(frame, feat_img,
-                                                       ((W - feat_img.width) // 2, ty))
-                    if scene_t > 5.0:
-                        stars = create_rating_stars(rating_val, font_path or "arial.ttf",
-                                                   40, animated_t=scene_t - 5.0, total_dur=1.5)
-                        stars_y = base_y + feat_img.height + 12
-                        frame = paste_overlay_on_frame(frame, stars,
-                                                       ((W - stars.width) // 2, stars_y))
-                    if scene_t > 8.0:
-                        cnt_t = scene_t - 8.0
-                        current = int(min(cnt_t / 2.0, 1.0) * sold_count)
-                        cnt_img = create_count_up_text(current, "Terjual",
-                                                       font_path or "arial.ttf", accent)
-                        cnt_y = base_y + feat_img.height + 12
-                        if scene_t > 5.0:
-                            cnt_y += cached_stars_h + 10
-                        frame = paste_overlay_on_frame(frame, cnt_img,
-                                                       ((W - cnt_img.width) // 2, cnt_y))
-
-                elif scene_id == 'proof':
-                    bubble1_y = BOTTOM_Y
-                    if scene_t > 0.5:
-                        review_text = "Bagus banget, sesuai deskripsi! Recommended "
-                        bubble = create_chat_bubble(review_text, font_path or "arial.ttf",
-                                                    side='left', accent_color=accent)
-                        slide_t = min((scene_t - 0.5) / 0.4, 1.0)
-                        bx = int(-bubble.width + (80 + bubble.width) * ease_out_cubic(slide_t))
-                        frame = paste_overlay_on_frame(frame, bubble, (bx, bubble1_y))
-
-                    if scene_t > 3.0:
-                        bubble2_y = bubble1_y + cached_bubble_h + 12
-                        review2 = "Worth it sih, harga segini kualitas ok !"
-                        bubble2 = create_chat_bubble(review2, font_path or "arial.ttf",
-                                                     side='right', accent_color=(80, 80, 90))
-                        slide_t2 = min((scene_t - 3.0) / 0.4, 1.0)
-                        bx2 = int(W + 10 - (W + 10 - 300) * ease_out_cubic(slide_t2))
-                        frame = paste_overlay_on_frame(frame, bubble2,
-                                                       (min(bx2, W - bubble2.width - 20), bubble2_y))
-
-                elif scene_id == 'cta':
-                    if scene_t > 0.5:
-                        ty = text_slide_up(cta_img, H, BOTTOM_Y, scene_t - 0.5, 0.35)
-                        frame = paste_overlay_on_frame(frame, cta_img,
-                                                       ((W - cta_img.width) // 2, ty))
-                    if scene_t > 3.0:
-                        stok_y = BOTTOM_Y + cta_img.height + 15
+                            (center_x - feat_img.width // 2 + fx_off, center_y - 200))
+                    
+                    if stage_t > 4.0:
+                        rb_t = stage_t - 4.0
+                        rb_off = slide_element_x(rb_t, SLIDE_DUR, 'in_left') if rb_t < SLIDE_DUR else 0
+                        frame = paste_overlay_on_frame(frame, review_bubble,
+                            (80 + rb_off, center_y + 50))
+                    
+                    if stage_t > 6.0:
+                        vt = stage_t - 6.0
+                        v_off = slide_element_x(vt, SLIDE_DUR, 'in_right') if vt < SLIDE_DUR else 0
+                        frame = paste_overlay_on_frame(frame, verdict_img,
+                            (center_x - verdict_img.width // 2 + v_off, center_y + 250))
+                    
+                    if t > S5_END:
+                        exit_t = t - S5_END
+                        x_out = slide_element_x(exit_t, S6_END - S5_END, 'out_right')
+                        frame2 = _ken_burns(bg, t % 10, 10, 'zoom_in')
+                        frame2 = draw_frame_border(frame2, accent_color=border_color)
+                        if stage_t > 0.8:
+                            frame2 = paste_overlay_on_frame(frame2, feat_img,
+                                (center_x - feat_img.width // 2 + x_out, center_y - 200))
+                        if stage_t > 4.0:
+                            frame2 = paste_overlay_on_frame(frame2, review_bubble,
+                                (80 + x_out, center_y + 50))
+                        if stage_t > 6.0:
+                            frame2 = paste_overlay_on_frame(frame2, verdict_img,
+                                (center_x - verdict_img.width // 2 + x_out, center_y + 250))
+                        frame = frame2
+                
+                else:
+                    cta_t = t - S6_END
+                    cx_off = slide_element_x(cta_t, SLIDE_DUR, 'in_left') if cta_t < SLIDE_DUR else 0
+                    cta_y = center_y - 80
+                    frame = paste_overlay_on_frame(frame, cta_img,
+                        (center_x - cta_img.width // 2 + cx_off, cta_y))
+                    
+                    if cta_t > 2.0:
                         blink = create_blinking_label(" STOK TERBATAS!",
-                                                      font_bold or font_path or "arial.ttf",
-                                                      (220, 53, 69), scene_t, 0.6)
+                            font_bold or font_path or "arial.ttf", (220, 53, 69), cta_t, 0.6)
                         frame = paste_overlay_on_frame(frame, blink,
-                                                       ((W - blink.width) // 2, stok_y))
-
+                            (center_x - blink.width // 2, cta_y + cta_img.height + 25))
+                    
+                    if cta_t > 4.0:
+                        stars = create_rating_stars(rating_val, font_path or "arial.ttf", 40)
+                        frame = paste_overlay_on_frame(frame, stars,
+                            (center_x - stars.width // 2, cta_y + cta_img.height + 90))
+                
                 return frame
 
-            # === ASSEMBLE VIDEO ===
             video = VideoClip(make_frame, duration=total_dur).with_fps(24)
 
-            # === AUDIO: Music + SFX + Voiceover (normalized) ===
             audio_clips = []
-
-            # Get per-gender volume levels
             vo_vol, music_vol = get_voice_volumes(acct_id)
 
             music_dir = os.path.join(output_dir, "yt")
@@ -509,34 +520,31 @@ def generate_shorts(queue_file, output_dir):
                 music = prepare_music(AudioFileClip(music_path), total_dur, music_vol=music_vol)
                 audio_clips.append(music)
 
-            sfx_entries = [
-                ('swoosh', 0.3),
-                ('pop', 3.0),       # Transition hook->hero
-                ('swoosh', 12.0),   # Transition hero->feature
-                ('ding', 17.0),
-                ('swoosh', 30.0),   # Transition feature->proof
-                ('bass_drop', 40.0),# Transition proof->cta
-            ]
-            for sfx_name, sfx_time in sfx_entries:
-                sfx_path = get_sfx_path(sfx_name)
-                if sfx_path and os.path.exists(sfx_path) and sfx_time < total_dur:
+            for st_time in [S1_END, S2_END, S4_END, S6_END]:
+                sfx_path = get_sfx_path('swoosh')
+                if sfx_path and os.path.exists(sfx_path) and st_time < total_dur:
                     try:
-                        sfx = prepare_sfx(AudioFileClip(sfx_path), sfx_time)
-                        audio_clips.append(sfx)
+                        audio_clips.append(prepare_sfx(AudioFileClip(sfx_path), st_time))
                     except Exception:
                         pass
 
-            # === VOICEOVER: covers every scene (clip to scene gap) ===
+            sfx_path = get_sfx_path('bass_drop')
+            if sfx_path and os.path.exists(sfx_path) and S6_END + 0.5 < total_dur:
+                try:
+                    audio_clips.append(prepare_sfx(AudioFileClip(sfx_path), S6_END + 0.5))
+                except Exception:
+                    pass
+
+            # Voiceover
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'yt_short')
-            scene_starts_list = [('hook', 0.0), ('hero', 3.5), ('feature', 13.0), ('proof', 31.0), ('cta', 41.0)]
-            for idx, (scene_id, start_time) in enumerate(scene_starts_list):
-                vo_path = os.path.join(vo_dir, f"vo_{scene_id}.mp3")
+            vo_stages = [('hook', 0.0), ('hero', S1_END), ('feature', S4_END), ('cta', S6_END)]
+            for idx, (stage_id, start_time) in enumerate(vo_stages):
+                vo_path = os.path.join(vo_dir, f"vo_{stage_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:
                     try:
                         vo = AudioFileClip(vo_path)
-                        # Clip VO so it doesn't overlap with next scene
-                        if idx + 1 < len(scene_starts_list):
-                            max_dur = scene_starts_list[idx + 1][1] - start_time - 0.3
+                        if idx + 1 < len(vo_stages):
+                            max_dur = vo_stages[idx + 1][1] - start_time - 0.3
                         else:
                             max_dur = total_dur - start_time - 0.2
                         if max_dur > 0.5 and vo.duration > max_dur:
@@ -551,19 +559,16 @@ def generate_shorts(queue_file, output_dir):
 
             if audio_clips:
                 try:
-                    final_audio = CompositeAudioClip(audio_clips)
-                    video = video.with_audio(final_audio)
+                    video = video.with_audio(CompositeAudioClip(audio_clips))
                 except Exception as e:
-                    print(f"  [WARN] Audio composite failed: {e}")
+                    print(f"  [WARN] Audio failed: {e}")
 
-            # === EXPORT ===
             out_file = f"{today}_{produk_id}_v{acct_num}_yt.mp4"
             out_path = os.path.join(output_dir, "yt", out_file)
             audio_params = get_ffmpeg_audio_params()
             video.write_videofile(out_path, fps=24, codec='libx264',
                                 preset='ultrafast', logger=None,
                                 **audio_params)
-
             print(f"  [OK] Short: {out_file} ({total_dur}s)")
             video.close()
 
