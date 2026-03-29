@@ -266,153 +266,79 @@ def _process_music_file(source_path, output_path, target_duration, produk_id, ac
 
 # ═══════════════════════════════════════════════════════════════════
 #  PROCEDURAL FALLBACK (when no library music available)
+#  Delegates to music_downloader's numpy-accelerated synth (<1s vs 165s)
 # ═══════════════════════════════════════════════════════════════════
 
-SCALES = {
-    'major':      [0, 2, 4, 5, 7, 9, 11],
-    'minor':      [0, 2, 3, 5, 7, 8, 10],
-    'pentatonic': [0, 2, 4, 7, 9],
-    'dorian':     [0, 2, 3, 5, 7, 9, 10],
-    'mixolydian': [0, 2, 4, 5, 7, 9, 10],
-}
-
 CATEGORY_MOODS = {
-    'gadget':   {'tempo': (125, 148), 'density': 0.82, 'wave': 'warm',
-                 'bass_v': 0.44, 'pad_v': 0.18, 'mel_v': 0.16, 'perc_v': 0.08, 'scale': 'major'},
-    'home':     {'tempo': (85, 105), 'density': 0.50, 'wave': 'sine',
-                 'bass_v': 0.38, 'pad_v': 0.30, 'mel_v': 0.13, 'perc_v': 0.05, 'scale': 'pentatonic'},
-    'fashion':  {'tempo': (112, 135), 'density': 0.72, 'wave': 'warm',
-                 'bass_v': 0.40, 'pad_v': 0.24, 'mel_v': 0.17, 'perc_v': 0.07, 'scale': 'major'},
-    'beauty':   {'tempo': (72, 92), 'density': 0.40, 'wave': 'sine',
-                 'bass_v': 0.34, 'pad_v': 0.35, 'mel_v': 0.11, 'perc_v': 0.03, 'scale': 'pentatonic'},
-    'wellness': {'tempo': (120, 145), 'density': 0.80, 'wave': 'warm',
-                 'bass_v': 0.42, 'pad_v': 0.20, 'mel_v': 0.15, 'perc_v': 0.09, 'scale': 'mixolydian'},
+    'gadget':   {'scale': 'major'},
+    'home':     {'scale': 'pentatonic'},
+    'fashion':  {'scale': 'major'},
+    'beauty':   {'scale': 'pentatonic'},
+    'wellness': {'scale': 'mixolydian'},
 }
-DEFAULT_MOOD = {'tempo': (110, 132), 'density': 0.70, 'wave': 'warm',
-                'bass_v': 0.40, 'pad_v': 0.22, 'mel_v': 0.15, 'perc_v': 0.07, 'scale': 'major'}
-
-
-def midi_to_freq(m):
-    return 440.0 * (2.0 ** ((m - 69) / 12.0))
-
-
-def make_env(n, a=0.08, d=0.10, s=0.60, r=0.20):
-    env = []
-    ai, di, ri = int(n*a), int(n*d), int(n*r)
-    for i in range(n):
-        if i < ai: e = (i / max(ai, 1)) ** 0.7
-        elif i < ai+di: e = 1.0 - (1.0-s)*((i-ai)/max(di, 1))
-        elif i > n-ri: e = s*((n-i)/max(ri, 1))**1.3
-        else: e = s
-        env.append(e)
-    return env
-
-
-def osc(freq, t, wt='sine'):
-    p = 2*math.pi*freq*t
-    if wt == 'sine': return math.sin(p)
-    elif wt == 'warm':
-        return 0.70*math.sin(p)+0.16*math.sin(p*2)+0.09*math.sin(p*3)+0.05*math.sin(p*4)
-    elif wt == 'pad':
-        return (0.40*math.sin(p)+0.28*math.sin(2*math.pi*freq*1.004*t)+
-                0.20*math.sin(2*math.pi*freq*0.996*t)+0.12*math.sin(p*0.5))
-    elif wt == 'bass': return math.tanh(1.4*math.sin(p))
-    return math.sin(p)
 
 
 def _generate_procedural_track(output_path, produk_id, account_id, category='home', duration=15):
-    """Generate procedural music as fallback when no library files available."""
+    """Generate procedural music as fallback.
+    Uses music_downloader's numpy-accelerated version for speed.
+    Falls back to simple WAV if numpy is not available."""
     seed = int(hashlib.md5(
         f"{produk_id}_{account_id}_{datetime.datetime.now().strftime('%Y%m%d%H%M')}".encode()
     ).hexdigest()[:8], 16)
+
+    mood_info = CATEGORY_MOODS.get(category, {'scale': 'major'})
+
+    # Try fast numpy version from music_downloader
+    try:
+        from engine.modules.music_downloader import generate_procedural_track as _fast_synth
+        wav_path = output_path.replace('.mp3', '.wav')
+        _fast_synth(wav_path, category, seed, duration)
+
+        # Convert WAV to MP3 via ffmpeg
+        try:
+            import subprocess
+            res = subprocess.run(
+                ['ffmpeg', '-y', '-i', wav_path, '-b:a', '192k', '-ar', '44100', output_path],
+                capture_output=True, text=True, timeout=60
+            )
+            if res.returncode == 0 and os.path.exists(output_path):
+                os.remove(wav_path)
+            else:
+                # ffmpeg failed, rename WAV as output
+                if os.path.exists(wav_path):
+                    os.rename(wav_path, output_path)
+        except FileNotFoundError:
+            # ffmpeg not installed, keep WAV
+            if os.path.exists(wav_path):
+                os.rename(wav_path, output_path)
+
+        return f"procedural_{mood_info.get('scale', 'major')}_numpy"
+
+    except ImportError:
+        pass
+
+    # Fallback: simple sine wave WAV (no numpy, very fast)
     rng = random.Random(seed)
-
-    mood = CATEGORY_MOODS.get(category, DEFAULT_MOOD)
-    tempo = rng.randint(*mood['tempo'])
-    scale = SCALES[mood.get('scale', 'major')]
-    root = rng.choice(list(range(48, 72)))
-    beat = 60.0 / tempo
-
     n = int(SAMPLE_RATE * duration)
+    freq = 440.0 * (2.0 ** ((rng.randint(48, 72) - 69) / 12.0))
 
-    # Generate bass
-    bass = [0.0] * n
-    t, note_idx = 0.0, 0
-    bass_notes = [root-12, root-12+scale[2%len(scale)], root-12+scale[4%len(scale)], root-12]
-    while t < duration:
-        note = bass_notes[note_idx % len(bass_notes)]
-        nd = min(beat, duration - t)
-        if nd > 0.01:
-            ns = int(SAMPLE_RATE * nd)
-            env = make_env(ns, a=0.03, r=0.15)
-            si = int(SAMPLE_RATE * t)
-            for j in range(min(ns, n-si)):
-                bass[si+j] += osc(midi_to_freq(note), j/SAMPLE_RATE, 'bass') * mood['bass_v'] * env[j]
-        t += beat
-        note_idx += 1
-
-    # Generate pad
-    pad = [0.0] * n
-    chord_dur = duration / 4
-    for ci in range(4):
-        cr = root + scale[(ci*2) % len(scale)]
-        nd = min(chord_dur, duration - ci*chord_dur)
-        if nd <= 0: break
-        ns = int(SAMPLE_RATE * nd)
-        env = make_env(ns, a=0.18, d=0.05, s=0.75, r=0.22)
-        idx = int(SAMPLE_RATE * ci * chord_dur)
-        for iv in [0, scale[2%len(scale)], scale[4%len(scale)]]:
-            freq = midi_to_freq(cr + iv)
-            vol = mood['pad_v'] * (0.50 if iv == 0 else 0.35)
-            for j in range(min(ns, n - idx)):
-                pad[idx+j] += osc(freq, j/SAMPLE_RATE, 'pad') * vol * env[j]
-
-    # Generate melody
-    melody = [0.0] * n
-    pool = [root+s for s in scale] + [root+12+s for s in scale]
-    t, prev = 0.0, root
-    while t < duration:
-        if rng.random() < mood['density']:
-            cands = [nn for nn in pool if abs(nn-prev) <= 5]
-            note = rng.choice(cands or pool)
-            prev = note
-            nd = beat * rng.choice([0.25, 0.5, 1.0])
-            nd = min(nd, duration-t)
-            if nd > 0.01:
-                ns = int(SAMPLE_RATE*nd)
-                env = make_env(ns)
-                si = int(SAMPLE_RATE*t)
-                for j in range(min(ns, n-si)):
-                    melody[si+j] += osc(midi_to_freq(note), j/SAMPLE_RATE, mood['wave']) * mood['mel_v'] * env[j]
-        t += beat * rng.choice([0.5, 1])
-
-    # Mix stereo
-    left = [0.0] * n
-    right = [0.0] * n
-    for i in range(n):
-        left[i] = bass[i]*1.3 + pad[i]*0.85 + melody[i]*0.35
-        right[i] = bass[i]*1.3 + pad[i]*0.58 + melody[i]*0.55
-
-    # Limiter
-    peak = max(max(abs(s) for s in left), max(abs(s) for s in right))
-    if peak > 0.78:
-        r = 0.76 / peak
-        left = [s*r for s in left]
-        right = [s*r for s in right]
-
-    # Save WAV
     wav_path = output_path.replace('.mp3', '.wav')
     with wave.open(wav_path, 'w') as wf:
-        wf.setnchannels(2)
+        wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(SAMPLE_RATE)
         for i in range(n):
-            l = max(-1.0, min(1.0, left[i]))
-            rv = max(-1.0, min(1.0, right[i]))
-            wf.writeframes(struct.pack('<h', int(l*32767)))
-            wf.writeframes(struct.pack('<h', int(rv*32767)))
+            t = i / SAMPLE_RATE
+            val = 0.3 * math.sin(2 * math.pi * freq * t)
+            val += 0.15 * math.sin(2 * math.pi * freq * 2 * t)
+            if i < SAMPLE_RATE:
+                val *= i / SAMPLE_RATE
+            elif i > n - SAMPLE_RATE:
+                val *= (n - i) / SAMPLE_RATE
+            sample = max(-32767, min(32767, int(val * 32767)))
+            wf.writeframes(struct.pack('<h', sample))
 
-    # Convert to MP3
+    # Try convert to MP3
     try:
         import subprocess
         res = subprocess.run(
@@ -422,9 +348,10 @@ def _generate_procedural_track(output_path, produk_id, account_id, category='hom
         if res.returncode == 0:
             os.remove(wav_path)
     except Exception:
-        pass
+        if os.path.exists(wav_path):
+            os.rename(wav_path, output_path)
 
-    return f"procedural_{mood.get('scale', 'major')}_{tempo}bpm"
+    return f"procedural_{mood_info.get('scale', 'major')}_simple"
 
 
 # ═══════════════════════════════════════════════════════════════════
