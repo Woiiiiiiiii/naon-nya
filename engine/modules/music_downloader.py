@@ -3,14 +3,14 @@ music_downloader.py
 Auto-download royalty-free music per kategori.
 
 Per user request: MusicGen DIHAPUS (rawan gagal).
-Sumber musik otomatis (4 tier):
+Sumber musik otomatis (3 tier):
   Tier 1: Freesound API (proper REST API, search+download, royalty-free)
-  Tier 2: Pixabay Music API (royalty-free)
-  Tier 3: YouTube Audio Library (yt-dlp, curated playlists, royalty-free)
-  Tier 4: Procedural wave synthesis (offline fallback, always works)
+  Tier 2: YouTube Audio Library (yt-dlp, curated playlists, royalty-free)
+  Tier 3: Procedural wave synthesis (offline fallback, always works)
+
+Pixabay: DIHAPUS (no music API, dead code)
 
 Organizes by category in assets/music/[category]/.
-Min 12 tracks per category. Auto-restock when below threshold.
 """
 import os
 import sys
@@ -486,81 +486,17 @@ def generate_procedural_track(filepath, category, seed_val=0, duration=30):
 # ===============================================
 
 def restock_all():
-    """Auto-restock music for all categories WITH rotation.
-    Each run: delete oldest API tracks -> download fresh ones -> keep it varied.
-    Priority: Freesound API -> Pixabay -> YouTube Audio Library -> Procedural synth."""
-    print("=== Music Auto-Download (4 tiers with rotation) ===")
+    """Auto-restock music for all categories.
+    Uses restock_category() which has correct tier order:
+    Freesound -> YouTube -> Synth (Pixabay REMOVED)."""
+    print("=== Music Auto-Restock (3 tiers) ===")
     print(f"  Base dir: {os.path.abspath(MUSIC_DIR)}")
-    print(f"  Min stock: {MIN_STOCK} per category")
-    print(f"  Rotate: {ROTATE_COUNT} tracks per run\n")
+    print(f"  Min stock: {MIN_STOCK} per category\n")
 
     for category in CATEGORY_MOODS:
-        d = get_music_dir(category)
         local = count_local(category)
-        print(f"  [{category}] Local: {local} tracks")
-
-        # ROTATION: delete oldest API tracks to force variety
-        if local >= MIN_STOCK:
-            api_files = sorted(
-                [f for f in os.listdir(d)
-                 if f.lower().endswith(('.mp3', '.ogg', '.m4a'))
-                 and '_synth_' not in f],
-                key=lambda f: os.path.getmtime(os.path.join(d, f))
-            )
-            # Delete oldest ROTATE_COUNT API tracks
-            to_delete = api_files[:ROTATE_COUNT]
-            for f in to_delete:
-                try:
-                    os.remove(os.path.join(d, f))
-                    print(f"    [ROTATE] Deleted old: {f}")
-                except Exception:
-                    pass
-            local = count_local(category)
-
-        need = max(MIN_STOCK - local, ROTATE_COUNT)
-        print(f"    Downloading {need} fresh tracks...")
-
-        # -- TIER 1: Freesound API --
-        fs_got = fetch_freesound(category, count=need)
-        if fs_got > 0:
-            print(f"    [+] Freesound: +{fs_got} tracks")
-
-        # -- TIER 2: Pixabay --
-        new_local = count_local(category)
-        still_need = MIN_STOCK - new_local
-        if still_need > 0:
-            px_got = fetch_pixabay_music(category, count=still_need)
-            if px_got > 0:
-                print(f"    [+] Pixabay: +{px_got} tracks")
-
-        # -- TIER 3: YouTube Audio Library --
-        new_local = count_local(category)
-        still_need = MIN_STOCK - new_local
-        if still_need > 0:
-            yt_got = fetch_youtube_audio_library(category, count=still_need)
-            if yt_got > 0:
-                print(f"    [+] YouTube Audio: +{yt_got} tracks")
-
-        # -- TIER 4: Procedural synth (always works) --
-        new_local = count_local(category)
-        still_need = MIN_STOCK - new_local
-        if still_need > 0:
-            d = get_music_dir(category)
-            generated = 0
-            for i in range(still_need):
-                track_num = new_local + i + 1
-                filename = f"{category}_synth_{track_num:02d}.wav"
-                filepath = os.path.join(d, filename)
-                if not os.path.exists(filepath):
-                    seed_val = hash(f"{category}_{track_num}_{datetime.datetime.now().strftime('%Y%m')}")
-                    dur = random.randint(25, 45)
-                    generate_procedural_track(filepath, category, seed_val, dur)
-                    generated += 1
-                    size_kb = os.path.getsize(filepath) // 1024
-                    print(f"    [OK] Synth: {filename} ({size_kb}KB)")
-            if generated > 0:
-                print(f"    [+] Synth fallback: +{generated} tracks")
-
+        print(f"  [{category}] Current: {local} tracks")
+        restock_category(category)
         final = count_local(category)
         print(f"    Final stock: {final} tracks")
 
