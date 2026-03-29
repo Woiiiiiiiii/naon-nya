@@ -112,9 +112,13 @@ def _generate_fallback_composites(produk_id, category, count=5):
             composites.append(np.array(bg))
         return composites
 
+    # Auto-trim white borders from Shopee images
+    from engine.modules.image_utils import auto_trim_whitespace
+    product_img = auto_trim_whitespace(product_img, is_transparent)
+
     pw, ph = product_img.size
     # CONTAIN mode: fit ENTIRE product in frame (never crop)
-    scale = min(W / pw, H / ph) * 0.75  # 75% of frame (more room for glow)
+    scale = min(W / pw, H / ph) * 0.85  # 85% of frame (centered, no white gaps)
     new_w, new_h = int(pw * scale), int(ph * scale)
     img_scaled = product_img.resize((new_w, new_h), Image.LANCZOS)
 

@@ -140,8 +140,13 @@ def _generate_fallback_composites(produk_id, category, count=7):
             composites.append(np.array(bg))
         return composites
 
+    # === AUTO-TRIM white/light borders ===
+    from engine.modules.image_utils import auto_trim_whitespace
+    product_img = auto_trim_whitespace(product_img, is_transparent)
+
     pw, ph = product_img.size
-    scale = min(W / pw, H / ph) * 0.75
+    # Scale product to fill 85% of frame (centered, no white gaps)
+    scale = min(W / pw, H / ph) * 0.85
     new_w, new_h = int(pw * scale), int(ph * scale)
     img_scaled = product_img.resize((new_w, new_h), Image.LANCZOS)
 

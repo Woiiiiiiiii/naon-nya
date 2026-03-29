@@ -104,8 +104,12 @@ def _generate_fallback(produk_id, category, count=4):
             composites.append(np.array(bg))
         return composites
 
+    # Auto-trim white borders from Shopee images
+    from engine.modules.image_utils import auto_trim_whitespace
+    product_img = auto_trim_whitespace(product_img, is_transparent)
+
     pw, ph = product_img.size
-    scale = min(W / pw, H / ph) * 0.75
+    scale = min(W / pw, H / ph) * 0.85
     new_w, new_h = int(pw * scale), int(ph * scale)
     img_scaled = product_img.resize((new_w, new_h), Image.LANCZOS)
 
