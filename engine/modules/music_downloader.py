@@ -513,8 +513,8 @@ def restock_all():
 
 def restock_category(category):
     """Restock a single category ONLY if stock is below MIN_STOCK.
-    If stock >= MIN_STOCK → immediately return (no API calls, no rotation).
-    Tries APIs in order: Freesound → Pixabay → YouTube Audio.
+    If stock >= MIN_STOCK → immediately return (no API calls).
+    Tries APIs in order: Freesound → YouTube Audio.
     Synth is LAST RESORT only (when ALL API tiers failed)."""
     d = get_music_dir(category)
     local = count_local(category)
