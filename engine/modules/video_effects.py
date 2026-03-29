@@ -73,6 +73,97 @@ def create_vignette_overlay(size=(W, H), strength=0.7):
     return vig
 
 
+# ═══════════════════════════════════════════════════════════════════════
+#  PIGURA (PICTURE FRAME BORDER)
+# ═══════════════════════════════════════════════════════════════════════
+def draw_frame_border(frame_arr, accent_color=(200, 180, 130), thickness=4, margin=28, corner_radius=18, opacity=0.85):
+    """Draw a decorative picture frame border around the video.
+    
+    Simple elegant lines with rounded corners — always visible throughout video.
+    Color adapts to category accent.
+    """
+    canvas = Image.fromarray(frame_arr).convert('RGBA')
+    overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(overlay)
+    
+    # Outer frame line
+    r, g, b = accent_color[:3]
+    alpha = int(255 * opacity)
+    color = (r, g, b, alpha)
+    
+    # Main frame
+    d.rounded_rectangle(
+        [margin, margin, W - margin, H - margin],
+        radius=corner_radius, outline=color, width=thickness
+    )
+    
+    # Inner subtle line (thinner, slightly faded)
+    inner_m = margin + thickness + 6
+    inner_color = (r, g, b, int(alpha * 0.4))
+    d.rounded_rectangle(
+        [inner_m, inner_m, W - inner_m, H - inner_m],
+        radius=max(corner_radius - 6, 8), outline=inner_color, width=1
+    )
+    
+    # Corner accents — small decorative squares at corners
+    corner_size = 14
+    corners = [
+        (margin - 2, margin - 2),                   # top-left
+        (W - margin - corner_size + 2, margin - 2),  # top-right
+        (margin - 2, H - margin - corner_size + 2),  # bottom-left
+        (W - margin - corner_size + 2, H - margin - corner_size + 2),  # bottom-right
+    ]
+    for cx, cy in corners:
+        d.rectangle([cx, cy, cx + corner_size, cy + corner_size], fill=color)
+    
+    # Composite
+    canvas = Image.alpha_composite(canvas, overlay)
+    return np.array(canvas.convert('RGB'))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  SLIDING ANIMATIONS
+# ═══════════════════════════════════════════════════════════════════════
+def slide_element_x(t, duration, direction='in_left', canvas_w=W):
+    """Calculate X position for horizontal slide animation.
+    
+    Directions:
+      'in_left'   — slide in from left edge to center
+      'in_right'  — slide in from right edge to center
+      'out_left'  — slide from center to left (exit)
+      'out_right' — slide from center to right (exit)
+    
+    Returns: x_offset (0 = centered, negative = left, positive = right)
+    """
+    progress = min(1.0, max(0.0, t / max(duration, 0.01)))
+    ease = ease_out_cubic(progress)
+    
+    off_screen = canvas_w + 100  # Far enough to be invisible
+    
+    if direction == 'in_left':
+        return int(-off_screen + off_screen * ease)
+    elif direction == 'in_right':
+        return int(off_screen - off_screen * ease)
+    elif direction == 'out_left':
+        return int(-off_screen * ease)
+    elif direction == 'out_right':
+        return int(off_screen * ease)
+    return 0
+
+
+def sway_x(t, amplitude=15, period=3.0):
+    """Gentle horizontal sway — product rocks left/right slowly.
+    
+    Args:
+        t: current time
+        amplitude: max pixel offset left/right (default 15px)
+        period: seconds for one full cycle (default 3s)
+    
+    Returns: x_offset in pixels
+    """
+    return int(amplitude * math.sin(2 * math.pi * t / period))
+
+
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  PRODUCT ENTRY ANIMATIONS
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
