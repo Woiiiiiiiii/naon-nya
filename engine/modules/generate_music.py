@@ -506,41 +506,71 @@ def generate_all_music(queue_dir, output_dir):
             else:
                 target_dur = MUSIC_DURATIONS.get(platform, 50)
 
-            # STEP 1: Try existing library
-            library_file = _select_music_from_library(category, produk_id, acct_id)
+            # === MUSIK: Tier 1 dulu (Freesound = kualitas terbaik) ===
+            # Flow: Tier1 Freesound → Tier2 YouTube → Library existing → Tier3 Synth
+            got_music = False
 
-            if library_file:
-                success = _process_music_file(
-                    library_file, music_file, target_dur, produk_id, acct_id
+            if HAS_DOWNLOADER:
+                # TIER 1: Freesound API (kualitas terbaik, royalty-free)
+                try:
+                    from engine.modules.music_downloader import fetch_freesound, count_local
+                    got = fetch_freesound(category, count=1)
+                    if got > 0:
+                        print(f"    [TIER 1] Freesound: +{got} fresh track for {category}")
+                        # Pick the newly downloaded track
+                        library_file = _select_music_from_library(category, produk_id, acct_id)
+                        if library_file:
+                            success = _process_music_file(
+                                library_file, music_file, target_dur, produk_id, acct_id
+                            )
+                            if success:
+                                globally_used.add(os.path.basename(library_file))
+                                print(f"    [OK] {os.path.basename(music_file)} <- Freesound ({target_dur}s)")
+                                total_lib += 1
+                                got_music = True
+                except Exception as e:
+                    print(f"    [TIER 1] Freesound failed: {e}")
+
+                # TIER 2: YouTube Audio (kalau Freesound gagal)
+                if not got_music:
+                    try:
+                        from engine.modules.music_downloader import fetch_youtube_audio_library
+                        got = fetch_youtube_audio_library(category, count=1)
+                        if got > 0:
+                            print(f"    [TIER 2] YouTube: +{got} fresh track for {category}")
+                            library_file = _select_music_from_library(category, produk_id, acct_id)
+                            if library_file:
+                                success = _process_music_file(
+                                    library_file, music_file, target_dur, produk_id, acct_id
+                                )
+                                if success:
+                                    globally_used.add(os.path.basename(library_file))
+                                    print(f"    [OK] {os.path.basename(music_file)} <- YouTube ({target_dur}s)")
+                                    total_lib += 1
+                                    got_music = True
+                    except Exception as e:
+                        print(f"    [TIER 2] YouTube failed: {e}")
+
+            # FALLBACK: pakai existing library (API tracks dari run sebelumnya)
+            if not got_music:
+                library_file = _select_music_from_library(category, produk_id, acct_id)
+                if library_file and '_synth_' not in os.path.basename(library_file):
+                    success = _process_music_file(
+                        library_file, music_file, target_dur, produk_id, acct_id
+                    )
+                    if success:
+                        globally_used.add(os.path.basename(library_file))
+                        print(f"    [LIBRARY] {os.path.basename(music_file)} <- {os.path.basename(library_file)} ({target_dur}s)")
+                        total_lib += 1
+                        got_music = True
+
+            # TIER 3 (LAST RESORT): Synth procedural
+            if not got_music:
+                info = _generate_procedural_track(
+                    music_file, produk_id, acct_id, category, duration=target_dur
                 )
-                if success:
-                    basename = os.path.basename(library_file)
-                    globally_used.add(basename)
-                    print(f"    [LIBRARY] {os.path.basename(music_file)} <- {basename} ({target_dur}s)")
-                    total_lib += 1
-                    continue
-
-            # STEP 2: Library exhausted → force restock via tier system (on-demand, 1 track)
-            _ensure_category_has_music(category, force=True)
-            # Try library again after restock
-            library_file = _select_music_from_library(category, produk_id, acct_id)
-            if library_file:
-                success = _process_music_file(
-                    library_file, music_file, target_dur, produk_id, acct_id
-                )
-                if success:
-                    basename = os.path.basename(library_file)
-                    globally_used.add(basename)
-                    print(f"    [RESTOCKED] {os.path.basename(music_file)} <- {basename} ({target_dur}s)")
-                    total_lib += 1
-                    continue
-
-            # STEP 3: Last resort — procedural on-demand (1 track)
-            info = _generate_procedural_track(
-                music_file, produk_id, acct_id, category, duration=target_dur
-            )
-            print(f"    [SYNTH] {os.path.basename(music_file)} | {info} ({target_dur}s)")
-            total_proc += 1
+                print(f"    [SYNTH] {os.path.basename(music_file)} | {info} ({target_dur}s)")
+                total_proc += 1
 
     # Save global used music tracking
     _save_used_music(globally_used)
