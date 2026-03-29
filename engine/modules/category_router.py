@@ -468,7 +468,7 @@ SCHEDULE = {
 #  VIDEO DURATION CONFIG (used by video generators)
 # ═══════════════════════════════════════════════════════════════════
 VIDEO_DURATION = {
-    'yt_long':  {'min': 60, 'max': 80, 'label': 'YouTube Long-form'},
+    'yt_long':  {'min': 90, 'max': 120, 'label': 'YouTube Long-form'},
     'yt_short': {'min': 45, 'max': 50,  'label': 'YouTube Shorts'},
     'tiktok':   {'min': 25, 'max': 30,  'label': 'TikTok'},
     'facebook': {'min': 50, 'max': 60,  'label': 'Facebook'},

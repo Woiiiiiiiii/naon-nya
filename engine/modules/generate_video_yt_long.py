@@ -552,26 +552,30 @@ def generate_long(queue_file, output_dir):
             # === AUTO-EXTRACT SHORTS ===
             try:
                 short_dur = random.randint(45, 50)
-                hook_end = min(5, scenes[0]['e'])
-                detail_s = scenes[2]['s']
-                detail_e = min(detail_s + 15, scenes[2]['e'])
-                verdict_s = scenes[5]['s']
-                verdict_e = min(verdict_s + 15, scenes[5]['e'])
+                hook_end = min(5, scenes[0]['e'], total_dur)
+                detail_s = min(scenes[2]['s'], total_dur - 1)
+                detail_e = min(detail_s + 15, scenes[2]['e'], total_dur)
+                verdict_s = min(scenes[5]['s'], total_dur - 1)
+                verdict_e = min(verdict_s + 15, scenes[5]['e'], total_dur)
 
-                hook_clip = video.subclipped(0, hook_end)
-                detail_clip = video.subclipped(detail_s, detail_e)
-                closing_clip = video.subclipped(verdict_s, min(verdict_e, total_dur))
+                # Safety: all timestamps must be within video duration
+                if detail_s >= total_dur or verdict_s >= total_dur or hook_end <= 0:
+                    print(f"  [WARN] Shorts: video too short ({total_dur}s) for extraction, skipping")
+                else:
+                    hook_clip = video.subclipped(0, hook_end)
+                    detail_clip = video.subclipped(detail_s, detail_e)
+                    closing_clip = video.subclipped(verdict_s, verdict_e)
 
-                shorts_video = concatenate_videoclips([hook_clip, detail_clip, closing_clip])
-                short_out = f"{today}_{produk_id}_v{acct_num}_yt.mp4"
-                short_path = os.path.join(output_dir, "yt", short_out)
+                    shorts_video = concatenate_videoclips([hook_clip, detail_clip, closing_clip])
+                    short_out = f"{today}_{produk_id}_v{acct_num}_yt.mp4"
+                    short_path = os.path.join(output_dir, "yt", short_out)
 
-                if not os.path.exists(short_path):
-                    shorts_video.write_videofile(short_path, fps=24, codec='libx264',
-                                               audio_codec='aac', preset='ultrafast',
-                                               logger=None)
-                    print(f"  [OK] Short extracted: {short_out}")
-                shorts_video.close()
+                    if not os.path.exists(short_path):
+                        shorts_video.write_videofile(short_path, fps=24, codec='libx264',
+                                                   audio_codec='aac', preset='ultrafast',
+                                                   logger=None)
+                        print(f"  [OK] Short extracted: {short_out}")
+                    shorts_video.close()
             except Exception as e:
                 print(f"  [WARN] Shorts extraction failed: {e}")
 
