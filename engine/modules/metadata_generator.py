@@ -251,6 +251,8 @@ def generate_all_metadata(queue_dir, output_dir):
         for job in jobs:
             produk_id = job.get('produk_id', 'unknown')
             nama = job.get('nama', produk_id)
+            from engine.modules.image_utils import clean_product_name
+            nama = clean_product_name(nama)
             category = job.get('category', 'general')
             harga = job.get('harga', '')
             link = job.get('affiliate_link', '')

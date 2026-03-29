@@ -1,13 +1,74 @@
 """
 image_utils.py
-Shared image utilities for all video generators.
+Shared image & product utilities for all video generators.
 
 - auto_trim_whitespace: remove white borders from Shopee product images
-- load_and_prepare_product: load, trim, scale product image for compositing
+- clean_product_name: shorten long Shopee names to descriptive part only
 """
 import os
+import re
 import numpy as np
 from PIL import Image
+
+
+def clean_product_name(nama):
+    """Shorten long Shopee product names to the descriptive part.
+    
+    Shopee names follow pattern:
+      "Brand - Generic Category / Specific Name / Extra Details / More..."
+    
+    We want just "Specific Name" — the part after the first "/" separator.
+    If no separator, take the first meaningful segment.
+    
+    Examples:
+      "Puswall - Stiker Dinding / Wallsticker Motive Lamp / Dekorasi..."
+        → "Wallsticker Motive Lamp"
+      "PROMO Tas Selempang Wanita Korean Style"
+        → "Tas Selempang Wanita Korean Style"
+      "Simple Product Name"
+        → "Simple Product Name"
+    """
+    if not nama or len(nama) < 5:
+        return nama
+    
+    # Split by "/" first (most common Shopee separator)
+    if '/' in nama:
+        parts = [p.strip() for p in nama.split('/')]
+        # Take second segment (after first /) — usually the descriptive name
+        # But skip if it's too short (< 3 words)
+        if len(parts) > 1 and len(parts[1].split()) >= 2:
+            nama = parts[1]
+        elif len(parts) > 0:
+            # Fallback: take first part if second is too short
+            nama = parts[0]
+    
+    # If still has " - " separator (e.g. "Brand - Product Name"), take after dash
+    if ' - ' in nama:
+        parts = nama.split(' - ', 1)
+        # Take the longer part (usually the product description)
+        if len(parts[1]) > len(parts[0]):
+            nama = parts[1]
+        else:
+            nama = parts[0]
+    
+    # Remove common Shopee noise prefixes
+    noise = ['PROMO', 'SALE', 'DISKON', 'HOT', 'NEW', 'BEST SELLER',
+             'TERMURAH', 'TERLARIS', 'COD', 'GRATIS ONGKIR', 'FREE ONGKIR']
+    upper_nama = nama.upper()
+    for n in noise:
+        if upper_nama.startswith(n + ' '):
+            nama = nama[len(n):].strip()
+            upper_nama = nama.upper()
+            # Strip leading punctuation after removing noise
+            nama = nama.lstrip('!-– ').strip()
+    
+    # Truncate to max ~50 chars at word boundary
+    if len(nama) > 50:
+        words = nama[:55].split()
+        nama = ' '.join(words[:-1]) if len(words) > 1 else nama[:50]
+    
+    return nama.strip()
+
 
 
 def auto_trim_whitespace(product_img, is_transparent=False, threshold=235):

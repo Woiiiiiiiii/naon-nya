@@ -286,6 +286,8 @@ def generate_long(queue_file, output_dir):
         ctas = get_copywriting(category, 'cta')
         hook_text = job.get('hook', random.choice(hooks) if hooks else 'Cek ini!')
         nama = job.get('nama', produk_id)
+        from engine.modules.image_utils import clean_product_name
+        nama = clean_product_name(nama)
         harga = job.get('harga', '')
         desc = job.get('deskripsi_singkat', '')
         cta_text = job.get('cta', random.choice(ctas) if ctas else 'Link di deskripsi!')
