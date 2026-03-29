@@ -104,7 +104,7 @@ def _generate_fallback(produk_id, category, count=5):
     product_img = auto_trim_whitespace(product_img, is_transparent)
 
     pw, ph = product_img.size
-    scale = min(W / pw, H / ph) * 0.85
+    scale = min(W / pw, H / ph) * 0.75
     new_w, new_h = int(pw * scale), int(ph * scale)
     img_scaled = product_img.resize((new_w, new_h), Image.LANCZOS)
 
