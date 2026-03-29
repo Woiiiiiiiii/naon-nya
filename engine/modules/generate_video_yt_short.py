@@ -34,7 +34,8 @@ from engine.modules.video_effects import (
     text_slide_up, ease_out_back, ease_out_cubic,
     create_rating_stars, create_price_display, create_chat_bubble,
     create_count_up_text, create_blinking_label, create_simple_price,
-    draw_frame_border, slide_element_x, sway_x
+    draw_frame_border, slide_element_x, sway_x,
+    render_outline_text, create_plain_gradient
 )
 from engine.modules.sound_manager import get_sfx_path, init_sounds
 from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params, find_music_file, get_voice_volumes
@@ -358,11 +359,12 @@ def generate_shorts(queue_file, output_dir):
 
             txt_w = W - 120
             
-            nama_img = render_text_image(f" {nama} ", font_bold or font_path,
-                                         54, (255, 255, 255), (*accent, 235), txt_w, 26,
-                                         style='gradient_pill')
+            plain_bg = create_plain_gradient(accent, (W, H))
+            nama_img = render_outline_text(nama, font_bold or font_path,
+                                           74, outline_color=(255, 255, 255),
+                                           stroke_width=3, max_width=txt_w)
             teaser_img = render_text_image(hook_text, font_path or "arial.ttf",
-                                          44, (255, 255, 255), (0, 0, 0, 200), txt_w, 20,
+                                          42, (255, 255, 255), (0, 0, 0, 160), txt_w, 18,
                                           style='glass')
             
             top_nama_img = render_text_image(nama, font_bold or font_path,
@@ -391,24 +393,27 @@ def generate_shorts(queue_file, output_dir):
                                         50, (255, 255, 255), (220, 53, 69, 240), txt_w, 24,
                                         style='gradient_pill')
 
+            INTRO_SLIDE = 1.8
+
             def make_frame(t):
-                bg_idx = int(t / 10) % len(composites)
-                bg = composites[bg_idx]
-                frame = _ken_burns(bg, t % 10, 10, 'zoom_in')
-                frame = draw_frame_border(frame, accent_color=border_color)
-                
                 center_x = W // 2
                 center_y = H // 2
                 
                 if t < S1_END:
-                    x_off = slide_element_x(t, SLIDE_DUR, 'in_left') if t < SLIDE_DUR else 0
+                    frame = plain_bg.copy()
+                    frame = draw_frame_border(frame, accent_color=border_color)
+                    
+                    if t < INTRO_SLIDE:
+                        x_off = slide_element_x(t, INTRO_SLIDE, 'in_left')
+                    else:
+                        x_off = 0
                     nama_y = center_y - nama_img.height // 2 - 60
                     frame = paste_overlay_on_frame(frame, nama_img,
                         (center_x - nama_img.width // 2 + x_off, nama_y))
                     
-                    if t > 1.2:
-                        tt = t - 1.2
-                        tx_off = slide_element_x(tt, SLIDE_DUR, 'in_left') if tt < SLIDE_DUR else 0
+                    if t > 2.0:
+                        tt = t - 2.0
+                        tx_off = slide_element_x(tt, 1.5, 'in_left') if tt < 1.5 else 0
                         teaser_y = nama_y + nama_img.height + 28
                         frame = paste_overlay_on_frame(frame, teaser_img,
                             (center_x - teaser_img.width // 2 + tx_off, teaser_y))
@@ -416,16 +421,20 @@ def generate_shorts(queue_file, output_dir):
                     if t > S1_END - 1.2:
                         exit_t = t - (S1_END - 1.2)
                         x_out = slide_element_x(exit_t, 1.2, 'out_left')
-                        frame_temp = _ken_burns(bg, t % 10, 10, 'zoom_in')
-                        frame_temp = draw_frame_border(frame_temp, accent_color=border_color)
-                        frame_temp = paste_overlay_on_frame(frame_temp, nama_img,
+                        frame2 = plain_bg.copy()
+                        frame2 = draw_frame_border(frame2, accent_color=border_color)
+                        frame2 = paste_overlay_on_frame(frame2, nama_img,
                             (center_x - nama_img.width // 2 + x_out, nama_y))
-                        if t > 1.2:
-                            frame_temp = paste_overlay_on_frame(frame_temp, teaser_img,
+                        if t > 2.0:
+                            frame2 = paste_overlay_on_frame(frame2, teaser_img,
                                 (center_x - teaser_img.width // 2 + x_out, teaser_y))
-                        frame = frame_temp
+                        frame = frame2
                 
                 elif t < S4_END and prod_img_pil:
+                    bg_idx = int(t / 10) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 10, 10, 'zoom_in')
+                    frame = draw_frame_border(frame, accent_color=border_color)
                     prod_t = t - S1_END
                     if prod_t < SLIDE_DUR:
                         x_off = slide_element_x(prod_t, SLIDE_DUR, 'in_right')
@@ -448,6 +457,10 @@ def generate_shorts(queue_file, output_dir):
                                 opacity=info_opacity)
                 
                 elif t < S6_END:
+                    bg_idx = int(t / 10) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 10, 10, 'zoom_in')
+                    frame = draw_frame_border(frame, accent_color=border_color)
                     stage_t = t - S4_END
                     
                     if stage_t < SLIDE_DUR:
@@ -490,6 +503,10 @@ def generate_shorts(queue_file, output_dir):
                         frame = frame2
                 
                 else:
+                    bg_idx = int(t / 10) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 10, 10, 'zoom_in')
+                    frame = draw_frame_border(frame, accent_color=border_color)
                     cta_t = t - S6_END
                     cx_off = slide_element_x(cta_t, SLIDE_DUR, 'in_left') if cta_t < SLIDE_DUR else 0
                     cta_y = center_y - 80

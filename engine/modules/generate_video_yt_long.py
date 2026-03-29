@@ -34,7 +34,8 @@ from engine.modules.video_effects import (
     text_slide_up, ease_out_back, ease_out_cubic,
     create_rating_stars, create_price_display, create_chat_bubble,
     create_count_up_text, create_blinking_label, create_simple_price,
-    draw_frame_border, slide_element_x, sway_x
+    draw_frame_border, slide_element_x, sway_x,
+    render_outline_text, create_plain_gradient
 )
 from engine.modules.sound_manager import get_sfx_path, init_sounds
 from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params, find_music_file, get_voice_volumes
@@ -346,12 +347,13 @@ def generate_long(queue_file, output_dir):
             # Pre-render text overlays
             txt_w = W - 120
             
-            # Stage 1: nama + teaser
-            nama_img = render_text_image(f" {nama} ", font_bold or font_path,
-                                         56, (255, 255, 255), (*accent, 235), txt_w, 28,
-                                         style='gradient_pill')
+            # Stage 1: outline text (hollow, no bg) + teaser
+            plain_bg = create_plain_gradient(accent, (W, H))
+            nama_img = render_outline_text(nama, font_bold or font_path,
+                                           80, outline_color=(255, 255, 255),
+                                           stroke_width=3, max_width=txt_w)
             teaser_img = render_text_image(hook_text, font_path or "arial.ttf",
-                                          44, (255, 255, 255), (0, 0, 0, 200), txt_w, 20,
+                                          42, (255, 255, 255), (0, 0, 0, 160), txt_w, 18,
                                           style='glass')
             
             # Stage 3: nama + harga (top bar - compact)
@@ -388,64 +390,60 @@ def generate_long(queue_file, output_dir):
                                         50, (255, 255, 255), (220, 53, 69, 240), txt_w, 24,
                                         style='gradient_pill')
 
+            INTRO_SLIDE = 2.5  # Slow, gradual slide for Stage 1
+
             def make_frame(t):
-                # Background: use composite images with gentle Ken Burns
-                bg_idx = int(t / 15) % len(composites)
-                bg = composites[bg_idx]
-                frame = _ken_burns(bg, t % 15, 15, 'zoom_in')
-                
-                # ═══ PIGURA: Frame border — always visible ═══
-                frame = draw_frame_border(frame, accent_color=border_color)
-                
-                # Center positions
                 center_x = W // 2
                 center_y = H // 2
                 
                 # ═══════════════════════════════════════════
-                # STAGE 1: Nama + teaser slide in from LEFT
+                # STAGE 1: Plain bg + outline nama slides in slowly
                 # ═══════════════════════════════════════════
                 if t < S1_END:
-                    # Nama slides in from left (0 - 1.2s)
-                    if t < SLIDE_DUR:
-                        x_off = slide_element_x(t, SLIDE_DUR, 'in_left')
+                    # Use plain gradient background (NO product image)
+                    frame = plain_bg.copy()
+                    frame = draw_frame_border(frame, accent_color=border_color)
+                    
+                    # Nama outline slides in slowly from left (2.5s)
+                    if t < INTRO_SLIDE:
+                        x_off = slide_element_x(t, INTRO_SLIDE, 'in_left')
                     else:
                         x_off = 0
                     
-                    # Nama centered vertically
-                    nama_x = center_x - nama_img.width // 2 + x_off
                     nama_y = center_y - nama_img.height // 2 - 60
-                    frame = paste_overlay_on_frame(frame, nama_img, (nama_x, nama_y))
+                    frame = paste_overlay_on_frame(frame, nama_img,
+                        (center_x - nama_img.width // 2 + x_off, nama_y))
                     
-                    # Teaser appears after 1.5s
-                    if t > 1.5:
-                        teaser_t = t - 1.5
-                        if teaser_t < SLIDE_DUR:
-                            tx_off = slide_element_x(teaser_t, SLIDE_DUR, 'in_left')
-                        else:
-                            tx_off = 0
-                        teaser_x = center_x - teaser_img.width // 2 + tx_off
-                        teaser_y = nama_y + nama_img.height + 30
-                        frame = paste_overlay_on_frame(frame, teaser_img, (teaser_x, teaser_y))
+                    # Teaser appears after 3s, also slow slide
+                    if t > 3.0:
+                        teaser_t = t - 3.0
+                        tx_off = slide_element_x(teaser_t, 2.0, 'in_left') if teaser_t < 2.0 else 0
+                        teaser_y = nama_y + nama_img.height + 35
+                        frame = paste_overlay_on_frame(frame, teaser_img,
+                            (center_x - teaser_img.width // 2 + tx_off, teaser_y))
                     
-                    # Exit: nama + teaser slide out left (last 1.5s of stage)
-                    exit_start = S1_END - 1.5
+                    # Exit: slide out left (last 2s of stage)
+                    exit_start = S1_END - 2.0
                     if t > exit_start:
                         exit_t = t - exit_start
-                        x_out = slide_element_x(exit_t, 1.5, 'out_left')
-                        # Re-draw with exit offset (overwrite previous)
-                        frame_temp = _ken_burns(bg, t % 15, 15, 'zoom_in')
-                        frame_temp = draw_frame_border(frame_temp, accent_color=border_color)
-                        nama_x2 = center_x - nama_img.width // 2 + x_out
-                        frame_temp = paste_overlay_on_frame(frame_temp, nama_img, (nama_x2, nama_y))
-                        if t > 1.5:
-                            teaser_x2 = center_x - teaser_img.width // 2 + x_out
-                            frame_temp = paste_overlay_on_frame(frame_temp, teaser_img, (teaser_x2, teaser_y))
-                        frame = frame_temp
+                        x_out = slide_element_x(exit_t, 2.0, 'out_left')
+                        frame2 = plain_bg.copy()
+                        frame2 = draw_frame_border(frame2, accent_color=border_color)
+                        frame2 = paste_overlay_on_frame(frame2, nama_img,
+                            (center_x - nama_img.width // 2 + x_out, nama_y))
+                        if t > 3.0:
+                            frame2 = paste_overlay_on_frame(frame2, teaser_img,
+                                (center_x - teaser_img.width // 2 + x_out, teaser_y))
+                        frame = frame2
                 
                 # ═══════════════════════════════════════════
                 # STAGE 2-3: Product image slides in + sways
                 # ═══════════════════════════════════════════
                 elif t < S4_END and prod_img_pil:
+                    bg_idx = int(t / 15) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 15, 15, 'zoom_in')
+                    frame = draw_frame_border(frame, accent_color=border_color)
                     prod_t = t - S1_END
                     
                     # Product slides in from right (first SLIDE_DUR)
@@ -480,6 +478,10 @@ def generate_long(queue_file, output_dir):
                 # STAGE 5: Feature/review text
                 # ═══════════════════════════════════════════
                 elif t < S6_END:
+                    bg_idx = int(t / 15) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 15, 15, 'zoom_in')
+                    frame = draw_frame_border(frame, accent_color=border_color)
                     stage_t = t - S4_END
                     
                     # Nama exits left (first 1.2s)
@@ -565,6 +567,10 @@ def generate_long(queue_file, output_dir):
                 # STAGE 7: CTA closing
                 # ═══════════════════════════════════════════
                 else:
+                    bg_idx = int(t / 15) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 15, 15, 'zoom_in')
+                    frame = draw_frame_border(frame, accent_color=border_color)
                     cta_t = t - S6_END
                     
                     # CTA slides in from left

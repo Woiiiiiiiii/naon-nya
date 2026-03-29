@@ -30,7 +30,8 @@ from engine.modules.video_effects import (
     text_slide_up, ease_out_cubic, ease_out_back,
     create_rating_stars, create_blinking_label, create_count_up_text,
     create_simple_price,
-    draw_frame_border, slide_element_x, sway_x
+    draw_frame_border, slide_element_x, sway_x,
+    render_outline_text, create_plain_gradient
 )
 from engine.modules.sound_manager import get_sfx_path, init_sounds
 from engine.modules.audio_normalizer import prepare_music, prepare_sfx, get_ffmpeg_audio_params, find_music_file, get_voice_volumes
@@ -282,11 +283,12 @@ def generate_video_tt(queue_file, output_dir):
 
             txt_w = W - 100
             
-            nama_img = render_text_image(f" {nama} ", font_bold or font_path,
-                                         58, (255, 255, 255), (*TT_ACCENT, 240), txt_w, 28,
-                                         style='gradient_pill')
+            plain_bg = create_plain_gradient(TT_ACCENT, (W, H))
+            nama_img = render_outline_text(nama, font_bold or font_path,
+                                           68, outline_color=(255, 255, 255),
+                                           stroke_width=3, max_width=txt_w)
             teaser_img = render_text_image(hook_text, font_path or "arial.ttf",
-                                          46, (255, 255, 255), (0, 0, 0, 210), txt_w, 22,
+                                          44, (255, 255, 255), (0, 0, 0, 170), txt_w, 20,
                                           style='glass')
             
             top_nama_img = render_text_image(nama, font_bold or font_path,
@@ -311,24 +313,27 @@ def generate_video_tt(queue_file, output_dir):
                                         54, (255, 255, 255), (220, 53, 69, 245), txt_w, 26,
                                         style='gradient_pill')
 
+            INTRO_SLIDE = 1.2  # Faster for TikTok, but still gradual
+
             def make_frame(t):
-                bg_idx = int(t / 8) % len(composites)
-                bg = composites[bg_idx]
-                frame = _ken_burns(bg, t % 8, 8, 'zoom_in')
-                frame = draw_frame_border(frame, accent_color=border_color, thickness=3, margin=22)
-                
                 center_x = W // 2
                 center_y = H // 2
                 
                 if t < S1_END:
-                    x_off = slide_element_x(t, SLIDE_DUR, 'in_left') if t < SLIDE_DUR else 0
+                    frame = plain_bg.copy()
+                    frame = draw_frame_border(frame, accent_color=border_color, thickness=3, margin=22)
+                    
+                    if t < INTRO_SLIDE:
+                        x_off = slide_element_x(t, INTRO_SLIDE, 'in_left')
+                    else:
+                        x_off = 0
                     nama_y = center_y - nama_img.height // 2 - 60
                     frame = paste_overlay_on_frame(frame, nama_img,
                         (center_x - nama_img.width // 2 + x_off, nama_y))
                     
-                    if t > 0.8:
-                        tt = t - 0.8
-                        tx_off = slide_element_x(tt, SLIDE_DUR, 'in_left') if tt < SLIDE_DUR else 0
+                    if t > 1.5:
+                        tt = t - 1.5
+                        tx_off = slide_element_x(tt, 1.0, 'in_left') if tt < 1.0 else 0
                         teaser_y = nama_y + nama_img.height + 25
                         frame = paste_overlay_on_frame(frame, teaser_img,
                             (center_x - teaser_img.width // 2 + tx_off, teaser_y))
@@ -336,16 +341,20 @@ def generate_video_tt(queue_file, output_dir):
                     if t > S1_END - 1.0:
                         exit_t = t - (S1_END - 1.0)
                         x_out = slide_element_x(exit_t, 1.0, 'out_left')
-                        frame_temp = _ken_burns(bg, t % 8, 8, 'zoom_in')
-                        frame_temp = draw_frame_border(frame_temp, accent_color=border_color, thickness=3, margin=22)
-                        frame_temp = paste_overlay_on_frame(frame_temp, nama_img,
+                        frame2 = plain_bg.copy()
+                        frame2 = draw_frame_border(frame2, accent_color=border_color, thickness=3, margin=22)
+                        frame2 = paste_overlay_on_frame(frame2, nama_img,
                             (center_x - nama_img.width // 2 + x_out, nama_y))
-                        if t > 0.8:
-                            frame_temp = paste_overlay_on_frame(frame_temp, teaser_img,
+                        if t > 1.5:
+                            frame2 = paste_overlay_on_frame(frame2, teaser_img,
                                 (center_x - teaser_img.width // 2 + x_out, teaser_y))
-                        frame = frame_temp
+                        frame = frame2
                 
                 elif t < S4_END and prod_img_pil:
+                    bg_idx = int(t / 8) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                    frame = draw_frame_border(frame, accent_color=border_color, thickness=3, margin=22)
                     prod_t = t - S1_END
                     if prod_t < SLIDE_DUR:
                         x_off = slide_element_x(prod_t, SLIDE_DUR, 'in_right')
@@ -368,6 +377,10 @@ def generate_video_tt(queue_file, output_dir):
                                 opacity=info_opacity)
                 
                 elif t < S6_END:
+                    bg_idx = int(t / 8) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                    frame = draw_frame_border(frame, accent_color=border_color, thickness=3, margin=22)
                     stage_t = t - S4_END
                     
                     if stage_t > 0.5:
@@ -396,6 +409,10 @@ def generate_video_tt(queue_file, output_dir):
                         frame = frame2
                 
                 else:
+                    bg_idx = int(t / 8) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                    frame = draw_frame_border(frame, accent_color=border_color, thickness=3, margin=22)
                     cta_t = t - S6_END
                     cx_off = slide_element_x(cta_t, SLIDE_DUR, 'in_left') if cta_t < SLIDE_DUR else 0
                     cta_y = center_y - 80

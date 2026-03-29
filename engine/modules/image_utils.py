@@ -12,21 +12,17 @@ from PIL import Image
 
 
 def clean_product_name(nama):
-    """Shorten long Shopee product names to the descriptive part.
+    """Shorten long Shopee product names to a SHORT descriptive label.
     
-    Shopee names follow pattern:
-      "Brand - Generic Category / Specific Name / Extra Details / More..."
-    
-    We want just "Specific Name" — the part after the first "/" separator.
-    If no separator, take the first meaningful segment.
+    Goal: max ~30 chars, just the core product identity.
     
     Examples:
       "Puswall - Stiker Dinding / Wallsticker Motive Lamp / Dekorasi..."
         → "Wallsticker Motive Lamp"
-      "PROMO Tas Selempang Wanita Korean Style"
-        → "Tas Selempang Wanita Korean Style"
-      "Simple Product Name"
-        → "Simple Product Name"
+      "Panaled - Lampu LED / Lampu LED Panaled Premium Cahaya Putih Super Terang 5W..."
+        → "Lampu LED Panaled"
+      "PROMO Tas Selempang Wanita Korean Style Murah Terbaru 2024"
+        → "Tas Selempang Wanita"
     """
     if not nama or len(nama) < 5:
         return nama
@@ -34,38 +30,51 @@ def clean_product_name(nama):
     # Split by "/" first (most common Shopee separator)
     if '/' in nama:
         parts = [p.strip() for p in nama.split('/')]
-        # Take second segment (after first /) — usually the descriptive name
-        # But skip if it's too short (< 3 words)
         if len(parts) > 1 and len(parts[1].split()) >= 2:
             nama = parts[1]
         elif len(parts) > 0:
-            # Fallback: take first part if second is too short
             nama = parts[0]
     
-    # If still has " - " separator (e.g. "Brand - Product Name"), take after dash
+    # If has " - " separator, take the longer part
     if ' - ' in nama:
         parts = nama.split(' - ', 1)
-        # Take the longer part (usually the product description)
         if len(parts[1]) > len(parts[0]):
             nama = parts[1]
         else:
             nama = parts[0]
     
     # Remove common Shopee noise prefixes
-    noise = ['PROMO', 'SALE', 'DISKON', 'HOT', 'NEW', 'BEST SELLER',
-             'TERMURAH', 'TERLARIS', 'COD', 'GRATIS ONGKIR', 'FREE ONGKIR']
+    noise_prefix = ['PROMO', 'SALE', 'DISKON', 'HOT', 'NEW', 'BEST SELLER',
+             'TERMURAH', 'TERLARIS', 'COD', 'GRATIS ONGKIR', 'FREE ONGKIR',
+             'ORIGINAL', 'ORI ', 'READY', 'IMPORT', 'MURAH']
     upper_nama = nama.upper()
-    for n in noise:
-        if upper_nama.startswith(n + ' '):
+    for n in noise_prefix:
+        if upper_nama.startswith(n + ' ') or upper_nama.startswith(n + '!'):
             nama = nama[len(n):].strip()
             upper_nama = nama.upper()
-            # Strip leading punctuation after removing noise
             nama = nama.lstrip('!-– ').strip()
     
-    # Truncate to max ~50 chars at word boundary
-    if len(nama) > 50:
-        words = nama[:55].split()
-        nama = ' '.join(words[:-1]) if len(words) > 1 else nama[:50]
+    # Remove noise suffixes (sizes, specs, years, marketing)
+    noise_suffix = [
+        r'\s+\d+[wW]\b.*$',           # "30W..." and everything after
+        r'\s+\d+\s*(pcs|pack|set|lembar|meter|cm|mm|ml|gr|kg)\b.*$',
+        r'\s+(Murah|Terbaru|Termurah|Terlaris|Premium|Super|Original)\b.*$',
+        r'\s+\d{4}\b.*$',              # Year "2024..."
+        r'\s+[A-Z]{2,}\d+.*$',         # Model codes "AB123..."
+        r'\s+(Size|Ukuran|Warna|Motif|Varian)\b.*$',
+    ]
+    for pattern in noise_suffix:
+        nama = re.sub(pattern, '', nama, flags=re.IGNORECASE)
+    
+    # Take max 4 words
+    words = nama.split()
+    if len(words) > 4:
+        nama = ' '.join(words[:4])
+    
+    # Hard truncate at 30 chars on word boundary
+    if len(nama) > 30:
+        words = nama[:35].split()
+        nama = ' '.join(words[:-1]) if len(words) > 1 else nama[:30]
     
     return nama.strip()
 

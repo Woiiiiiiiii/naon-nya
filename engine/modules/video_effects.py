@@ -164,6 +164,104 @@ def sway_x(t, amplitude=15, period=3.0):
     return int(amplitude * math.sin(2 * math.pi * t / period))
 
 
+def render_outline_text(text, font_path, font_size, outline_color=(255, 255, 255),
+                        stroke_width=3, max_width=900):
+    """Render text as OUTLINE only — hollow letters where background shows through.
+    
+    No fill, no background pill. Just clean stroked letters.
+    Returns PIL RGBA Image with transparent center.
+    """
+    try:
+        font = ImageFont.truetype(font_path, font_size)
+    except Exception:
+        font = ImageFont.load_default()
+    
+    # Word wrap
+    dummy = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+    words = text.split()
+    lines, cur = [], ""
+    for w in words:
+        test = f"{cur} {w}".strip()
+        try:
+            tw = font.getlength(test)
+        except AttributeError:
+            bb = dummy.textbbox((0, 0), test, font=font)
+            tw = bb[2] - bb[0]
+        if tw > max_width:
+            if cur:
+                lines.append(cur)
+            cur = w
+        else:
+            cur = test
+    if cur:
+        lines.append(cur)
+    if not lines:
+        lines = [text]
+    
+    # Measure
+    line_bboxes = []
+    for l in lines:
+        bb = dummy.textbbox((0, 0), l, font=font)
+        line_bboxes.append(bb)
+    
+    spacing = int(font_size * 0.4)
+    total_h = sum(bb[3] - bb[1] for bb in line_bboxes) + (len(lines) - 1) * spacing
+    max_w = max(bb[2] - bb[0] for bb in line_bboxes)
+    
+    pad = stroke_width * 2 + 10
+    iw, ih = max_w + pad * 2, total_h + pad * 2
+    
+    img = Image.new('RGBA', (iw, ih), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    
+    cy = pad
+    center_x = iw // 2
+    
+    r, g, b = outline_color[:3]
+    
+    for i, line in enumerate(lines):
+        bb = line_bboxes[i]
+        text_w = bb[2] - bb[0]
+        x_off = bb[0]
+        y_off = bb[1]
+        draw_x = center_x - text_w // 2 - x_off
+        draw_y = cy - y_off
+        
+        # Draw stroke (outline) using Pillow's stroke_width
+        d.text((draw_x, draw_y), line, fill=(0, 0, 0, 0), font=font,
+               stroke_width=stroke_width, stroke_fill=(r, g, b, 255))
+        
+        # Draw the "hollow" center by drawing text in transparent
+        # This clears the inside of the letters
+        d.text((draw_x, draw_y), line, fill=(0, 0, 0, 0), font=font)
+        
+        cy += (bb[3] - bb[1]) + spacing
+    
+    return img
+
+
+def create_plain_gradient(accent_color=(40, 60, 100), size=(W, H)):
+    """Create a plain premium gradient background (no product images).
+    
+    Used for Stage 1 (intro) where only text should appear.
+    Returns numpy array (RGB).
+    """
+    w, h = size
+    img = Image.new('RGB', (w, h))
+    d = ImageDraw.Draw(img)
+    
+    r, g, b = accent_color[:3]
+    # Dark premium gradient: top darker, bottom slightly lighter
+    for y in range(h):
+        ratio = y / h
+        cr = int(max(0, r * 0.3 + r * 0.4 * ratio))
+        cg = int(max(0, g * 0.3 + g * 0.4 * ratio))
+        cb = int(max(0, b * 0.3 + b * 0.5 * ratio))
+        d.line([(0, y), (w, y)], fill=(cr, cg, cb))
+    
+    return np.array(img)
+
+
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  PRODUCT ENTRY ANIMATIONS
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
