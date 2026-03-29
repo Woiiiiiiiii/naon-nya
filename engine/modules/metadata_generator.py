@@ -26,7 +26,8 @@ _channel_key_map = None
 
 
 def _load_channel_key_map():
-    """Load per-channel Gemini API keys from config with env var resolution."""
+    """Load per-channel Gemini API keys from config with env var resolution.
+    Supports dual-key: each channel has [primary, backup] keys."""
     global _channel_key_map
     if _channel_key_map is not None:
         return _channel_key_map
@@ -36,11 +37,17 @@ def _load_channel_key_map():
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:
             config = json.load(f)
-        # Config format: {"yt_1": "GEMINI_API_KEY_1", ...}
-        for channel, env_var in config.items():
-            resolved = os.environ.get(env_var, '')
-            if resolved and not resolved.startswith('GEMINI_'):
-                _channel_key_map[channel] = resolved
+        # Config format: {"yt_1": ["GEMINI_API_KEY_1", "GEMINI_API_KEY_2"], ...}
+        for channel, env_vars in config.items():
+            if isinstance(env_vars, str):
+                env_vars = [env_vars]  # Legacy single-key support
+            keys = []
+            for ev in env_vars:
+                resolved = os.environ.get(ev, '')
+                if resolved and not resolved.startswith('GEMINI_'):
+                    keys.append(resolved)
+            if keys:
+                _channel_key_map[channel] = keys
 
     # Fallback: try env vars directly (GEMINI_API_KEY_1..7)
     if not _channel_key_map:
@@ -50,14 +57,15 @@ def _load_channel_key_map():
             key = os.environ.get(f'GEMINI_API_KEY_{i}', '')
             if key:
                 channel = index_to_channel.get(i, f'idx_{i}')
-                _channel_key_map[channel] = key
+                _channel_key_map[channel] = [key]
 
     return _channel_key_map
 
 
-def _get_key_for_account(account_id=None):
-    """Get the DEDICATED Gemini API key for a specific account.
-    Each channel uses ONLY its own key — no borrowing.
+def _get_keys_for_account(account_id=None):
+    """Get the DEDICATED Gemini API key LIST for a specific account.
+    Returns list of keys [primary, backup] for failover.
+    Each channel uses ONLY its own keys — no borrowing.
     """
     key_map = _load_channel_key_map()
 
@@ -69,57 +77,64 @@ def _get_key_for_account(account_id=None):
         # Resolve via ACCOUNT_GEMINI_MAP (category name → index → channel)
         key_index = ACCOUNT_GEMINI_MAP.get(account_id)
         if key_index:
-            # Find channel name for this index
             for ch, idx in ACCOUNT_GEMINI_MAP.items():
                 if idx == key_index and ch in key_map:
                     return key_map[ch]
 
-    # No account_id or not found — return None (do NOT borrow other channel's key)
-    return None
+    return []
 
 
 def call_gemini(prompt, account_id=None, max_retries=3):
-    """Call Gemini API with DEDICATED per-channel key.
-    Each channel uses ONLY its own key — no round-robin, no borrowing.
+    """Call Gemini API with DEDICATED per-channel key + failover.
+    Each channel has [primary, backup] keys.
+    If primary fails, automatically tries backup before giving up.
 
     Args:
         prompt: Text prompt for Gemini
         account_id: Channel ID (yt_1..yt_5, tt_1, fb_1) or category name
-        max_retries: Number of retries on transient errors
+        max_retries: Number of retries per key on transient errors
     """
-    api_key = _get_key_for_account(account_id)
-    if not api_key:
+    api_keys = _get_keys_for_account(account_id)
+    if not api_keys:
         print(f"  [WARN] No Gemini API key for account={account_id}")
         return None
 
     key_index = ACCOUNT_GEMINI_MAP.get(account_id, '?')
 
-    for attempt in range(max_retries):
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "temperature": 0.8,
-                    "maxOutputTokens": 1024,
-                }
-            }
-            resp = requests.post(url, json=payload, timeout=30)
+    for key_num, api_key in enumerate(api_keys):
+        key_label = f"key#{key_index}" if key_num == 0 else f"backup#{key_index}"
 
-            if resp.status_code == 200:
-                data = resp.json()
-                text = data['candidates'][0]['content']['parts'][0]['text']
-                return text.strip()
-            elif resp.status_code == 429:
-                print(f"  [WARN] Gemini rate limited (key #{key_index}), retrying...")
-                time.sleep(2)
-                continue
-            else:
-                print(f"  [WARN] Gemini {resp.status_code}: {resp.text[:100]}")
-                continue
-        except Exception as e:
-            print(f"  [WARN] Gemini error: {e}")
-            continue
+        for attempt in range(max_retries):
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.8,
+                        "maxOutputTokens": 1024,
+                    }
+                }
+                resp = requests.post(url, json=payload, timeout=30)
+
+                if resp.status_code == 200:
+                    data = resp.json()
+                    text = data['candidates'][0]['content']['parts'][0]['text']
+                    return text.strip()
+                elif resp.status_code == 429:
+                    print(f"  [WARN] Gemini rate limited ({key_label}), "
+                          f"{'retrying...' if attempt < max_retries-1 else 'switching to backup...'}")
+                    time.sleep(2)
+                    continue
+                else:
+                    print(f"  [WARN] Gemini {resp.status_code} ({key_label}): {resp.text[:100]}")
+                    break  # Non-retryable error → try backup key
+            except Exception as e:
+                print(f"  [WARN] Gemini error ({key_label}): {e}")
+                break  # Network error → try backup key
+
+        # If we get here, this key failed all retries → try next key
+        if key_num < len(api_keys) - 1:
+            print(f"  [GEMINI] Primary key failed, trying backup key...")
 
     return None
 

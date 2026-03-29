@@ -381,12 +381,18 @@ def get_color_grading(account_id):
     return fallback.get(cat, 'clean_bright')
 
 
-_hf_router_counter = 0
-
 def get_hf_api_key(account_id):
-    """Get DEDICATED Hugging Face API key for an account (dual keys, alternating).
-    Each channel has 2 keys — no borrowing from other channels."""
-    global _hf_router_counter
+    """Get DEDICATED Hugging Face API key for an account (dual keys, failover).
+    Each channel has 2 keys — no borrowing from other channels.
+    Returns primary key. Use get_hf_api_keys() for failover list."""
+    keys = get_hf_api_keys(account_id)
+    return keys[0] if keys else ''
+
+
+def get_hf_api_keys(account_id):
+    """Get ALL Hugging Face API keys for an account (for failover).
+    Returns list: [primary_key, backup_key].
+    If primary fails (429/error), caller should try backup."""
     import os, json
     hf_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'hf_config.json')
     if os.path.exists(hf_path):
@@ -399,14 +405,17 @@ def get_hf_api_key(account_id):
         }
         key = acct_map.get(account_id)
         if not key or key not in mapping:
-            return ''  # Unknown account — do NOT borrow other channel's key
+            return []  # Unknown account — do NOT borrow other channel's key
         env_vars = mapping[key]
         if isinstance(env_vars, str):
             env_vars = [env_vars]
-        idx = _hf_router_counter % len(env_vars)
-        _hf_router_counter += 1
-        return os.environ.get(env_vars[idx], '')
-    return ''  # No config = no key (do NOT borrow)
+        keys = []
+        for ev in env_vars:
+            resolved = os.environ.get(ev, '')
+            if resolved:
+                keys.append(resolved)
+        return keys
+    return []  # No config = no key (do NOT borrow)
 
 
 def get_style_copy(account_id):

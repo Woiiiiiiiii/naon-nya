@@ -1,9 +1,9 @@
 {
-    "yt_1": "GEMINI_API_KEY_1",
-    "yt_2": "GEMINI_API_KEY_2",
-    "yt_3": "GEMINI_API_KEY_3",
-    "yt_4": "GEMINI_API_KEY_4",
-    "yt_5": "GEMINI_API_KEY_5",
-    "tt_1": "GEMINI_API_KEY_6",
-    "fb_1": "GEMINI_API_KEY_7"
+    "yt_1": ["GEMINI_API_KEY_1", "GEMINI_API_KEY_2"],
+    "yt_2": ["GEMINI_API_KEY_2", "GEMINI_API_KEY_3"],
+    "yt_3": ["GEMINI_API_KEY_3", "GEMINI_API_KEY_4"],
+    "yt_4": ["GEMINI_API_KEY_4", "GEMINI_API_KEY_5"],
+    "yt_5": ["GEMINI_API_KEY_5", "GEMINI_API_KEY_1"],
+    "tt_1": ["GEMINI_API_KEY_6", "GEMINI_API_KEY_7"],
+    "fb_1": ["GEMINI_API_KEY_7", "GEMINI_API_KEY_6"]
 }
