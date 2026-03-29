@@ -1,4 +1,4 @@
-﻿"""
+"""
 qc_engine.py
 Quality Control Engine â€” checks every generated video against latest specs.
 
@@ -110,25 +110,54 @@ def run_qc(video_dir):
     failed = []
     warnings = []
 
-    # --- PRE-CHECK: Images ---
-    print("\n--- Pre-Check: Product Images ---")
-    if os.path.exists(img_dir):
-        images = [f for f in os.listdir(img_dir) if f.endswith(('.jpg', '.png', '.jpeg'))]
+    # --- PRE-CHECK: Images (ONLY queued products) ---
+    print("\n--- Pre-Check: Product Images (queued only) ---")
+    queued_ids = set()
+    queue_dir = "engine/queue"
+    for qf_name in ['yt_queue.jsonl', 'tt_queue.jsonl', 'fb_queue.jsonl']:
+        qf_path = os.path.join(queue_dir, qf_name)
+        if os.path.exists(qf_path):
+            with open(qf_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        try:
+                            job = json.loads(line.strip())
+                            pid = job.get('produk_id', '')
+                            if pid:
+                                queued_ids.add(pid)
+                        except Exception:
+                            pass
+
+    if queued_ids and os.path.exists(img_dir):
         placeholder_count = 0
         real_count = 0
         
-        for img_file in images:
-            img_path = os.path.join(img_dir, img_file)
+        for pid in queued_ids:
+            img_path = None
+            for ext in ['jpg', 'png', 'jpeg', 'webp']:
+                p = os.path.join(img_dir, f"{pid}.{ext}")
+                if os.path.exists(p):
+                    img_path = p
+                    break
+            
+            if img_path is None:
+                print(f"  [WARN] {pid}: No image found")
+                placeholder_count += 1
+                continue
+            
             if is_placeholder_image(img_path):
                 placeholder_count += 1
-                print(f"  [WARN] {img_file}: Placeholder image detected (low color variance)")
+                print(f"  [WARN] {os.path.basename(img_path)}: Placeholder (low variance)")
             else:
                 real_count += 1
-                print(f"  [OK] {img_file}: Real product image")
+                print(f"  [OK] {os.path.basename(img_path)}: Real product image")
         
+        print(f"  Checked {len(queued_ids)} queued products: {real_count} real, {placeholder_count} placeholder/missing")
         if real_count == 0 and placeholder_count > 0:
-            warnings.append("ALL product images are placeholders â€” video visuals will be poor")
-            print(f"  [!!] WARNING: All {placeholder_count} images are placeholders!")
+            warnings.append("ALL queued product images are placeholders/missing")
+            print(f"  [!!] WARNING: All queued images are placeholders!")
+    elif not queued_ids:
+        print(f"  [SKIP] No queued products found — nothing to check")
     else:
         warnings.append("Image directory not found")
         print(f"  [!!] Image directory '{img_dir}' not found!")
