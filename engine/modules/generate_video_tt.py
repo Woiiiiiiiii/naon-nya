@@ -303,17 +303,17 @@ def generate_video_tt(queue_file, output_dir):
             
             feat_text = f"{desc[:60]}" if desc else "Fitur terbaik"
             feat_img = render_text_image(feat_text, font_path or "arial.ttf",
-                                         44, (255, 255, 255), (40, 167, 69, 230), txt_w, 20,
-                                         style='glass')
+                                         44, (255, 255, 255), (*TT_ACCENT, 230), txt_w, 20,
+                                         style='frosted')
             
             verdict_text = f"Rating {rating_val}/5 | {sold_count:,}+ Terjual"
             verdict_img = render_text_image(verdict_text, font_bold or font_path,
-                                           42, (255, 255, 255), (40, 167, 69, 230), txt_w, 18,
-                                           style='glow')
+                                           42, (255, 255, 255), (*TT_ACCENT, 230), txt_w, 18,
+                                           style='frosted')
             
             cta_img = render_text_image(f" {cta_text}", font_bold or font_path,
                                         54, (255, 255, 255), (220, 53, 69, 245), txt_w, 26,
-                                        style='gradient_pill')
+                                        style='frosted')
 
             INTRO_SLIDE = 1.2  # Faster for TikTok, but still gradual
 

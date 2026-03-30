@@ -379,8 +379,8 @@ def generate_shorts(queue_file, output_dir):
             
             feat_text = f"{desc[:70]}" if desc else "Fitur unggulan produk ini"
             feat_img = render_text_image(feat_text, font_path or "arial.ttf",
-                                         42, (255, 255, 255), (40, 167, 69, 220), txt_w, 18,
-                                         style='glass')
+                                         42, (255, 255, 255), (*accent, 220), txt_w, 18,
+                                         style='frosted')
             
             review_bubble = create_chat_bubble("Bagus banget, recommended!",
                                                font_path or "arial.ttf", side='left',
@@ -388,12 +388,12 @@ def generate_shorts(queue_file, output_dir):
             
             verdict_text = f"Rating {rating_val}/5 | {sold_count:,}+ Terjual"
             verdict_img = render_text_image(verdict_text, font_bold or font_path,
-                                           42, (255, 255, 255), (40, 167, 69, 225), txt_w, 18,
-                                           style='glow')
+                                           42, (255, 255, 255), (*accent, 225), txt_w, 18,
+                                           style='frosted')
             
             cta_img = render_text_image(f" {cta_text}", font_bold or font_path,
                                         50, (255, 255, 255), (220, 53, 69, 240), txt_w, 24,
-                                        style='gradient_pill')
+                                        style='frosted')
 
             INTRO_SLIDE = 1.8
 

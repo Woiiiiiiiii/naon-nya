@@ -431,6 +431,17 @@ def render_text_image(text, font_path, font_size, text_color, bg_color,
         d.rounded_rectangle([0, 6, 5, ih - 6], radius=3,
                            fill=(br, bg_g, bb_c, 255))
 
+    elif style == 'frosted':
+        # Premium frosted dark glass - elegant over busy backgrounds
+        d.rounded_rectangle([0, 0, iw, ih], radius=radius + 6,
+                           fill=(10, 10, 18, int(ba * 0.75)))
+        # Subtle accent glow border
+        d.rounded_rectangle([0, 0, iw, ih], radius=radius + 6,
+                           outline=(br, bg_g, bb_c, 90), width=2)
+        # Inner subtle highlight
+        d.rounded_rectangle([3, 3, iw - 3, ih - 3], radius=max(radius + 3, 6),
+                           outline=(255, 255, 255, 25), width=1)
+
     else:
         # Fallback â€” original plain style
         d.rounded_rectangle([0, 0, iw, ih], radius=radius, fill=bg_color)

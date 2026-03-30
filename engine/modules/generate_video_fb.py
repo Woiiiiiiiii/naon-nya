@@ -300,8 +300,8 @@ def generate_video_fb(queue_file, output_dir):
             
             feat_text = f"{desc[:90]}" if desc else "Fitur unggulan produk ini"
             feat_img = render_text_image(feat_text, font_path or "arial.ttf",
-                                         42, (255, 255, 255), (40, 167, 69, 215), txt_w, 18,
-                                         style='glass')
+                                         42, (255, 255, 255), (*accent, 215), txt_w, 18,
+                                         style='frosted')
             
             reviews = [
                 ("Bagus banget, sesuai deskripsi!", 'left', accent),
@@ -313,12 +313,12 @@ def generate_video_fb(queue_file, output_dir):
             
             verdict_text = f"Rating: {rating_val}/5 | {sold_count:,}+ Terjual"
             verdict_img = render_text_image(verdict_text, font_bold or font_path,
-                                           42, (255, 255, 255), (40, 167, 69, 225), txt_w, 20,
-                                           style='glow')
+                                           42, (255, 255, 255), (*accent, 225), txt_w, 20,
+                                           style='frosted')
             
             cta_img = render_text_image(f" {cta_text}", font_bold or font_path,
                                         48, (255, 255, 255), (220, 53, 69, 235), txt_w, 22,
-                                        style='gradient_pill')
+                                        style='frosted')
 
             INTRO_SLIDE = 2.0
 

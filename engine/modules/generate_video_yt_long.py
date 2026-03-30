@@ -370,13 +370,13 @@ def generate_long(queue_file, output_dir):
             # Stage 5: fitur + review
             feat_text = f"{desc[:80]}" if desc else "Fitur unggulan produk ini"
             feat_img = render_text_image(feat_text, font_path or "arial.ttf",
-                                         44, (255, 255, 255), (40, 167, 69, 220), txt_w, 20,
-                                         style='glass')
+                                         44, (255, 255, 255), (*accent, 200), txt_w, 20,
+                                         style='frosted')
             
             detail2_text = "Kualitas premium, tahan lama"
             detail2_img = render_text_image(detail2_text, font_path or "arial.ttf",
-                                            42, (255, 255, 255), (0, 123, 255, 210), txt_w, 18,
-                                            style='gradient_pill')
+                                            42, (255, 255, 255), (*accent, 200), txt_w, 18,
+                                            style='frosted')
             
             review_text = "Bagus banget, sesuai deskripsi! Recommended "
             review_bubble = create_chat_bubble(review_text, font_path or "arial.ttf",
@@ -384,13 +384,13 @@ def generate_long(queue_file, output_dir):
             
             verdict_text = f"Rating: {rating_val}/5 | {sold_count:,}+ Terjual"
             verdict_img = render_text_image(verdict_text, font_bold or font_path,
-                                           44, (255, 255, 255), (40, 167, 69, 230), txt_w, 22,
-                                           style='glow')
+                                           44, (255, 255, 255), (*accent, 220), txt_w, 22,
+                                           style='frosted')
             
             # Stage 7: CTA
             cta_img = render_text_image(f" {cta_text}", font_bold or font_path,
                                         50, (255, 255, 255), (220, 53, 69, 240), txt_w, 24,
-                                        style='gradient_pill')
+                                        style='frosted')
 
             INTRO_SLIDE = 2.5  # Slow, gradual slide for Stage 1
 
