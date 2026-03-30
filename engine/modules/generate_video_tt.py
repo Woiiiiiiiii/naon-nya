@@ -286,11 +286,11 @@ def generate_video_tt(queue_file, output_dir):
             
             plain_bg = create_plain_gradient(TT_ACCENT, (W, H))
             nama_img = render_outline_text(nama, font_bold or font_path,
-                                           68, outline_color=(255, 255, 255),
+                                           90, outline_color=(255, 255, 255),
                                            stroke_width=3, max_width=txt_w)
-            teaser_img = render_text_image(hook_text, font_path or "arial.ttf",
-                                          44, (255, 255, 255), (0, 0, 0, 170), txt_w, 20,
-                                          style='glass')
+            teaser_img = render_outline_text(hook_text, font_path or "arial.ttf",
+                                            42, outline_color=(200, 200, 200),
+                                            stroke_width=2, max_width=txt_w)
             
             top_nama_img = render_text_image(nama, font_bold or font_path,
                                             44, (255, 255, 255), (*TT_ACCENT, 230), txt_w, 16,

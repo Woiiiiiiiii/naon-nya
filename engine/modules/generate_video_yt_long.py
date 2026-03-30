@@ -348,14 +348,14 @@ def generate_long(queue_file, output_dir):
             # Pre-render text overlays
             txt_w = W - 120
             
-            # Stage 1: outline text (hollow, no bg) + teaser
+            # Stage 1: outline text (hollow, no bg) — clean & elegant
             plain_bg = create_plain_gradient(accent, (W, H))
             nama_img = render_outline_text(nama, font_bold or font_path,
-                                           80, outline_color=(255, 255, 255),
-                                           stroke_width=3, max_width=txt_w)
-            teaser_img = render_text_image(hook_text, font_path or "arial.ttf",
-                                          42, (255, 255, 255), (0, 0, 0, 160), txt_w, 18,
-                                          style='glass')
+                                           120, outline_color=(255, 255, 255),
+                                           stroke_width=4, max_width=txt_w)
+            teaser_img = render_outline_text(hook_text, font_path or "arial.ttf",
+                                            48, outline_color=(200, 200, 200),
+                                            stroke_width=2, max_width=txt_w)
             
             # Stage 3: nama + harga (top bar - compact)
             top_nama_img = render_text_image(nama, font_bold or font_path,

@@ -362,11 +362,11 @@ def generate_shorts(queue_file, output_dir):
             
             plain_bg = create_plain_gradient(accent, (W, H))
             nama_img = render_outline_text(nama, font_bold or font_path,
-                                           74, outline_color=(255, 255, 255),
-                                           stroke_width=3, max_width=txt_w)
-            teaser_img = render_text_image(hook_text, font_path or "arial.ttf",
-                                          42, (255, 255, 255), (0, 0, 0, 160), txt_w, 18,
-                                          style='glass')
+                                           110, outline_color=(255, 255, 255),
+                                           stroke_width=4, max_width=txt_w)
+            teaser_img = render_outline_text(hook_text, font_path or "arial.ttf",
+                                            44, outline_color=(200, 200, 200),
+                                            stroke_width=2, max_width=txt_w)
             
             top_nama_img = render_text_image(nama, font_bold or font_path,
                                             42, (255, 255, 255), (*accent, 220), txt_w, 14,
