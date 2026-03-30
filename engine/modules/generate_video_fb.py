@@ -246,6 +246,7 @@ def generate_video_fb(queue_file, output_dir):
         # S7 = 51 - total_dur: CTA
         
         SLIDE_DUR = 1.0
+        PROD_SLIDE = 1.8  # Slower product entry
 
         kb_dirs = ['zoom_in', 'pan_left', 'pan_right', 'zoom_out', 'pan_up']
         random.shuffle(kb_dirs)
@@ -269,7 +270,7 @@ def generate_video_fb(queue_file, output_dir):
                     prod_img_pil = prod_img_pil.convert('RGB')
                 prod_img_pil = auto_trim_whitespace(prod_img_pil, is_transp)
                 pw, ph = prod_img_pil.size
-                prod_scale = min(W / pw, H / ph) * 0.65
+                prod_scale = min(W / pw, H / ph) * 0.85
                 prod_w = int(pw * prod_scale)
                 prod_h = int(ph * prod_scale)
                 prod_img_pil = prod_img_pil.resize((prod_w, prod_h), Image.LANCZOS)
@@ -362,8 +363,8 @@ def generate_video_fb(queue_file, output_dir):
                     frame = _ken_burns(bg, t % 12, 12, 'zoom_in')
                     frame = draw_frame_border(frame, accent_color=border_color)
                     prod_t = t - S1_END
-                    if prod_t < SLIDE_DUR:
-                        x_off = slide_element_x(prod_t, SLIDE_DUR, 'in_right')
+                    if prod_t < PROD_SLIDE:
+                        x_off = slide_element_x(prod_t, PROD_SLIDE, 'in_right')
                     elif t > S3_END:
                         x_off = slide_element_x(t - S3_END, S4_END - S3_END, 'out_right')
                     else:

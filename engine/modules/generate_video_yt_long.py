@@ -312,6 +312,7 @@ def generate_long(queue_file, output_dir):
         # S7 = 85 - total_dur: CTA
         
         SLIDE_DUR = 1.2  # Duration of slide animations
+        PROD_SLIDE = 2.0  # Slower product entry
 
         try:
             # === LOAD COMPOSITE IMAGES (for backgrounds) ===
@@ -334,7 +335,7 @@ def generate_long(queue_file, output_dir):
                     prod_img_pil = prod_img_pil.convert('RGB')
                 prod_img_pil = auto_trim_whitespace(prod_img_pil, is_transp)
                 pw, ph = prod_img_pil.size
-                prod_scale = min(W / pw, H / ph) * 0.65
+                prod_scale = min(W / pw, H / ph) * 0.85
                 prod_w = int(pw * prod_scale)
                 prod_h = int(ph * prod_scale)
                 prod_img_pil = prod_img_pil.resize((prod_w, prod_h), Image.LANCZOS)
@@ -447,8 +448,8 @@ def generate_long(queue_file, output_dir):
                     prod_t = t - S1_END
                     
                     # Product slides in from right (first SLIDE_DUR)
-                    if prod_t < SLIDE_DUR:
-                        x_off = slide_element_x(prod_t, SLIDE_DUR, 'in_right')
+                    if prod_t < PROD_SLIDE:
+                        x_off = slide_element_x(prod_t, PROD_SLIDE, 'in_right')
                     # Product exits right (last 1.5s before S4_END)
                     elif t > S3_END:
                         exit_t = t - S3_END
