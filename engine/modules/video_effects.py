@@ -432,9 +432,9 @@ def render_text_image(text, font_path, font_size, text_color, bg_color,
                            fill=(br, bg_g, bb_c, 255))
 
     elif style == 'frosted':
-        # Premium frosted dark glass - elegant over busy backgrounds
+        # Premium frosted dark glass - semi-transparent, product still visible
         d.rounded_rectangle([0, 0, iw, ih], radius=radius + 6,
-                           fill=(10, 10, 18, int(ba * 0.75)))
+                           fill=(10, 10, 18, int(ba * 0.40)))
         # Subtle accent glow border
         d.rounded_rectangle([0, 0, iw, ih], radius=radius + 6,
                            outline=(br, bg_g, bb_c, 90), width=2)
