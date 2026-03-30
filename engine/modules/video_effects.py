@@ -127,6 +127,9 @@ def draw_frame_border(frame_arr, accent_color=(200, 180, 130), thickness=4, marg
 def slide_element_x(t, duration, direction='in_left', canvas_w=W):
     """Calculate X position for horizontal slide animation.
     
+    Uses smooth ease-in-out: starts slow, speeds up in middle, slows at end.
+    This creates a visible, gradual slide from edge to center.
+    
     Directions:
       'in_left'   — slide in from left edge to center
       'in_right'  — slide in from right edge to center
@@ -136,7 +139,13 @@ def slide_element_x(t, duration, direction='in_left', canvas_w=W):
     Returns: x_offset (0 = centered, negative = left, positive = right)
     """
     progress = min(1.0, max(0.0, t / max(duration, 0.01)))
-    ease = ease_out_cubic(progress)
+    
+    # Smooth ease-in-out: slow start, fast middle, slow end
+    # Makes movement feel gradual and natural
+    if progress < 0.5:
+        ease = 2 * progress * progress
+    else:
+        ease = 1 - (-2 * progress + 2) ** 2 / 2
     
     off_screen = canvas_w + 100  # Far enough to be invisible
     
