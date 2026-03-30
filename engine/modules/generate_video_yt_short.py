@@ -361,11 +361,21 @@ def generate_shorts(queue_file, output_dir):
             txt_w = W - 120
             
             plain_bg = create_plain_gradient(accent, (W, H))
+            
+            # Auto text color: dark text for bright bg, light text for dark bg
+            _lum = int(0.299 * accent[0] + 0.587 * accent[1] + 0.114 * accent[2])
+            if _lum > 140:  # Bright accent = dark text
+                _nama_color = (30, 30, 40)
+                _teaser_color = (60, 60, 70)
+            else:  # Dark accent = light text
+                _nama_color = (255, 255, 255)
+                _teaser_color = (200, 200, 210)
+            
             nama_img = render_outline_text(nama, font_bold or font_path,
-                                           110, outline_color=(255, 255, 255),
+                                           110, outline_color=_nama_color,
                                            stroke_width=4, max_width=txt_w)
             teaser_img = render_outline_text(hook_text, font_path or "arial.ttf",
-                                            44, outline_color=(200, 200, 200),
+                                            44, outline_color=_teaser_color,
                                             stroke_width=2, max_width=txt_w)
             
             top_nama_img = render_outline_text(nama, font_bold or font_path,
@@ -430,31 +440,28 @@ def generate_shorts(queue_file, output_dir):
                     frame = plain_bg.copy()
                     frame = draw_frame_border(frame, accent_color=border_color)
                     
-                    if t < INTRO_SLIDE:
-                        x_off = slide_element_x(t, INTRO_SLIDE, 'in_left')
-                    else:
-                        x_off = 0
                     nama_y = center_y - nama_img.height // 2 - 60
                     frame = paste_overlay_on_frame(frame, nama_img,
-                        (center_x - nama_img.width // 2 + x_off, nama_y))
+                        (center_x - nama_img.width // 2, nama_y))
                     
                     if t > 2.0:
-                        tt = t - 2.0
-                        tx_off = slide_element_x(tt, 1.5, 'in_left') if tt < 1.5 else 0
+                        _tt = t - 2.0
+                        _t_opacity = min(1.0, _tt / 1.0)
                         teaser_y = nama_y + nama_img.height + 28
                         frame = paste_overlay_on_frame(frame, teaser_img,
-                            (center_x - teaser_img.width // 2 + tx_off, teaser_y))
+                            (center_x - teaser_img.width // 2, teaser_y),
+                            opacity=_t_opacity)
                     
                     if t > S1_END - 1.2:
                         exit_t = t - (S1_END - 1.2)
-                        x_out = slide_element_x(exit_t, 1.2, 'out_left')
+                        fade_out = max(0.0, 1.0 - exit_t / 1.2)
                         frame2 = plain_bg.copy()
                         frame2 = draw_frame_border(frame2, accent_color=border_color)
                         frame2 = paste_overlay_on_frame(frame2, nama_img,
-                            (center_x - nama_img.width // 2 + x_out, nama_y))
+                            (center_x - nama_img.width // 2, nama_y), opacity=fade_out)
                         if t > 2.0:
                             frame2 = paste_overlay_on_frame(frame2, teaser_img,
-                                (center_x - teaser_img.width // 2 + x_out, teaser_y))
+                                (center_x - teaser_img.width // 2, teaser_y), opacity=fade_out)
                         frame = frame2
                 
                 elif t < S4_END:
