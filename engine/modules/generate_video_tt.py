@@ -303,12 +303,12 @@ def generate_video_tt(queue_file, output_dir):
                                             stroke_width=2, max_width=txt_w)
             
             top_nama_img = render_outline_text(nama, font_bold or font_path,
-                                              44, outline_color=(255, 255, 255),
+                                              44, outline_color=_nama_color,
                                               stroke_width=2, max_width=txt_w)
             top_harga_img = None
             if harga:
                 top_harga_img = render_outline_text(harga, font_bold or font_path or "arial.ttf",
-                                                    50, outline_color=(255, 220, 100),
+                                                    50, outline_color=(255, 220, 100) if _lum < 140 else (180, 120, 0),
                                                     stroke_width=2, max_width=txt_w)
             
             feat_text = f"{desc[:60]}" if desc else "Fitur terbaik"
@@ -330,12 +330,12 @@ def generate_video_tt(queue_file, output_dir):
             _ch_name = get_channel_name('tt_1')
             _ch_motto = get_channel_motto('tt_1')
             bot_channel_img = render_outline_text(f"@{_ch_name}", font_bold or font_path,
-                                                  38, outline_color=(255, 255, 255),
+                                                  38, outline_color=_nama_color,
                                                   stroke_width=2, max_width=txt_w)
             bot_motto_img = None
             if _ch_motto:
                 bot_motto_img = render_outline_text(_ch_motto, font_path or "arial.ttf",
-                                                    28, outline_color=(180, 180, 200),
+                                                    28, outline_color=_teaser_color,
                                                     stroke_width=1, max_width=txt_w)
 
             INTRO_SLIDE = 1.2  # Faster for TikTok, but still gradual
@@ -348,7 +348,7 @@ def generate_video_tt(queue_file, output_dir):
                 # Bottom bar helper (inside make_frame for center_x access)
                 def _render_bottom_bar(frame, opacity=1.0, x_offset=0):
                     bot_total_h = bot_channel_img.height + (bot_motto_img.height + 6 if bot_motto_img else 0)
-                    bot_y = H - 60 - bot_total_h
+                    bot_y = H - 100 - bot_total_h
                     frame = paste_overlay_on_frame(frame, bot_channel_img,
                         (center_x - bot_channel_img.width // 2 + x_offset, bot_y), opacity=opacity)
                     if bot_motto_img:
@@ -396,7 +396,7 @@ def generate_video_tt(queue_file, output_dir):
                         info_t = stage_t - 2.0
                         info_opacity = min(1.0, info_t / 1.0)
                         info_total_h = top_nama_img.height + (top_harga_img.height + 10 if top_harga_img else 0)
-                        top_y = 50
+                        top_y = 40
                         frame = paste_overlay_on_frame(frame, top_nama_img,
                             (center_x - top_nama_img.width // 2, top_y), opacity=info_opacity)
                         if top_harga_img:
@@ -414,7 +414,7 @@ def generate_video_tt(queue_file, output_dir):
                     
                     # Persistent nama + harga at top
                     info_total_h = top_nama_img.height + (top_harga_img.height + 10 if top_harga_img else 0)
-                    top_y = 50
+                    top_y = 40
                     frame = paste_overlay_on_frame(frame, top_nama_img,
                         (center_x - top_nama_img.width // 2, top_y))
                     if top_harga_img:

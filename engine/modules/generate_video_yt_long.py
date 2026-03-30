@@ -370,12 +370,12 @@ def generate_long(queue_file, output_dir):
             
             # Stage 3: nama + harga overlay (outline, no bg)
             top_nama_img = render_outline_text(nama, font_bold or font_path,
-                                              46, outline_color=(255, 255, 255),
+                                              46, outline_color=_nama_color,
                                               stroke_width=2, max_width=txt_w)
             top_harga_img = None
             if harga:
                 top_harga_img = render_outline_text(harga, font_bold or font_path or "arial.ttf",
-                                                    52, outline_color=(255, 220, 100),
+                                                    52, outline_color=(255, 220, 100) if _lum < 140 else (180, 120, 0),
                                                     stroke_width=2, max_width=txt_w)
             
             # Stage 5: fitur + review
@@ -406,12 +406,12 @@ def generate_long(queue_file, output_dir):
             # Bottom bar: channel name + motto (persistent from Stage 2)
             motto = get_channel_motto(acct_id)
             bot_channel_img = render_outline_text(f"@{channel}", font_bold or font_path,
-                                                  38, outline_color=(255, 255, 255),
+                                                  38, outline_color=_nama_color,
                                                   stroke_width=2, max_width=txt_w)
             bot_motto_img = None
             if motto:
                 bot_motto_img = render_outline_text(motto, font_path or "arial.ttf",
-                                                    28, outline_color=(180, 180, 200),
+                                                    28, outline_color=_teaser_color,
                                                     stroke_width=1, max_width=txt_w)
 
             INTRO_SLIDE = 2.5  # Slow, gradual slide for Stage 1
@@ -423,7 +423,7 @@ def generate_long(queue_file, output_dir):
                 # Bottom bar helper (inside make_frame for center_x access)
                 def _render_bottom_bar(frame, opacity=1.0, x_offset=0):
                     bot_total_h = bot_channel_img.height + (bot_motto_img.height + 6 if bot_motto_img else 0)
-                    bot_y = H - 60 - bot_total_h
+                    bot_y = H - 100 - bot_total_h
                     frame = paste_overlay_on_frame(frame, bot_channel_img,
                         (center_x - bot_channel_img.width // 2 + x_offset, bot_y), opacity=opacity)
                     if bot_motto_img:
@@ -485,7 +485,7 @@ def generate_long(queue_file, output_dir):
                         info_opacity = min(1.0, info_t / 1.5)
                         
                         info_total_h = top_nama_img.height + (top_harga_img.height + 10 if top_harga_img else 0)
-                        top_y = 60
+                        top_y = 40
                         frame = paste_overlay_on_frame(frame, top_nama_img,
                             (center_x - top_nama_img.width // 2, top_y), opacity=info_opacity)
                         if top_harga_img:
