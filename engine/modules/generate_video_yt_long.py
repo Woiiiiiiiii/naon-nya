@@ -439,39 +439,22 @@ def generate_long(queue_file, output_dir):
                         frame = frame2
                 
                 # ═══════════════════════════════════════════
-                # STAGE 2-3: Product image slides in + sways
+                # STAGE 2-3: Composite bg (product in bg) + nama+harga overlay
                 # ═══════════════════════════════════════════
-                elif t < S4_END and prod_img_pil:
-                    frame = plain_bg.copy()
+                elif t < S4_END:
+                    bg_idx = int(t / 15) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 15, 15, 'zoom_in')
                     frame = draw_frame_border(frame, accent_color=border_color)
-                    prod_t = t - S1_END
                     
-                    # Product slides in from right (first SLIDE_DUR)
-                    if prod_t < PROD_SLIDE:
-                        x_off = slide_element_x(prod_t, PROD_SLIDE, 'in_right')
-                    # Product exits right (last 1.5s before S4_END)
-                    elif t > S3_END:
-                        exit_t = t - S3_END
-                        x_off = slide_element_x(exit_t, S4_END - S3_END, 'out_right')
-                    else:
-                        # Sway left-right gently
-                        x_off = sway_x(prod_t, amplitude=20, period=3.5)
-                    
-                    prod_x = center_x - prod_w // 2 + x_off
-                    prod_y = center_y - prod_h // 2 + 40
-                    frame = paste_overlay_on_frame(frame, prod_img_pil, (prod_x, prod_y))
-                    
-                    # Nama + harga fade in when product settles (after PROD_SLIDE)
-                    if prod_t > PROD_SLIDE and t < S3_END:
-                        info_t = prod_t - PROD_SLIDE
-                        info_opacity = min(1.0, info_t / 1.5)  # 1.5s gradual fade
+                    # Nama + harga fade in after 3s
+                    stage_t = t - S1_END
+                    if stage_t > 3.0 and t < S3_END:
+                        info_t = stage_t - 3.0
+                        info_opacity = min(1.0, info_t / 1.5)
                         
-                        # Position: centered between frame border top (30px) and product top
-                        frame_top = 30  # pigura margin
-                        prod_top = prod_y
                         info_total_h = top_nama_img.height + (top_harga_img.height + 10 if top_harga_img else 0)
-                        top_y = frame_top + (prod_top - frame_top - info_total_h) // 2
-                        
+                        top_y = 60
                         frame = paste_overlay_on_frame(frame, top_nama_img,
                             (center_x - top_nama_img.width // 2, top_y), opacity=info_opacity)
                         if top_harga_img:
@@ -483,7 +466,9 @@ def generate_long(queue_file, output_dir):
                 # STAGE 5: Feature/review text
                 # ═══════════════════════════════════════════
                 elif t < S6_END:
-                    frame = plain_bg.copy()
+                    bg_idx = int(t / 15) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 15, 15, 'zoom_in')
                     frame = draw_frame_border(frame, accent_color=border_color)
                     stage_t = t - S4_END
                     
@@ -556,7 +541,7 @@ def generate_long(queue_file, output_dir):
                     if t > S5_END:
                         exit_t = t - S5_END
                         x_out = slide_element_x(exit_t, S6_END - S5_END, 'out_right')
-                        frame2 = plain_bg.copy()
+                        frame2 = _ken_burns(bg, t % 15, 15, 'zoom_in')
                         frame2 = draw_frame_border(frame2, accent_color=border_color)
                         # Nama+harga exit too
                         frame2 = paste_overlay_on_frame(frame2, top_nama_img,
@@ -582,7 +567,9 @@ def generate_long(queue_file, output_dir):
                 # STAGE 7: CTA closing
                 # ═══════════════════════════════════════════
                 else:
-                    frame = plain_bg.copy()
+                    bg_idx = int(t / 15) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 15, 15, 'zoom_in')
                     frame = draw_frame_border(frame, accent_color=border_color)
                     cta_t = t - S6_END
                     

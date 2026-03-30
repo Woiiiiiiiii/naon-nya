@@ -358,28 +358,18 @@ def generate_video_fb(queue_file, output_dir):
                                 (center_x - teaser_img.width // 2 + x_out, teaser_y))
                         frame = frame2
                 
-                elif t < S4_END and prod_img_pil:
-                    frame = plain_bg.copy()
+                elif t < S4_END:
+                    bg_idx = int(t / 12) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 12, 12, 'zoom_in')
                     frame = draw_frame_border(frame, accent_color=border_color)
-                    prod_t = t - S1_END
-                    if prod_t < PROD_SLIDE:
-                        x_off = slide_element_x(prod_t, PROD_SLIDE, 'in_right')
-                    elif t > S3_END:
-                        x_off = slide_element_x(t - S3_END, S4_END - S3_END, 'out_right')
-                    else:
-                        x_off = sway_x(prod_t, amplitude=18, period=4.0)
                     
-                    prod_x = center_x - prod_w // 2 + x_off
-                    prod_y = center_y - prod_h // 2 + 40
-                    frame = paste_overlay_on_frame(frame, prod_img_pil, (prod_x, prod_y))
-                    
-                    if prod_t > PROD_SLIDE and t < S3_END:
-                        info_t = prod_t - PROD_SLIDE
+                    stage_t = t - S1_END
+                    if stage_t > 3.0 and t < S3_END:
+                        info_t = stage_t - 3.0
                         info_opacity = min(1.0, info_t / 1.5)
-                        frame_top = 30
-                        prod_top = prod_y
                         info_total_h = top_nama_img.height + (top_harga_img.height + 10 if top_harga_img else 0)
-                        top_y = frame_top + (prod_top - frame_top - info_total_h) // 2
+                        top_y = 60
                         frame = paste_overlay_on_frame(frame, top_nama_img,
                             (center_x - top_nama_img.width // 2, top_y), opacity=info_opacity)
                         if top_harga_img:
@@ -388,7 +378,9 @@ def generate_video_fb(queue_file, output_dir):
                                 opacity=info_opacity)
                 
                 elif t < S6_END:
-                    frame = plain_bg.copy()
+                    bg_idx = int(t / 12) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 12, 12, 'zoom_in')
                     frame = draw_frame_border(frame, accent_color=border_color)
                     stage_t = t - S4_END
                     
@@ -430,7 +422,7 @@ def generate_video_fb(queue_file, output_dir):
                     if t > S5_END:
                         exit_t = t - S5_END
                         x_out = slide_element_x(exit_t, S6_END - S5_END, 'out_right')
-                        frame2 = plain_bg.copy()
+                        frame2 = _ken_burns(bg, t % 12, 12, 'zoom_in')
                         frame2 = draw_frame_border(frame2, accent_color=border_color)
                         frame2 = paste_overlay_on_frame(frame2, top_nama_img,
                             (center_x - top_nama_img.width // 2 + x_out, top_y))
@@ -452,7 +444,9 @@ def generate_video_fb(queue_file, output_dir):
                         frame = frame2
                 
                 else:
-                    frame = plain_bg.copy()
+                    bg_idx = int(t / 12) % len(composites)
+                    bg = composites[bg_idx]
+                    frame = _ken_burns(bg, t % 12, 12, 'zoom_in')
                     frame = draw_frame_border(frame, accent_color=border_color)
                     cta_t = t - S6_END
                     cx_off = slide_element_x(cta_t, SLIDE_DUR, 'in_left') if cta_t < SLIDE_DUR else 0
