@@ -20,26 +20,31 @@ YOUTUBE_CATEGORIES = {
         'category': 'fashion',
         'label': 'Fashion & Aksesoris',
         'channel': 'PantauProduk',
+        'motto': 'Gaya Terbaik, Harga Terjangkau',
     },
     'yt_2': {
         'category': 'gadget',
         'label': 'Gadget & Tech',
         'channel': 'CekVideo',
+        'motto': 'Review Gadget Tanpa Basa-basi',
     },
     'yt_3': {
         'category': 'beauty',
         'label': 'Skincare & Beauty',
         'channel': 'ReviewKilat',
+        'motto': 'Cantik Cerdas, Pilih yang Tepat',
     },
     'yt_4': {
         'category': 'home',
         'label': 'Home & Living',
         'channel': 'IntipProduk',
+        'motto': 'Rumah Nyaman, Hidup Tenang',
     },
     'yt_5': {
         'category': 'wellness',
         'label': 'Health & Wellness',
         'channel': 'TinjauCepat',
+        'motto': 'Sehat Itu Investasi Terbaik',
     },
 }
 
@@ -64,7 +69,13 @@ def _get_fb_category():
     else:              # Even days
         return {'account_id': 'fb_1', 'category': 'gadget', 'label': 'Gadget & Tech'}
 
-# Legacy compat — dynamic properties
+# TT & FB channel identity
+TT_CHANNEL = 'TrendSpot'
+TT_MOTTO = 'Produk Viral, Harga Real'
+FB_CHANNEL = 'SmartPick ID'
+FB_MOTTO = 'Pilihan Cerdas Setiap Hari'
+
+# Legacy compat
 TIKTOK_ACCOUNT = _get_tt_category()
 FACEBOOK_ACCOUNT = _get_fb_category()
 
@@ -290,10 +301,25 @@ def get_label(account_id):
 
 
 def get_channel_name(account_id):
-    """Get YouTube channel name for an account."""
+    """Get channel name for an account."""
     if account_id in YOUTUBE_CATEGORIES:
         return YOUTUBE_CATEGORIES[account_id]['channel']
+    if account_id == 'tt_1':
+        return TT_CHANNEL
+    if account_id == 'fb_1':
+        return FB_CHANNEL
     return account_id
+
+
+def get_channel_motto(account_id):
+    """Get channel motto/tagline for an account."""
+    if account_id in YOUTUBE_CATEGORIES:
+        return YOUTUBE_CATEGORIES[account_id].get('motto', '')
+    if account_id == 'tt_1':
+        return TT_MOTTO
+    if account_id == 'fb_1':
+        return FB_MOTTO
+    return ''
 
 
 def get_keywords(category, keyword_type='scrape'):

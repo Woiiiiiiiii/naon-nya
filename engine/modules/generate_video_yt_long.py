@@ -27,7 +27,7 @@ from moviepy import (VideoClip, ImageClip, AudioFileClip, CompositeAudioClip,
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from engine.modules.category_router import (
     get_category, get_accent_color, get_copywriting,
-    get_channel_name, VIDEO_DURATION
+    get_channel_name, get_channel_motto, VIDEO_DURATION
 )
 from engine.modules.video_effects import (
     render_text_image, paste_overlay_on_frame,
@@ -391,8 +391,33 @@ def generate_long(queue_file, output_dir):
             cta_img = render_text_image(f" {cta_text}", font_bold or font_path,
                                         50, (255, 255, 255), (220, 53, 69, 240), txt_w, 24,
                                         style='frosted')
+            
+            # Bottom bar: channel name + motto (persistent from Stage 2)
+            motto = get_channel_motto(acct_id)
+            bot_channel_img = render_outline_text(f"@{channel}", font_bold or font_path,
+                                                  38, outline_color=(255, 255, 255),
+                                                  stroke_width=2, max_width=txt_w)
+            bot_motto_img = None
+            if motto:
+                bot_motto_img = render_outline_text(motto, font_path or "arial.ttf",
+                                                    28, outline_color=(180, 180, 200),
+                                                    stroke_width=1, max_width=txt_w)
 
             INTRO_SLIDE = 2.5  # Slow, gradual slide for Stage 1
+
+
+            # Bottom bar helper
+            def _render_bottom_bar(frame, opacity=1.0, x_offset=0):
+                """Render channel name + motto at bottom of frame."""
+                bot_total_h = bot_channel_img.height + (bot_motto_img.height + 6 if bot_motto_img else 0)
+                bot_y = H - 60 - bot_total_h  # 60px from bottom
+                frame = paste_overlay_on_frame(frame, bot_channel_img,
+                    (center_x - bot_channel_img.width // 2 + x_offset, bot_y), opacity=opacity)
+                if bot_motto_img:
+                    motto_y = bot_y + bot_channel_img.height + 6
+                    frame = paste_overlay_on_frame(frame, bot_motto_img,
+                        (center_x - bot_motto_img.width // 2 + x_offset, motto_y), opacity=opacity)
+                return frame
 
             def make_frame(t):
                 center_x = W // 2
@@ -436,6 +461,7 @@ def generate_long(queue_file, output_dir):
                         if t > 3.0:
                             frame2 = paste_overlay_on_frame(frame2, teaser_img,
                                 (center_x - teaser_img.width // 2 + x_out, teaser_y))
+                        frame2 = _render_bottom_bar(frame2, x_offset=x_out)
                         frame = frame2
                 
                 # ═══════════════════════════════════════════
@@ -461,6 +487,8 @@ def generate_long(queue_file, output_dir):
                             harga_y = top_y + top_nama_img.height + 10
                             frame = paste_overlay_on_frame(frame, top_harga_img,
                                 (center_x - top_harga_img.width // 2, harga_y), opacity=info_opacity)
+                        # Bottom bar fades in same timing
+                        frame = _render_bottom_bar(frame, opacity=info_opacity)
                 
                 # ═══════════════════════════════════════════
                 # STAGE 5: Feature/review text
@@ -485,6 +513,7 @@ def generate_long(queue_file, output_dir):
                     
                     # Content area starts below nama+harga
                     content_top = top_y + info_total_h + 40
+                    frame = _render_bottom_bar(frame)
                     
                     # Feature text slides in from right
                     feat_start = 0.5
@@ -582,6 +611,7 @@ def generate_long(queue_file, output_dir):
                     cta_y = center_y - 100
                     frame = paste_overlay_on_frame(frame, cta_img,
                         (center_x - cta_img.width // 2 + cx_off, cta_y))
+                    frame = _render_bottom_bar(frame)
                     
                     # "STOK TERBATAS" blinks after 2s
                     if cta_t > 2.0:
