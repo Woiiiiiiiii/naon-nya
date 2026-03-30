@@ -549,6 +549,14 @@ def generate_shorts(queue_file, output_dir):
                     bg = composites[bg_idx]
                     frame = _ken_burns(bg, t % 10, 10, 'zoom_in')
                     frame = draw_frame_border(frame, accent_color=border_color)
+
+                    # Persistent top bar (nama + harga)
+                    top_y = 40
+                    frame = paste_overlay_on_frame(frame, top_nama_img,
+                        (center_x - top_nama_img.width // 2, top_y))
+                    if top_harga_img:
+                        frame = paste_overlay_on_frame(frame, top_harga_img,
+                            (center_x - top_harga_img.width // 2, top_y + top_nama_img.height + 10))
                     cta_t = t - S6_END
                     cx_off = slide_element_x(cta_t, SLIDE_DUR, 'in_left') if cta_t < SLIDE_DUR else 0
                     cta_y = center_y - 80
