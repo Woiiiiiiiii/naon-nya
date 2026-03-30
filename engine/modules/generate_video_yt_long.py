@@ -357,14 +357,15 @@ def generate_long(queue_file, output_dir):
                                             48, outline_color=(200, 200, 200),
                                             stroke_width=2, max_width=txt_w)
             
-            # Stage 3: nama + harga (top bar - compact)
-            top_nama_img = render_text_image(nama, font_bold or font_path,
-                                            42, (255, 255, 255), (*accent, 220), txt_w, 16,
-                                            style='clean')
+            # Stage 3: nama + harga overlay (outline, no bg)
+            top_nama_img = render_outline_text(nama, font_bold or font_path,
+                                              46, outline_color=(255, 255, 255),
+                                              stroke_width=2, max_width=txt_w)
             top_harga_img = None
             if harga:
-                top_harga_img = create_simple_price(harga, font_bold or font_path or "arial.ttf",
-                                                    46, accent)
+                top_harga_img = render_outline_text(harga, font_bold or font_path or "arial.ttf",
+                                                    52, outline_color=(255, 220, 100),
+                                                    stroke_width=2, max_width=txt_w)
             
             # Stage 5: fitur + review
             feat_text = f"{desc[:80]}" if desc else "Fitur unggulan produk ini"
@@ -460,16 +461,21 @@ def generate_long(queue_file, output_dir):
                     prod_y = center_y - prod_h // 2 + 40
                     frame = paste_overlay_on_frame(frame, prod_img_pil, (prod_x, prod_y))
                     
-                    # Nama + harga appear at top after 3s into stage 2
-                    if t > S2_END + 3.0 and t < S3_END:
-                        info_t = t - (S2_END + 3.0)
-                        info_opacity = min(1.0, info_t / 0.8)
+                    # Nama + harga fade in when product settles (after PROD_SLIDE)
+                    if prod_t > PROD_SLIDE and t < S3_END:
+                        info_t = prod_t - PROD_SLIDE
+                        info_opacity = min(1.0, info_t / 1.5)  # 1.5s gradual fade
                         
-                        top_y = 80
+                        # Position: centered between frame border top (30px) and product top
+                        frame_top = 30  # pigura margin
+                        prod_top = prod_y
+                        info_total_h = top_nama_img.height + (top_harga_img.height + 10 if top_harga_img else 0)
+                        top_y = frame_top + (prod_top - frame_top - info_total_h) // 2
+                        
                         frame = paste_overlay_on_frame(frame, top_nama_img,
                             (center_x - top_nama_img.width // 2, top_y), opacity=info_opacity)
                         if top_harga_img:
-                            harga_y = top_y + top_nama_img.height + 8
+                            harga_y = top_y + top_nama_img.height + 10
                             frame = paste_overlay_on_frame(frame, top_harga_img,
                                 (center_x - top_harga_img.width // 2, harga_y), opacity=info_opacity)
                 

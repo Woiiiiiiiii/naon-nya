@@ -368,13 +368,14 @@ def generate_shorts(queue_file, output_dir):
                                             44, outline_color=(200, 200, 200),
                                             stroke_width=2, max_width=txt_w)
             
-            top_nama_img = render_text_image(nama, font_bold or font_path,
-                                            42, (255, 255, 255), (*accent, 220), txt_w, 14,
-                                            style='clean')
+            top_nama_img = render_outline_text(nama, font_bold or font_path,
+                                              44, outline_color=(255, 255, 255),
+                                              stroke_width=2, max_width=txt_w)
             top_harga_img = None
             if harga:
-                top_harga_img = create_simple_price(harga, font_bold or font_path or "arial.ttf",
-                                                    48, accent)
+                top_harga_img = render_outline_text(harga, font_bold or font_path or "arial.ttf",
+                                                    50, outline_color=(255, 220, 100),
+                                                    stroke_width=2, max_width=txt_w)
             
             feat_text = f"{desc[:70]}" if desc else "Fitur unggulan produk ini"
             feat_img = render_text_image(feat_text, font_path or "arial.ttf",
@@ -446,13 +447,18 @@ def generate_shorts(queue_file, output_dir):
                     prod_y = center_y - prod_h // 2 + 40
                     frame = paste_overlay_on_frame(frame, prod_img_pil, (prod_x, prod_y))
                     
-                    if t > S2_END + 2.0 and t < S3_END:
-                        info_opacity = min(1.0, (t - S2_END - 2.0) / 0.6)
+                    if prod_t > PROD_SLIDE and t < S3_END:
+                        info_t = prod_t - PROD_SLIDE
+                        info_opacity = min(1.0, info_t / 1.2)
+                        frame_top = 30
+                        prod_top = prod_y
+                        info_total_h = top_nama_img.height + (top_harga_img.height + 10 if top_harga_img else 0)
+                        top_y = frame_top + (prod_top - frame_top - info_total_h) // 2
                         frame = paste_overlay_on_frame(frame, top_nama_img,
-                            (center_x - top_nama_img.width // 2, 80), opacity=info_opacity)
+                            (center_x - top_nama_img.width // 2, top_y), opacity=info_opacity)
                         if top_harga_img:
                             frame = paste_overlay_on_frame(frame, top_harga_img,
-                                (center_x - top_harga_img.width // 2, 80 + top_nama_img.height + 8),
+                                (center_x - top_harga_img.width // 2, top_y + top_nama_img.height + 10),
                                 opacity=info_opacity)
                 
                 elif t < S6_END:
