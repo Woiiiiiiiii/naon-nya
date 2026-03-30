@@ -569,11 +569,6 @@ def generate_shorts(queue_file, output_dir):
                             font_bold or font_path or "arial.ttf", (220, 53, 69), cta_t, 0.6)
                         frame = paste_overlay_on_frame(frame, blink,
                             (center_x - blink.width // 2, cta_y + cta_img.height + 25))
-                    
-                    if cta_t > 4.0:
-                        stars = create_rating_stars(rating_val, font_path or "arial.ttf", 40)
-                        frame = paste_overlay_on_frame(frame, stars,
-                            (center_x - stars.width // 2, cta_y + cta_img.height + 90))
                 
                 return frame
 

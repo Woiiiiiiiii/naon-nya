@@ -635,20 +635,8 @@ def generate_long(queue_file, output_dir):
                             (center_x - blink.width // 2, cta_y + cta_img.height + 30))
                     
                     # Rating stars after 4s
-                    if cta_t > 4.0:
-                        stars = create_rating_stars(rating_val, font_path or "arial.ttf", 40)
-                        stars_y = cta_y + cta_img.height + 100
-                        frame = paste_overlay_on_frame(frame, stars,
-                            (center_x - stars.width // 2, stars_y))
                     
                     # Count-up "Terjual" after 5s
-                    if cta_t > 5.0:
-                        cnt_t = cta_t - 5.0
-                        current = int(min(cnt_t / 3.0, 1.0) * sold_count)
-                        cnt_img = create_count_up_text(current, "Terjual",
-                            font_path or "arial.ttf", accent)
-                        frame = paste_overlay_on_frame(frame, cnt_img,
-                            (center_x - cnt_img.width // 2, cta_y + cta_img.height + 170))
                 
                 return frame
 
