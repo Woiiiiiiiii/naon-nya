@@ -303,6 +303,7 @@ def generate_long(queue_file, output_dir):
         # Stage 4: Gambar exits RIGHT, fitur/review text slides in
         # Stage 5: Fitur exits, CTA penutup slides in
         
+        total_dur = target_dur
         S1_END = 10.0    # Nama + teaser
         S2_END = 14.0    # Transition: nama out, gambar in
         S3_END = 55.0    # Gambar goyang + info
@@ -405,23 +406,21 @@ def generate_long(queue_file, output_dir):
 
             INTRO_SLIDE = 2.5  # Slow, gradual slide for Stage 1
 
-
-            # Bottom bar helper
-            def _render_bottom_bar(frame, opacity=1.0, x_offset=0):
-                """Render channel name + motto at bottom of frame."""
-                bot_total_h = bot_channel_img.height + (bot_motto_img.height + 6 if bot_motto_img else 0)
-                bot_y = H - 60 - bot_total_h  # 60px from bottom
-                frame = paste_overlay_on_frame(frame, bot_channel_img,
-                    (center_x - bot_channel_img.width // 2 + x_offset, bot_y), opacity=opacity)
-                if bot_motto_img:
-                    motto_y = bot_y + bot_channel_img.height + 6
-                    frame = paste_overlay_on_frame(frame, bot_motto_img,
-                        (center_x - bot_motto_img.width // 2 + x_offset, motto_y), opacity=opacity)
-                return frame
-
             def make_frame(t):
                 center_x = W // 2
                 center_y = H // 2
+
+                # Bottom bar helper (inside make_frame for center_x access)
+                def _render_bottom_bar(frame, opacity=1.0, x_offset=0):
+                    bot_total_h = bot_channel_img.height + (bot_motto_img.height + 6 if bot_motto_img else 0)
+                    bot_y = H - 60 - bot_total_h
+                    frame = paste_overlay_on_frame(frame, bot_channel_img,
+                        (center_x - bot_channel_img.width // 2 + x_offset, bot_y), opacity=opacity)
+                    if bot_motto_img:
+                        motto_y = bot_y + bot_channel_img.height + 6
+                        frame = paste_overlay_on_frame(frame, bot_motto_img,
+                            (center_x - bot_motto_img.width // 2 + x_offset, motto_y), opacity=opacity)
+                    return frame
                 
                 # ═══════════════════════════════════════════
                 # STAGE 1: Plain bg + outline nama slides in slowly
