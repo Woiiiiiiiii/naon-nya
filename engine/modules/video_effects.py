@@ -477,8 +477,15 @@ def render_text_image(text, font_path, font_size, text_color, bg_color,
 
         # Text outline (dark border for readability)
         outline_color = (0, 0, 0, 200)
-        for ox, oy in [(-2,-2),(2,-2),(-2,2),(2,2),(-1,0),(1,0),(0,-1),(0,1)]:
-            d.text((draw_x + ox, draw_y + oy), line, fill=outline_color, font=font)
+        if style == 'frosted':
+            # Thicker outline for readability over product images
+            outline_color = (0, 0, 0, 240)
+            for ox, oy in [(-3,-3),(3,-3),(-3,3),(3,3),(-3,0),(3,0),(0,-3),(0,3),
+                           (-2,-2),(2,-2),(-2,2),(2,2),(-1,0),(1,0),(0,-1),(0,1)]:
+                d.text((draw_x + ox, draw_y + oy), line, fill=outline_color, font=font)
+        else:
+            for ox, oy in [(-2,-2),(2,-2),(-2,2),(2,2),(-1,0),(1,0),(0,-1),(0,1)]:
+                d.text((draw_x + ox, draw_y + oy), line, fill=outline_color, font=font)
 
         # Glow for glow style
         if style == 'glow':
@@ -761,10 +768,11 @@ def create_count_up_text(current_val, label, font_path, accent_color, font_size=
 
 def create_blinking_label(text, font_path, accent_color, t, blink_speed=0.5,
                           font_size=40, max_width=800):
-    """Create text that blinks (opacity pulses)."""
+    """Create text that blinks (opacity pulses) with frosted style."""
     opacity = int(128 + 127 * math.sin(2 * math.pi * t / blink_speed))
     return render_text_image(text, font_path, font_size, (255, 255, 255),
-                            (*accent_color, opacity), max_width=max_width, padding=14)
+                            (*accent_color, opacity), max_width=max_width, padding=14,
+                            style='frosted')
 
 
 def create_simple_price(price_text, font_path, font_size=48, accent_color=(255, 64, 129)):
