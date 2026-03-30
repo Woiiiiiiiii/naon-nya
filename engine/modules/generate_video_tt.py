@@ -422,7 +422,7 @@ def generate_video_tt(queue_file, output_dir):
                         frame = paste_overlay_on_frame(frame, top_harga_img,
                             (center_x - top_harga_img.width // 2, harga_y))
                     
-                    content_top = top_y + info_total_h + 25
+                    content_top = center_y - 80 + 25
                     frame = _render_bottom_bar(frame)
                     
                     if stage_t > 0.5:
@@ -443,17 +443,17 @@ def generate_video_tt(queue_file, output_dir):
                         frame2 = _ken_burns(bg, t % 8, 8, 'zoom_in')
                         frame2 = draw_frame_border(frame2, accent_color=border_color, thickness=3, margin=22)
                         frame2 = paste_overlay_on_frame(frame2, top_nama_img,
-                            (center_x - top_nama_img.width // 2 + x_out, top_y))
+                            (center_x - top_nama_img.width // 2, top_y))
                         if top_harga_img:
                             frame2 = paste_overlay_on_frame(frame2, top_harga_img,
-                                (center_x - top_harga_img.width // 2 + x_out, harga_y))
+                                (center_x - top_harga_img.width // 2, harga_y))
                         if stage_t > 0.5:
                             frame2 = paste_overlay_on_frame(frame2, feat_img,
                                 (center_x - feat_img.width // 2 + x_out, content_top + 10))
                         if stage_t > 2.5:
                             frame2 = paste_overlay_on_frame(frame2, verdict_img,
                                 (center_x - verdict_img.width // 2 + x_out, content_top + 250))
-                        frame2 = _render_bottom_bar(frame2, x_offset=x_out)
+                        frame2 = _render_bottom_bar(frame2)
                         frame = frame2
                 
                 else:

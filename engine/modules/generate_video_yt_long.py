@@ -517,7 +517,7 @@ def generate_long(queue_file, output_dir):
                             (center_x - top_harga_img.width // 2, harga_y))
                     
                     # Content area starts below nama+harga
-                    content_top = top_y + info_total_h + 40
+                    content_top = center_y - 80 + 40
                     frame = _render_bottom_bar(frame)
                     
                     # Feature text slides in from right
@@ -579,10 +579,10 @@ def generate_long(queue_file, output_dir):
                         frame2 = draw_frame_border(frame2, accent_color=border_color)
                         # Nama+harga exit too
                         frame2 = paste_overlay_on_frame(frame2, top_nama_img,
-                            (center_x - top_nama_img.width // 2 + x_out, top_y))
+                            (center_x - top_nama_img.width // 2, top_y))
                         if top_harga_img:
                             frame2 = paste_overlay_on_frame(frame2, top_harga_img,
-                                (center_x - top_harga_img.width // 2 + x_out, harga_y))
+                                (center_x - top_harga_img.width // 2, harga_y))
                         if stage_t > feat_start:
                             frame2 = paste_overlay_on_frame(frame2, feat_img,
                                 (center_x - feat_img.width // 2 + x_out, content_top + 20))
