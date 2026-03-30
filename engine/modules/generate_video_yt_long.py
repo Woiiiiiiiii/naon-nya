@@ -361,7 +361,7 @@ def generate_long(queue_file, output_dir):
                 _nama_color = (255, 255, 255)
                 _teaser_color = (200, 200, 210)
             
-            nama_img = render_outline_text(nama, font_bold or font_path,
+            nama_img = render_outline_text(nama.upper(), font_bold or font_path,
                                            120, outline_color=_nama_color,
                                            stroke_width=4, max_width=txt_w)
             teaser_img = render_outline_text(hook_text, font_path or "arial.ttf",
@@ -369,7 +369,7 @@ def generate_long(queue_file, output_dir):
                                             stroke_width=2, max_width=txt_w)
             
             # Stage 3: nama + harga overlay (outline, no bg)
-            top_nama_img = render_outline_text(nama, font_bold or font_path,
+            top_nama_img = render_outline_text(nama.upper(), font_bold or font_path,
                                               46, outline_color=_nama_color,
                                               stroke_width=2, max_width=txt_w)
             top_harga_img = None
@@ -423,7 +423,7 @@ def generate_long(queue_file, output_dir):
                 # Bottom bar helper (inside make_frame for center_x access)
                 def _render_bottom_bar(frame, opacity=1.0, x_offset=0):
                     bot_total_h = bot_channel_img.height + (bot_motto_img.height + 6 if bot_motto_img else 0)
-                    bot_y = H - 100 - bot_total_h
+                    bot_y = H - 90 - bot_total_h
                     frame = paste_overlay_on_frame(frame, bot_channel_img,
                         (center_x - bot_channel_img.width // 2 + x_offset, bot_y), opacity=opacity)
                     if bot_motto_img:
@@ -478,22 +478,14 @@ def generate_long(queue_file, output_dir):
                     frame = _ken_burns(bg, t % 15, 15, 'zoom_in')
                     frame = draw_frame_border(frame, accent_color=border_color)
                     
-                    # Nama + harga fade in after 3s
-                    stage_t = t - S1_END
-                    if stage_t > 3.0 and t < S3_END:
-                        info_t = stage_t - 3.0
-                        info_opacity = min(1.0, info_t / 1.5)
-                        
-                        info_total_h = top_nama_img.height + (top_harga_img.height + 10 if top_harga_img else 0)
-                        top_y = 40
-                        frame = paste_overlay_on_frame(frame, top_nama_img,
-                            (center_x - top_nama_img.width // 2, top_y), opacity=info_opacity)
-                        if top_harga_img:
-                            harga_y = top_y + top_nama_img.height + 10
-                            frame = paste_overlay_on_frame(frame, top_harga_img,
-                                (center_x - top_harga_img.width // 2, harga_y), opacity=info_opacity)
-                        # Bottom bar fades in same timing
-                        frame = _render_bottom_bar(frame, opacity=info_opacity)
+                    # Persistent top bar + bottom bar (instant, no fade)
+                    top_y = 25
+                    frame = paste_overlay_on_frame(frame, top_nama_img,
+                        (center_x - top_nama_img.width // 2, top_y))
+                    if top_harga_img:
+                        frame = paste_overlay_on_frame(frame, top_harga_img,
+                            (center_x - top_harga_img.width // 2, top_y + top_nama_img.height + 8))
+                    frame = _render_bottom_bar(frame)
                 
                 # ═══════════════════════════════════════════
                 # STAGE 5: Feature/review text
@@ -607,7 +599,7 @@ def generate_long(queue_file, output_dir):
                     frame = draw_frame_border(frame, accent_color=border_color)
 
                     # Persistent top bar (nama + harga)
-                    top_y = 40
+                    top_y = 25
                     frame = paste_overlay_on_frame(frame, top_nama_img,
                         (center_x - top_nama_img.width // 2, top_y))
                     if top_harga_img:
