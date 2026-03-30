@@ -466,43 +466,55 @@ def generate_shorts(queue_file, output_dir):
                     frame = draw_frame_border(frame, accent_color=border_color)
                     stage_t = t - S4_END
                     
-                    if stage_t < SLIDE_DUR:
-                        x_off = slide_element_x(stage_t, SLIDE_DUR, 'out_left')
-                        frame = paste_overlay_on_frame(frame, top_nama_img,
-                            (center_x - top_nama_img.width // 2 + x_off, 80))
+                    # Persistent nama + harga at top
+                    info_total_h = top_nama_img.height + (top_harga_img.height + 10 if top_harga_img else 0)
+                    top_y = 60
+                    frame = paste_overlay_on_frame(frame, top_nama_img,
+                        (center_x - top_nama_img.width // 2, top_y))
+                    if top_harga_img:
+                        harga_y = top_y + top_nama_img.height + 10
+                        frame = paste_overlay_on_frame(frame, top_harga_img,
+                            (center_x - top_harga_img.width // 2, harga_y))
                     
-                    if stage_t > 0.8:
-                        ft = stage_t - 0.8
+                    content_top = top_y + info_total_h + 30
+                    
+                    if stage_t > 0.5:
+                        ft = stage_t - 0.5
                         fx_off = slide_element_x(ft, SLIDE_DUR, 'in_right') if ft < SLIDE_DUR else 0
                         frame = paste_overlay_on_frame(frame, feat_img,
-                            (center_x - feat_img.width // 2 + fx_off, center_y - 200))
+                            (center_x - feat_img.width // 2 + fx_off, content_top + 10))
                     
                     if stage_t > 4.0:
                         rb_t = stage_t - 4.0
                         rb_off = slide_element_x(rb_t, SLIDE_DUR, 'in_left') if rb_t < SLIDE_DUR else 0
                         frame = paste_overlay_on_frame(frame, review_bubble,
-                            (80 + rb_off, center_y + 50))
+                            (80 + rb_off, content_top + 230))
                     
                     if stage_t > 6.0:
                         vt = stage_t - 6.0
                         v_off = slide_element_x(vt, SLIDE_DUR, 'in_right') if vt < SLIDE_DUR else 0
                         frame = paste_overlay_on_frame(frame, verdict_img,
-                            (center_x - verdict_img.width // 2 + v_off, center_y + 250))
+                            (center_x - verdict_img.width // 2 + v_off, content_top + 430))
                     
                     if t > S5_END:
                         exit_t = t - S5_END
                         x_out = slide_element_x(exit_t, S6_END - S5_END, 'out_right')
                         frame2 = plain_bg.copy()
                         frame2 = draw_frame_border(frame2, accent_color=border_color)
-                        if stage_t > 0.8:
+                        frame2 = paste_overlay_on_frame(frame2, top_nama_img,
+                            (center_x - top_nama_img.width // 2 + x_out, top_y))
+                        if top_harga_img:
+                            frame2 = paste_overlay_on_frame(frame2, top_harga_img,
+                                (center_x - top_harga_img.width // 2 + x_out, harga_y))
+                        if stage_t > 0.5:
                             frame2 = paste_overlay_on_frame(frame2, feat_img,
-                                (center_x - feat_img.width // 2 + x_out, center_y - 200))
+                                (center_x - feat_img.width // 2 + x_out, content_top + 10))
                         if stage_t > 4.0:
                             frame2 = paste_overlay_on_frame(frame2, review_bubble,
-                                (80 + x_out, center_y + 50))
+                                (80 + x_out, content_top + 230))
                         if stage_t > 6.0:
                             frame2 = paste_overlay_on_frame(frame2, verdict_img,
-                                (center_x - verdict_img.width // 2 + x_out, center_y + 250))
+                                (center_x - verdict_img.width // 2 + x_out, content_top + 430))
                         frame = frame2
                 
                 else:

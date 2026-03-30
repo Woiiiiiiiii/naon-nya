@@ -487,14 +487,22 @@ def generate_long(queue_file, output_dir):
                     frame = draw_frame_border(frame, accent_color=border_color)
                     stage_t = t - S4_END
                     
-                    # Nama exits left (first 1.2s)
-                    if stage_t < SLIDE_DUR:
-                        x_off = slide_element_x(stage_t, SLIDE_DUR, 'out_left')
-                        frame = paste_overlay_on_frame(frame, top_nama_img,
-                            (center_x - top_nama_img.width // 2 + x_off, 80))
+                    # Persistent nama + harga at top
+                    frame_top = 30
+                    info_total_h = top_nama_img.height + (top_harga_img.height + 10 if top_harga_img else 0)
+                    top_y = frame_top + 30  # Fixed near top
+                    frame = paste_overlay_on_frame(frame, top_nama_img,
+                        (center_x - top_nama_img.width // 2, top_y))
+                    if top_harga_img:
+                        harga_y = top_y + top_nama_img.height + 10
+                        frame = paste_overlay_on_frame(frame, top_harga_img,
+                            (center_x - top_harga_img.width // 2, harga_y))
+                    
+                    # Content area starts below nama+harga
+                    content_top = top_y + info_total_h + 40
                     
                     # Feature text slides in from right
-                    feat_start = 1.0
+                    feat_start = 0.5
                     if stage_t > feat_start:
                         ft = stage_t - feat_start
                         if ft < SLIDE_DUR:
@@ -502,7 +510,7 @@ def generate_long(queue_file, output_dir):
                         else:
                             fx_off = 0
                         
-                        feat_y = center_y - 200
+                        feat_y = content_top + 20
                         frame = paste_overlay_on_frame(frame, feat_img,
                             (center_x - feat_img.width // 2 + fx_off, feat_y))
                     
@@ -513,7 +521,7 @@ def generate_long(queue_file, output_dir):
                             d2_off = slide_element_x(d2t, SLIDE_DUR, 'in_left')
                         else:
                             d2_off = 0
-                        d2_y = center_y - 20
+                        d2_y = content_top + 180
                         frame = paste_overlay_on_frame(frame, detail2_img,
                             (center_x - detail2_img.width // 2 + d2_off, d2_y))
                     
@@ -525,7 +533,7 @@ def generate_long(queue_file, output_dir):
                         else:
                             rb_off = 0
                         frame = paste_overlay_on_frame(frame, review_bubble,
-                            (80 + rb_off, center_y + 160))
+                            (80 + rb_off, content_top + 360))
                     
                     # Verdict after 12s
                     if stage_t > 12.0:
@@ -535,35 +543,39 @@ def generate_long(queue_file, output_dir):
                         else:
                             v_off = 0
                         frame = paste_overlay_on_frame(frame, verdict_img,
-                            (center_x - verdict_img.width // 2 + v_off, center_y + 340))
+                            (center_x - verdict_img.width // 2 + v_off, content_top + 540))
                     
                     # Stars rating animation
                     if stage_t > 14.0:
                         stars = create_rating_stars(rating_val, font_path or "arial.ttf",
                                                    40, animated_t=stage_t - 14.0, total_dur=1.5)
                         frame = paste_overlay_on_frame(frame, stars,
-                            (center_x - stars.width // 2, center_y + 500))
+                            (center_x - stars.width // 2, content_top + 700))
                     
-                    # Exit all at end of stage
+                    # Exit all at end of stage (nama+harga also exit)
                     if t > S5_END:
                         exit_t = t - S5_END
                         x_out = slide_element_x(exit_t, S6_END - S5_END, 'out_right')
-                        # Re-render with exit offset
                         frame2 = plain_bg.copy()
                         frame2 = draw_frame_border(frame2, accent_color=border_color)
-                        # Move everything out to the right
+                        # Nama+harga exit too
+                        frame2 = paste_overlay_on_frame(frame2, top_nama_img,
+                            (center_x - top_nama_img.width // 2 + x_out, top_y))
+                        if top_harga_img:
+                            frame2 = paste_overlay_on_frame(frame2, top_harga_img,
+                                (center_x - top_harga_img.width // 2 + x_out, harga_y))
                         if stage_t > feat_start:
                             frame2 = paste_overlay_on_frame(frame2, feat_img,
-                                (center_x - feat_img.width // 2 + x_out, center_y - 200))
+                                (center_x - feat_img.width // 2 + x_out, content_top + 20))
                         if stage_t > 5.0:
                             frame2 = paste_overlay_on_frame(frame2, detail2_img,
-                                (center_x - detail2_img.width // 2 + x_out, center_y - 20))
+                                (center_x - detail2_img.width // 2 + x_out, content_top + 180))
                         if stage_t > 8.0:
                             frame2 = paste_overlay_on_frame(frame2, review_bubble,
-                                (80 + x_out, center_y + 160))
+                                (80 + x_out, content_top + 360))
                         if stage_t > 12.0:
                             frame2 = paste_overlay_on_frame(frame2, verdict_img,
-                                (center_x - verdict_img.width // 2 + x_out, center_y + 340))
+                                (center_x - verdict_img.width // 2 + x_out, content_top + 540))
                         frame = frame2
                 
                 # ═══════════════════════════════════════════
