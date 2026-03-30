@@ -293,7 +293,7 @@ def extract_product_info(item, affiliate_id, category):
         name = name[:77] + "..."
 
     price_raw = item_basic.get("price", 0)
-    price = int(price_raw) // 100000 if price_raw > 100000 else int(price_raw)
+    price = int(price_raw) // 100000 if price_raw > 10000000 else int(price_raw)
     price_str = f"Rp{price:,}".replace(",", ".")
 
     image_id = item_basic.get("image", "")

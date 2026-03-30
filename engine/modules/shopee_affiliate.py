@@ -525,7 +525,7 @@ def get_shop_products(shop_id, limit=6):
                 name = info.get('name', '')
                 item_id = info.get('itemid', 0)
                 price = info.get('price', 0)
-                if price > 100000:
+                if price > 10000000:
                     price = price // 100000
                 image_hash = info.get('image', '')
 
@@ -554,7 +554,7 @@ def get_shop_products(shop_id, limit=6):
                         name = info.get('name', '')
                         item_id = info.get('itemid', 0)
                         price = info.get('price', 0)
-                        if price > 100000:
+                        if price > 10000000:
                             price = price // 100000
                         image_hash = info.get('image', '')
                         if name and image_hash and item_id:
@@ -665,7 +665,7 @@ def collect_affiliate_products(category, target=5):
                         item_data.get('price') or item_data.get('price_min') or
                         po.get('price') or 0
                     )
-                    if isinstance(raw_price, (int, float)) and raw_price > 100000:
+                    if isinstance(raw_price, (int, float)) and raw_price > 10000000:
                         item_price = raw_price / 100000  # Convert from Shopee price units
                     else:
                         item_price = raw_price
@@ -834,7 +834,7 @@ def collect_affiliate_products(category, target=5):
                     if not ep_name or not ep_image:
                         continue
 
-                    if isinstance(ep_price, (int, float)) and ep_price > 100000:
+                    if isinstance(ep_price, (int, float)) and ep_price > 10000000:
                         ep_price = ep_price // 100000
 
                     if ep_image and not ep_image.startswith('http'):

@@ -227,7 +227,7 @@ def _parse_search_item(item):
     item_id = info.get('itemid', item.get('itemid', 0))
     
     price = info.get('price', 0)
-    if price > 100000:
+    if price > 10000000:
         price = price // 100000
     
     image_hash = info.get('image', '')
@@ -295,7 +295,7 @@ def scrape_product_page(url):
         
         name = item_info.get('name', '')
         price = item_info.get('price', 0)
-        if price > 100000:
+        if price > 10000000:
             price = price // 100000
         
         image = item_info.get('image', '')

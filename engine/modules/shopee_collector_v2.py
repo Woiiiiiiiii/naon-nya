@@ -476,7 +476,7 @@ def _extract_from_offer(offer):
         price = int(nested.get('price_max', 0) or nested.get('price', 0) or 0)
     except (ValueError, TypeError):
         price = 0
-    if price > 100000:
+    if price > 10000000:
         price = price // 100000
 
     # Image
@@ -550,7 +550,7 @@ def get_product_detail(item_id, shop_id, offer=None):
 def _parse_item_detail(item):
     """Parse item from /api/v4/item/get response."""
     price = item.get('price', 0)
-    if price > 100000:
+    if price > 10000000:
         price = price // 100000
 
     images = item.get('images', [])

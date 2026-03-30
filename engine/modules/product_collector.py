@@ -460,7 +460,7 @@ def _shopee_recommend_discover(category, limit=10):
                     shop_id = info.get('shopid', 0)
                     item_id = info.get('itemid', 0)
                     price = info.get('price', 0)
-                    if price > 100000:
+                    if price > 10000000:
                         price = price // 100000
                     image_hash = info.get('image', '')
                     if not image_hash or not item_id:
@@ -536,7 +536,7 @@ def _shopee_category_scrape(category, limit=10):
                 shop_id = info.get('shopid', item.get('shopid', 0))
                 item_id = info.get('itemid', item.get('itemid', 0))
                 price = info.get('price', 0)
-                if price > 100000:
+                if price > 10000000:
                     price = price // 100000
                 image_hash = info.get('image', '')
 
