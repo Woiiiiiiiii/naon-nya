@@ -273,7 +273,7 @@ def generate_video_tt(queue_file, output_dir):
                     prod_img_pil = prod_img_pil.convert('RGB')
                 prod_img_pil = auto_trim_whitespace(prod_img_pil, is_transp)
                 pw, ph = prod_img_pil.size
-                prod_scale = min(W / pw, H / ph) * 0.85
+                prod_scale = min(W / pw, H / ph) * 0.90
                 prod_w = int(pw * prod_scale)
                 prod_h = int(ph * prod_scale)
                 prod_img_pil = prod_img_pil.resize((prod_w, prod_h), Image.LANCZOS)
@@ -352,9 +352,7 @@ def generate_video_tt(queue_file, output_dir):
                         frame = frame2
                 
                 elif t < S4_END and prod_img_pil:
-                    bg_idx = int(t / 8) % len(composites)
-                    bg = composites[bg_idx]
-                    frame = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                    frame = plain_bg.copy()
                     frame = draw_frame_border(frame, accent_color=border_color, thickness=3, margin=22)
                     prod_t = t - S1_END
                     if prod_t < PROD_SLIDE:
@@ -378,9 +376,7 @@ def generate_video_tt(queue_file, output_dir):
                                 opacity=info_opacity)
                 
                 elif t < S6_END:
-                    bg_idx = int(t / 8) % len(composites)
-                    bg = composites[bg_idx]
-                    frame = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                    frame = plain_bg.copy()
                     frame = draw_frame_border(frame, accent_color=border_color, thickness=3, margin=22)
                     stage_t = t - S4_END
                     
@@ -399,7 +395,7 @@ def generate_video_tt(queue_file, output_dir):
                     if t > S5_END:
                         exit_t = t - S5_END
                         x_out = slide_element_x(exit_t, S6_END - S5_END, 'out_right')
-                        frame2 = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                        frame2 = plain_bg.copy()
                         frame2 = draw_frame_border(frame2, accent_color=border_color, thickness=3, margin=22)
                         if stage_t > 0.5:
                             frame2 = paste_overlay_on_frame(frame2, feat_img,
@@ -410,9 +406,7 @@ def generate_video_tt(queue_file, output_dir):
                         frame = frame2
                 
                 else:
-                    bg_idx = int(t / 8) % len(composites)
-                    bg = composites[bg_idx]
-                    frame = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                    frame = plain_bg.copy()
                     frame = draw_frame_border(frame, accent_color=border_color, thickness=3, margin=22)
                     cta_t = t - S6_END
                     cx_off = slide_element_x(cta_t, SLIDE_DUR, 'in_left') if cta_t < SLIDE_DUR else 0

@@ -335,7 +335,7 @@ def generate_long(queue_file, output_dir):
                     prod_img_pil = prod_img_pil.convert('RGB')
                 prod_img_pil = auto_trim_whitespace(prod_img_pil, is_transp)
                 pw, ph = prod_img_pil.size
-                prod_scale = min(W / pw, H / ph) * 0.85
+                prod_scale = min(W / pw, H / ph) * 0.90
                 prod_w = int(pw * prod_scale)
                 prod_h = int(ph * prod_scale)
                 prod_img_pil = prod_img_pil.resize((prod_w, prod_h), Image.LANCZOS)
@@ -441,9 +441,7 @@ def generate_long(queue_file, output_dir):
                 # STAGE 2-3: Product image slides in + sways
                 # ═══════════════════════════════════════════
                 elif t < S4_END and prod_img_pil:
-                    bg_idx = int(t / 15) % len(composites)
-                    bg = composites[bg_idx]
-                    frame = _ken_burns(bg, t % 15, 15, 'zoom_in')
+                    frame = plain_bg.copy()
                     frame = draw_frame_border(frame, accent_color=border_color)
                     prod_t = t - S1_END
                     
@@ -479,9 +477,7 @@ def generate_long(queue_file, output_dir):
                 # STAGE 5: Feature/review text
                 # ═══════════════════════════════════════════
                 elif t < S6_END:
-                    bg_idx = int(t / 15) % len(composites)
-                    bg = composites[bg_idx]
-                    frame = _ken_burns(bg, t % 15, 15, 'zoom_in')
+                    frame = plain_bg.copy()
                     frame = draw_frame_border(frame, accent_color=border_color)
                     stage_t = t - S4_END
                     
@@ -547,7 +543,7 @@ def generate_long(queue_file, output_dir):
                         exit_t = t - S5_END
                         x_out = slide_element_x(exit_t, S6_END - S5_END, 'out_right')
                         # Re-render with exit offset
-                        frame2 = _ken_burns(bg, t % 15, 15, 'zoom_in')
+                        frame2 = plain_bg.copy()
                         frame2 = draw_frame_border(frame2, accent_color=border_color)
                         # Move everything out to the right
                         if stage_t > feat_start:
@@ -568,9 +564,7 @@ def generate_long(queue_file, output_dir):
                 # STAGE 7: CTA closing
                 # ═══════════════════════════════════════════
                 else:
-                    bg_idx = int(t / 15) % len(composites)
-                    bg = composites[bg_idx]
-                    frame = _ken_burns(bg, t % 15, 15, 'zoom_in')
+                    frame = plain_bg.copy()
                     frame = draw_frame_border(frame, accent_color=border_color)
                     cta_t = t - S6_END
                     
