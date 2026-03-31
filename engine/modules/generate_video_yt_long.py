@@ -421,7 +421,7 @@ def generate_long(queue_file, output_dir):
                 center_y = H // 2
 
                 # Bottom bar helper (inside make_frame for center_x access)
-                def _render_bottom_bar(frame, opacity=1.0, x_offset=0):
+                def _render_bottom_bar(frame):
                     bot_total_h = bot_channel_img.height + (bot_motto_img.height + 6 if bot_motto_img else 0)
                     bot_y = H - 90 - bot_total_h
                     frame = paste_overlay_on_frame(frame, bot_channel_img,
@@ -466,7 +466,7 @@ def generate_long(queue_file, output_dir):
                         if t > 2.0:
                             frame2 = paste_overlay_on_frame(frame2, teaser_img,
                                 (center_x - teaser_img.width // 2, teaser_y), opacity=fade_out)
-                        frame2 = _render_bottom_bar(frame2, opacity=fade_out)
+                        frame2 = _render_bottom_bar(frame2)
                         frame = frame2
                 
                 # ═══════════════════════════════════════════
@@ -499,12 +499,12 @@ def generate_long(queue_file, output_dir):
                     
                     # Persistent nama + harga at top
                     frame_top = 30
-                    info_total_h = top_nama_img.height + (top_harga_img.height + 10 if top_harga_img else 0)
+                    info_total_h = top_nama_img.height + (top_harga_img.height + 8 if top_harga_img else 0)
                     top_y = frame_top + 30  # Fixed near top
                     frame = paste_overlay_on_frame(frame, top_nama_img,
                         (center_x - top_nama_img.width // 2, top_y))
                     if top_harga_img:
-                        harga_y = top_y + top_nama_img.height + 10
+                        harga_y = top_y + top_nama_img.height + 8
                         frame = paste_overlay_on_frame(frame, top_harga_img,
                             (center_x - top_harga_img.width // 2, harga_y))
                     
@@ -604,7 +604,7 @@ def generate_long(queue_file, output_dir):
                         (center_x - top_nama_img.width // 2, top_y))
                     if top_harga_img:
                         frame = paste_overlay_on_frame(frame, top_harga_img,
-                            (center_x - top_harga_img.width // 2, top_y + top_nama_img.height + 10))
+                            (center_x - top_harga_img.width // 2, top_y + top_nama_img.height + 8))
                     cta_t = t - S6_END
                     
                     # CTA slides in from left
