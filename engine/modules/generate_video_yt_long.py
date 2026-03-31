@@ -361,7 +361,7 @@ def generate_long(queue_file, output_dir):
                 _nama_color = (255, 255, 255)
                 _teaser_color = (200, 200, 210)
             
-            nama_img = render_outline_text(nama.upper(), font_bold or font_path,
+            nama_img = render_outline_text(nama.title(), font_bold or font_path,
                                            120, outline_color=_nama_color,
                                            stroke_width=4, max_width=txt_w)
             teaser_img = render_outline_text(hook_text, font_path or "arial.ttf",
@@ -369,7 +369,7 @@ def generate_long(queue_file, output_dir):
                                             stroke_width=2, max_width=txt_w)
             
             # Stage 3: nama + harga overlay (outline, no bg)
-            top_nama_img = render_outline_text(nama.upper(), font_bold or font_path,
+            top_nama_img = render_outline_text(nama.title(), font_bold or font_path,
                                               46, outline_color=(255, 255, 255),
                                               stroke_width=3, max_width=txt_w)
             top_harga_img = None

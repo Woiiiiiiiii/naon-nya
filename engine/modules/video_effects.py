@@ -236,13 +236,16 @@ def render_outline_text(text, font_path, font_size, outline_color=(255, 255, 255
         draw_x = center_x - text_w // 2 - x_off
         draw_y = cy - y_off
         
-        # Draw stroke (outline) using Pillow's stroke_width
-        d.text((draw_x, draw_y), line, fill=(0, 0, 0, 0), font=font,
-               stroke_width=stroke_width, stroke_fill=(r, g, b, 255))
+        # Determine stroke border color (contrast with fill)
+        fill_lum = 0.299 * r + 0.587 * g + 0.114 * b
+        if fill_lum > 140:  # Light text -> dark stroke
+            stroke_color = (20, 20, 30, 200)
+        else:  # Dark text -> light stroke
+            stroke_color = (240, 240, 250, 200)
         
-        # Draw the "hollow" center by drawing text in transparent
-        # This clears the inside of the letters
-        d.text((draw_x, draw_y), line, fill=(0, 0, 0, 0), font=font)
+        # Draw solid filled text with contrasting stroke border
+        d.text((draw_x, draw_y), line, fill=(r, g, b, 255), font=font,
+               stroke_width=stroke_width, stroke_fill=stroke_color)
         
         cy += (bb[3] - bb[1]) + spacing
     

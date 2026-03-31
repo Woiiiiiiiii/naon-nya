@@ -295,14 +295,14 @@ def generate_video_tt(queue_file, output_dir):
                 _nama_color = (255, 255, 255)
                 _teaser_color = (200, 200, 210)
             
-            nama_img = render_outline_text(nama.upper(), font_bold or font_path,
+            nama_img = render_outline_text(nama.title(), font_bold or font_path,
                                            90, outline_color=_nama_color,
                                            stroke_width=3, max_width=txt_w)
             teaser_img = render_outline_text(hook_text, font_path or "arial.ttf",
                                             42, outline_color=_teaser_color,
                                             stroke_width=2, max_width=txt_w)
             
-            top_nama_img = render_outline_text(nama.upper(), font_bold or font_path,
+            top_nama_img = render_outline_text(nama.title(), font_bold or font_path,
                                               44, outline_color=(255, 255, 255),
                                               stroke_width=3, max_width=txt_w)
             top_harga_img = None
