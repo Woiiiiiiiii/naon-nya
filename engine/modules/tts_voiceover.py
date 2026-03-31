@@ -433,15 +433,12 @@ def generate_voiceover_script(product_info, platform='yt_short', account_id='yt_
             'cta': cta_text,
         }
     elif platform == 'yt_long':
-        # Scene IDs MUST match TEMPLATES in generate_video_yt_long.py:
-        # hook, overview, detail1, detail2, comparison, verdict, cta
+        # Scene IDs match generate_video_yt_long.py stage loading:
+        # hook(intro), product(show), feature(fitur), cta(penutup)
         return {
             'hook': hook_text,
-            'overview': hero_text,
-            'detail1': feat_text,
-            'detail2': proof_text,
-            'comparison': extra_proof,
-            'verdict': _pick_unique(proofs, used, rng),
+            'product': hero_text,
+            'feature': feat_text,
             'cta': cta_text,
         }
     elif platform == 'tt':
