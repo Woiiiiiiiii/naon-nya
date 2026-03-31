@@ -379,13 +379,13 @@ def generate_shorts(queue_file, output_dir):
                                             stroke_width=2, max_width=txt_w)
             
             top_nama_img = render_outline_text(nama.upper(), font_bold or font_path,
-                                              44, outline_color=_nama_color,
-                                              stroke_width=2, max_width=txt_w)
+                                              44, outline_color=(255, 255, 255),
+                                              stroke_width=3, max_width=txt_w)
             top_harga_img = None
             if harga:
                 top_harga_img = render_outline_text(harga, font_bold or font_path or "arial.ttf",
-                                                    50, outline_color=(255, 220, 100) if _lum < 140 else (180, 120, 0),
-                                                    stroke_width=2, max_width=txt_w)
+                                                    50, outline_color=(255, 220, 100),
+                                                    stroke_width=3, max_width=txt_w)
             
             feat_text = f"{desc[:70]}" if desc else "Fitur unggulan produk ini"
             feat_img = render_text_image(feat_text, font_path or "arial.ttf",
@@ -409,12 +409,12 @@ def generate_shorts(queue_file, output_dir):
             # Bottom bar: channel name + motto (persistent from Stage 2)
             motto = get_channel_motto(acct_id)
             bot_channel_img = render_outline_text(f"@{channel}", font_bold or font_path,
-                                                  38, outline_color=_nama_color,
+                                                  38, outline_color=(255, 255, 255),
                                                   stroke_width=2, max_width=txt_w)
             bot_motto_img = None
             if motto:
                 bot_motto_img = render_outline_text(motto, font_path or "arial.ttf",
-                                                    28, outline_color=_teaser_color,
+                                                    28, outline_color=(220, 220, 230),
                                                     stroke_width=1, max_width=txt_w)
 
             INTRO_SLIDE = 1.8
