@@ -423,7 +423,7 @@ def generate_video_fb(queue_file, output_dir):
                         frame = paste_overlay_on_frame(frame, top_harga_img,
                             (center_x - top_harga_img.width // 2, harga_y))
                     
-                    content_top = center_y - 80
+                    content_top = center_y - 200
                     frame = _render_bottom_bar(frame)
                     
                     if stage_t > 0.5:
@@ -433,13 +433,13 @@ def generate_video_fb(queue_file, output_dir):
                             (center_x - feat_img.width // 2 + fx_off, content_top + 10))
                     
                     bubble_delays = [4.0, 6.5, 9.0]
-                    next_y = content_top + 170
+                    next_y = content_top + 80
                     for bi, (bubble, delay) in enumerate(zip(review_bubbles, bubble_delays)):
                         if stage_t > delay:
                             bt = stage_t - delay
                             side = reviews[bi][1]
                             b_off = slide_element_x(bt, SLIDE_DUR, f'in_{side}') if bt < SLIDE_DUR else 0
-                            bx = 80 + b_off if side == 'left' else W - bubble.width - 80 + b_off
+                            bx = center_x - bubble.width // 2 + b_off
                             frame = paste_overlay_on_frame(frame, bubble, (bx, next_y))
                         next_y += (review_bubbles[bi].height if stage_t > delay else 60) + 12
                     
@@ -447,7 +447,7 @@ def generate_video_fb(queue_file, output_dir):
                         vt = stage_t - 11.0
                         v_off = slide_element_x(vt, SLIDE_DUR, 'in_right') if vt < SLIDE_DUR else 0
                         frame = paste_overlay_on_frame(frame, verdict_img,
-                            (center_x - verdict_img.width // 2 + v_off, content_top + 550))
+                            (center_x - verdict_img.width // 2 + v_off, next_y + 10))
                     
                     if t > S5_END:
                         exit_t = t - S5_END
@@ -466,11 +466,11 @@ def generate_video_fb(queue_file, output_dir):
                         for bi, (bubble, delay) in enumerate(zip(review_bubbles, bubble_delays)):
                             if stage_t > delay:
                                 frame2 = paste_overlay_on_frame(frame2, bubble,
-                                    (80 + x_out, next_y2))
+                                    (center_x - bubble.width // 2 + x_out, next_y2))
                             next_y2 += review_bubbles[bi].height + 12
                         if stage_t > 11.0:
                             frame2 = paste_overlay_on_frame(frame2, verdict_img,
-                                (center_x - verdict_img.width // 2 + x_out, content_top + 550))
+                                (center_x - verdict_img.width // 2 + x_out, next_y + 10))
                         frame2 = _render_bottom_bar(frame2)
                         frame = frame2
                 

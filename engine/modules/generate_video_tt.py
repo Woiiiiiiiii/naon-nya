@@ -417,7 +417,7 @@ def generate_video_tt(queue_file, output_dir):
                         frame = paste_overlay_on_frame(frame, top_harga_img,
                             (center_x - top_harga_img.width // 2, harga_y))
                     
-                    content_top = center_y - 80 + 25
+                    content_top = center_y - 200 + 25
                     frame = _render_bottom_bar(frame)
                     
                     if stage_t > 0.5:
@@ -430,7 +430,7 @@ def generate_video_tt(queue_file, output_dir):
                         vt = stage_t - 2.5
                         v_off = slide_element_x(vt, SLIDE_DUR, 'in_left') if vt < SLIDE_DUR else 0
                         frame = paste_overlay_on_frame(frame, verdict_img,
-                            (center_x - verdict_img.width // 2 + v_off, content_top + 250))
+                            (center_x - verdict_img.width // 2 + v_off, next_y + 10))
                     
                     if t > S5_END:
                         exit_t = t - S5_END
@@ -447,7 +447,7 @@ def generate_video_tt(queue_file, output_dir):
                                 (center_x - feat_img.width // 2 + x_out, content_top + 10))
                         if stage_t > 2.5:
                             frame2 = paste_overlay_on_frame(frame2, verdict_img,
-                                (center_x - verdict_img.width // 2 + x_out, content_top + 250))
+                                (center_x - verdict_img.width // 2 + x_out, next_y + 10))
                         frame2 = _render_bottom_bar(frame2)
                         frame = frame2
                 

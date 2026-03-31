@@ -509,7 +509,7 @@ def generate_long(queue_file, output_dir):
                             (center_x - top_harga_img.width // 2, harga_y))
                     
                     # Content area starts below nama+harga
-                    content_top = center_y - 80 + 40
+                    content_top = center_y - 200 + 40
                     frame = _render_bottom_bar(frame)
                     
                     # Feature text slides in from right
@@ -532,7 +532,7 @@ def generate_long(queue_file, output_dir):
                             d2_off = slide_element_x(d2t, SLIDE_DUR, 'in_left')
                         else:
                             d2_off = 0
-                        d2_y = content_top + 180
+                        d2_y = content_top + 120
                         frame = paste_overlay_on_frame(frame, detail2_img,
                             (center_x - detail2_img.width // 2 + d2_off, d2_y))
                     
@@ -544,7 +544,7 @@ def generate_long(queue_file, output_dir):
                         else:
                             rb_off = 0
                         frame = paste_overlay_on_frame(frame, review_bubble,
-                            (80 + rb_off, content_top + 360))
+                            (center_x - review_bubble.width // 2 + rb_off, content_top + 230))
                     
                     # Verdict after 12s
                     if stage_t > 12.0:
@@ -554,14 +554,14 @@ def generate_long(queue_file, output_dir):
                         else:
                             v_off = 0
                         frame = paste_overlay_on_frame(frame, verdict_img,
-                            (center_x - verdict_img.width // 2 + v_off, content_top + 540))
+                            (center_x - verdict_img.width // 2 + v_off, content_top + 320))
                     
                     # Stars rating animation
                     if stage_t > 14.0:
                         stars = create_rating_stars(rating_val, font_path or "arial.ttf",
                                                    40, animated_t=stage_t - 14.0, total_dur=1.5)
                         frame = paste_overlay_on_frame(frame, stars,
-                            (center_x - stars.width // 2, content_top + 700))
+                            (center_x - stars.width // 2, content_top + 400))
                     
                     # Exit all at end of stage (nama+harga also exit)
                     if t > S5_END:
@@ -580,13 +580,13 @@ def generate_long(queue_file, output_dir):
                                 (center_x - feat_img.width // 2 + x_out, content_top + 20))
                         if stage_t > 5.0:
                             frame2 = paste_overlay_on_frame(frame2, detail2_img,
-                                (center_x - detail2_img.width // 2 + x_out, content_top + 180))
+                                (center_x - detail2_img.width // 2 + x_out, content_top + 120))
                         if stage_t > 8.0:
                             frame2 = paste_overlay_on_frame(frame2, review_bubble,
-                                (80 + x_out, content_top + 360))
+                                (center_x - review_bubble.width // 2 + x_out, content_top + 230))
                         if stage_t > 12.0:
                             frame2 = paste_overlay_on_frame(frame2, verdict_img,
-                                (center_x - verdict_img.width // 2 + x_out, content_top + 540))
+                                (center_x - verdict_img.width // 2 + x_out, content_top + 320))
                         frame = frame2
                 
                 # ═══════════════════════════════════════════

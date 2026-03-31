@@ -496,7 +496,7 @@ def generate_shorts(queue_file, output_dir):
                         frame = paste_overlay_on_frame(frame, top_harga_img,
                             (center_x - top_harga_img.width // 2, harga_y))
                     
-                    content_top = center_y - 80
+                    content_top = center_y - 200
                     frame = _render_bottom_bar(frame)
                     
                     if stage_t > 0.5:
@@ -509,13 +509,13 @@ def generate_shorts(queue_file, output_dir):
                         rb_t = stage_t - 4.0
                         rb_off = slide_element_x(rb_t, SLIDE_DUR, 'in_left') if rb_t < SLIDE_DUR else 0
                         frame = paste_overlay_on_frame(frame, review_bubble,
-                            (80 + rb_off, content_top + 230))
+                            (center_x - review_bubble.width // 2 + rb_off, content_top + 150))
                     
                     if stage_t > 6.0:
                         vt = stage_t - 6.0
                         v_off = slide_element_x(vt, SLIDE_DUR, 'in_right') if vt < SLIDE_DUR else 0
                         frame = paste_overlay_on_frame(frame, verdict_img,
-                            (center_x - verdict_img.width // 2 + v_off, content_top + 430))
+                            (center_x - verdict_img.width // 2 + v_off, content_top + 260))
                     
                     if t > S5_END:
                         exit_t = t - S5_END
@@ -532,10 +532,10 @@ def generate_shorts(queue_file, output_dir):
                                 (center_x - feat_img.width // 2 + x_out, content_top + 10))
                         if stage_t > 4.0:
                             frame2 = paste_overlay_on_frame(frame2, review_bubble,
-                                (80 + x_out, content_top + 230))
+                                (center_x - review_bubble.width // 2 + x_out, content_top + 150))
                         if stage_t > 6.0:
                             frame2 = paste_overlay_on_frame(frame2, verdict_img,
-                                (center_x - verdict_img.width // 2 + x_out, content_top + 430))
+                                (center_x - verdict_img.width // 2 + x_out, content_top + 260))
                         frame2 = _render_bottom_bar(frame2)
                         frame = frame2
                 
