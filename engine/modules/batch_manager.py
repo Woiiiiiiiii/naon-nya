@@ -107,7 +107,7 @@ def _select_and_validate_product(products_df, category, account_id, rng, images_
 
 def _make_storyboard_entry(product, rng):
     """Create a storyboard entry for a selected product."""
-    from engine.modules.image_utils import clean_product_name
+    from image_utils import clean_product_name
     nama_raw = str(product.get('nama', ''))
     nama = clean_product_name(nama_raw)
 
