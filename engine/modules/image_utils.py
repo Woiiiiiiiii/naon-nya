@@ -19,8 +19,8 @@ def clean_product_name(nama):
     Examples:
       "Puswall - Stiker Dinding / Wallsticker Motive Lamp / Dekorasi..."
         → "Wallsticker Motive Lamp"
-      "Panaled - Lampu LED / Lampu LED Panaled Premium Cahaya Putih Super Terang 5W..."
-        → "Lampu LED Panaled"
+      "Kap Lampu Gantung Tipe A Model XYZ"
+        → "Kap Lampu Gantung"
       "PROMO Tas Selempang Wanita Korean Style Murah Terbaru 2024"
         → "Tas Selempang Wanita"
     """
@@ -54,14 +54,16 @@ def clean_product_name(nama):
             upper_nama = nama.upper()
             nama = nama.lstrip('!-– ').strip()
     
-    # Remove noise suffixes (sizes, specs, years, marketing)
+    # Remove noise suffixes (specs, models, sizes, marketing)
     noise_suffix = [
+        r'\s+(Tipe|Type|Model|Seri|Series|Versi|Version|Edisi|Edition|Kode|Code|Nomor|No\.?)\b.*$',
         r'\s+\d+[wW]\b.*$',           # "30W..." and everything after
         r'\s+\d+\s*(pcs|pack|set|lembar|meter|cm|mm|ml|gr|kg)\b.*$',
         r'\s+(Murah|Terbaru|Termurah|Terlaris|Premium|Super|Original)\b.*$',
         r'\s+\d{4}\b.*$',              # Year "2024..."
         r'\s+[A-Z]{2,}\d+.*$',         # Model codes "AB123..."
-        r'\s+(Size|Ukuran|Warna|Motif|Varian)\b.*$',
+        r'\s+(Size|Ukuran|Warna|Motif|Varian|Variant|Color|Colour)\b.*$',
+        r'\s+(untuk|buat|cocok|anti|dengan|dan|or|&)\s.*$',  # conjunctions that add noise
     ]
     for pattern in noise_suffix:
         nama = re.sub(pattern, '', nama, flags=re.IGNORECASE)
@@ -71,10 +73,16 @@ def clean_product_name(nama):
     if len(words) > 4:
         nama = ' '.join(words[:4])
     
-    # Hard truncate at 30 chars on word boundary
+    # Hard truncate at 30 chars on WORD boundary (never mid-word)
     if len(nama) > 30:
-        words = nama[:35].split()
-        nama = ' '.join(words[:-1]) if len(words) > 1 else nama[:30]
+        words = nama.split()
+        result = ''
+        for w in words:
+            test = (result + ' ' + w).strip()
+            if len(test) > 30:
+                break
+            result = test
+        nama = result if result else words[0][:30]
     
     return nama.strip()
 

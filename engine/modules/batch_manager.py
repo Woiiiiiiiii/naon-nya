@@ -107,13 +107,15 @@ def _select_and_validate_product(products_df, category, account_id, rng, images_
 
 def _make_storyboard_entry(product, rng):
     """Create a storyboard entry for a selected product."""
-    nama = str(product.get('nama', ''))
+    from engine.modules.image_utils import clean_product_name
+    nama_raw = str(product.get('nama', ''))
+    nama = clean_product_name(nama_raw)
 
     template = rng.choice(MASALAH_TEMPLATES)
-    masalah = template.format(nama=nama[:30].lower())
+    masalah = template.format(nama=nama.lower())
 
     hook_template = rng.choice(HOOK_TEMPLATES)
-    hook = hook_template.format(nama=nama[:20]) if '{nama}' in hook_template else hook_template
+    hook = hook_template.format(nama=nama) if '{nama}' in hook_template else hook_template
     cta = rng.choice(CTA_TEMPLATES)
 
     return {
@@ -125,7 +127,7 @@ def _make_storyboard_entry(product, rng):
         "image_url": str(product.get('image_url', '')),
         "hook": hook,
         "masalah": masalah,
-        "solusi": f"Pakai {nama[:30]} aja!",
+        "solusi": f"Pakai {nama} aja!",
         "cta": cta,
         "scene_order": ["hook", "masalah", "solusi", "cta"],
     }
