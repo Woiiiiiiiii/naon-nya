@@ -27,20 +27,20 @@ from moviepy import (VideoClip, AudioFileClip, CompositeAudioClip,
                      afx, concatenate_audioclips)
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from engine.modules.category_router import (
+from category_router import (
     get_category, get_accent_color, VIDEO_DURATION
 )
-from engine.modules.slideshow_transitions import (
+from slideshow_transitions import (
     get_random_transitions, apply_transition, TRANSITION_NAMES
 )
-from engine.modules.slideshow_frame import (
+from slideshow_frame import (
     render_frame, apply_vignette, apply_ken_burns,
     fit_image_to_frame, get_random_pattern
 )
-from engine.modules.audio_normalizer import (
+from audio_normalizer import (
     prepare_music, get_ffmpeg_audio_params, find_music_file
 )
-from engine.modules.sound_manager import init_sounds
+from sound_manager import init_sounds
 
 W, H = 1080, 1920
 IMAGES_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'images')

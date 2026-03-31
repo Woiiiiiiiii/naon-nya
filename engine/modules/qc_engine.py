@@ -255,11 +255,13 @@ def run_qc(video_dir):
 
             print(f"  [OK] Resolution: {width}x{height}")
 
-            # Bitrate Quality Check (CRF 20 output should be â‰¥1500kbps)
+            # Bitrate Quality Check
+            # NOTE: Slideshow videos (static images) naturally have lower bitrate
+            # than motion video. 500kbps minimum = enough for 1080p stills.
             total_bitrate = int(info['format'].get('bit_rate', 0))
             bitrate_kbps = total_bitrate // 1000 if total_bitrate else 0
-            if bitrate_kbps > 0 and bitrate_kbps < 1500:
-                print(f"  [FAIL] Bitrate too low: {bitrate_kbps}kbps (min 1500kbps for 1080p clarity)")
+            if bitrate_kbps > 0 and bitrate_kbps < 500:
+                print(f"  [FAIL] Bitrate too low: {bitrate_kbps}kbps (min 500kbps)")
                 failed.append(path)
                 continue
 

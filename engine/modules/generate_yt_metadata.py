@@ -15,13 +15,13 @@ import pandas as pd
 import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from engine.modules.category_router import (
+from category_router import (
     get_category, get_hashtags, get_label, get_channel_name, get_copywriting
 )
 
 # Gemini integration for dynamic metadata
 try:
-    from engine.modules.metadata_generator import call_gemini
+    from metadata_generator import call_gemini
     HAS_GEMINI = True
 except ImportError:
     HAS_GEMINI = False

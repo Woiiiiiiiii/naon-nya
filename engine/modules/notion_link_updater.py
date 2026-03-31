@@ -23,7 +23,7 @@ import datetime
 import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from engine.modules.category_router import get_category, get_label
+from category_router import get_category, get_label
 
 NOTION_API = "https://api.notion.com/v1"
 NOTION_VERSION = "2022-06-28"

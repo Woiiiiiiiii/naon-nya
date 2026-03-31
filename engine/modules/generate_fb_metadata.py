@@ -13,7 +13,7 @@ import datetime
 import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from engine.modules.category_router import (
+from category_router import (
     get_category, get_hashtags, get_copywriting, FACEBOOK_ACCOUNT
 )
 

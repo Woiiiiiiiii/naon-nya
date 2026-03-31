@@ -91,7 +91,7 @@ def _isolate_product(img, img_path):
     Returns: clean product image (RGBA with transparent BG) or original if fails.
     """
     try:
-        from engine.modules.object_isolator import isolate_via_hf
+        from object_isolator import isolate_via_hf
         
         # Save temp for rembg
         temp_path = img_path + '.tmp_rembg.jpg'

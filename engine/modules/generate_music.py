@@ -27,12 +27,12 @@ import datetime
 import shutil
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from engine.modules.category_router import get_category
+from category_router import get_category
 
 # Import auto-restock from music_downloader (try multiple import paths)
 HAS_DOWNLOADER = False
 try:
-    from engine.modules.music_downloader import restock_category as _restock, count_local as _count
+    from music_downloader import restock_category as _restock, count_local as _count
     HAS_DOWNLOADER = True
 except ImportError:
     try:
@@ -447,7 +447,7 @@ def _ensure_category_has_music(category, force=False):
     if HAS_DOWNLOADER:
         # Tier 1: Freesound (try to get 1 track)
         try:
-            from engine.modules.music_downloader import fetch_freesound, count_local
+            from music_downloader import fetch_freesound, count_local
             got = fetch_freesound(category, count=count_needed)
             if got > 0:
                 print(f"      [TIER 1] Freesound: +{got} track for {category}")
@@ -457,7 +457,7 @@ def _ensure_category_has_music(category, force=False):
 
         # Tier 2: YouTube Audio (skip Pixabay — dead code)
         try:
-            from engine.modules.music_downloader import fetch_youtube_audio_library
+            from music_downloader import fetch_youtube_audio_library
             got = fetch_youtube_audio_library(category, count=count_needed)
             if got > 0:
                 print(f"      [TIER 2] YouTube Audio: +{got} track for {category}")
@@ -586,7 +586,7 @@ def generate_all_music(queue_dir, output_dir):
             if HAS_DOWNLOADER:
                 # TIER 1: Freesound API (kualitas terbaik, royalty-free)
                 try:
-                    from engine.modules.music_downloader import fetch_freesound, count_local
+                    from music_downloader import fetch_freesound, count_local
                     got = fetch_freesound(category, count=1)
                     if got > 0:
                         print(f"    [TIER 1] Freesound: +{got} fresh track for {category}")
@@ -607,7 +607,7 @@ def generate_all_music(queue_dir, output_dir):
                 # TIER 2: YouTube Audio (kalau Freesound gagal)
                 if not got_music:
                     try:
-                        from engine.modules.music_downloader import fetch_youtube_audio_library
+                        from music_downloader import fetch_youtube_audio_library
                         got = fetch_youtube_audio_library(category, count=1)
                         if got > 0:
                             print(f"    [TIER 2] YouTube: +{got} fresh track for {category}")
