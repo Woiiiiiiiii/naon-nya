@@ -429,11 +429,11 @@ def generate_shorts(queue_file, output_dir):
                     bot_total_h = bot_channel_img.height + (bot_motto_img.height + 6 if bot_motto_img else 0)
                     bot_y = H - 90 - bot_total_h
                     frame = paste_overlay_on_frame(frame, bot_channel_img,
-                        (center_x - bot_channel_img.width // 2 + x_offset, bot_y), opacity=opacity)
+                        (center_x - bot_channel_img.width // 2, bot_y))
                     if bot_motto_img:
                         motto_y = bot_y + bot_channel_img.height + 6
                         frame = paste_overlay_on_frame(frame, bot_motto_img,
-                            (center_x - bot_motto_img.width // 2 + x_offset, motto_y), opacity=opacity)
+                            (center_x - bot_motto_img.width // 2, motto_y))
                     return frame
                 
                 if t < S1_END:
