@@ -471,8 +471,6 @@ def generate_video_tt(queue_file, output_dir):
                         (center_x - cta_img.width // 2 + cx_off, cta_y))
                     frame = _render_bottom_bar(frame)
                     
-                    if cta_t > 1.5:
-                        blink = create_blinking_label(" STOK TERBATAS!",
                             font_bold or font_path or "arial.ttf", TT_ACCENT, cta_t, 0.5)
                         frame = paste_overlay_on_frame(frame, blink,
                             (center_x - blink.width // 2, cta_y + cta_img.height + 25))
@@ -490,20 +488,7 @@ def generate_video_tt(queue_file, output_dir):
                 music = prepare_music(AudioFileClip(music_path), total_dur, music_vol=music_vol)
                 audio_clips.append(music)
 
-            for st_time in [S1_END, S2_END, S4_END, S6_END]:
-                sfx_path = get_sfx_path('swoosh')
-                if sfx_path and os.path.exists(sfx_path) and st_time < total_dur:
-                    try:
-                        audio_clips.append(prepare_sfx(AudioFileClip(sfx_path), st_time))
-                    except Exception:
-                        pass
 
-            sfx_path = get_sfx_path('bass_drop')
-            if sfx_path and os.path.exists(sfx_path) and S6_END + 0.3 < total_dur:
-                try:
-                    audio_clips.append(prepare_sfx(AudioFileClip(sfx_path), S6_END + 0.3))
-                except Exception:
-                    pass
 
             # Voiceover
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'tt')

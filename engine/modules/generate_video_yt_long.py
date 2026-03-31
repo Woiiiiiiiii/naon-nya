@@ -619,8 +619,6 @@ def generate_long(queue_file, output_dir):
                     frame = _render_bottom_bar(frame)
                     
                     # "STOK TERBATAS" blinks after 2s
-                    if cta_t > 2.0:
-                        blink = create_blinking_label(" STOK TERBATAS!",
                             font_bold or font_path or "arial.ttf",
                             (220, 53, 69), cta_t, 0.6)
                         frame = paste_overlay_on_frame(frame, blink,
@@ -648,34 +646,12 @@ def generate_long(queue_file, output_dir):
 
             # SFX at stage transitions
             stage_transitions = [S1_END, S2_END, S4_END, S6_END]
-            for st_time in stage_transitions:
-                sfx_path = get_sfx_path('swoosh')
-                if sfx_path and os.path.exists(sfx_path) and st_time < total_dur:
-                    try:
-                        sfx = prepare_sfx(AudioFileClip(sfx_path), st_time)
-                        audio_clips.append(sfx)
-                    except Exception:
-                        pass
 
             # Ding at rating stars (stage 5, 14s in)
             ding_time = S4_END + 14.0
-            sfx_path = get_sfx_path('ding')
-            if sfx_path and os.path.exists(sfx_path) and ding_time < total_dur:
-                try:
-                    sfx = prepare_sfx(AudioFileClip(sfx_path), ding_time)
-                    audio_clips.append(sfx)
-                except Exception:
-                    pass
 
             # Bass drop at CTA
             cta_start = S6_END + 0.5
-            sfx_path = get_sfx_path('bass_drop')
-            if sfx_path and os.path.exists(sfx_path) and cta_start < total_dur:
-                try:
-                    sfx = prepare_sfx(AudioFileClip(sfx_path), cta_start)
-                    audio_clips.append(sfx)
-                except Exception:
-                    pass
 
             if audio_clips:
                 try:
