@@ -49,28 +49,11 @@ def _get_hf_key(account_id):
 
 
 def enhance_via_hf(image_path, account_id='yt_1'):
-    """Enhance image using Real-ESRGAN via HF API."""
-    api_key = _get_hf_key(account_id)
-    if not api_key:
-        print(f"  [WARN] No HF API key for {account_id}, using local enhance")
-        return enhance_local(image_path)
-
-    try:
-        with open(image_path, 'rb') as f:
-            data = f.read()
-
-        headers = {"Authorization": f"Bearer {api_key}"}
-        resp = requests.post(HF_API_URL, headers=headers, data=data, timeout=60)
-
-        if resp.status_code == 200:
-            enhanced = Image.open(BytesIO(resp.content))
-            return enhanced
-        else:
-            print(f"  [WARN] HF API {resp.status_code}: {resp.text[:100]}")
-            return enhance_local(image_path)
-    except Exception as e:
-        print(f"  [WARN] HF enhance failed: {e}")
-        return enhance_local(image_path)
+    """Enhance image using local PIL processing.
+    NOTE: Real-ESRGAN HF model no longer available (404).
+    Local enhancement provides good results without API dependency.
+    """
+    return enhance_local(image_path)
 
 
 def enhance_local(image_path):
