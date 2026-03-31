@@ -662,8 +662,7 @@ def generate_long(queue_file, output_dir):
             # === VOICEOVER: per-stage TTS ===
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'yt_long')
             vo_stages = [
-                ('hook', 0.0), ('overview', S1_END), ('detail1', S2_END),
-                ('detail2', S4_END), ('cta', S6_END)
+                ('hook', 0.0), ('product', S1_END), ('feature', S4_END), ('cta', S6_END)
             ]
             vo_found = False
             for idx, (stage_id, start_time) in enumerate(vo_stages):

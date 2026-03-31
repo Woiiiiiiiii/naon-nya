@@ -515,8 +515,7 @@ def generate_video_fb(queue_file, output_dir):
 
             # Voiceover
             vo_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'voiceovers', produk_id, 'fb')
-            vo_stages = [('hook', 0.0), ('product', S1_END), ('feature', S2_END+3),
-                         ('proof', S4_END+1), ('cta', S6_END)]
+            vo_stages = [('hook', 0.0), ('product', S1_END), ('feature', S4_END), ('cta', S6_END)]
             for idx, (stage_id, start_time) in enumerate(vo_stages):
                 vo_path = os.path.join(vo_dir, f"vo_{stage_id}.mp3")
                 if os.path.exists(vo_path) and start_time < total_dur:

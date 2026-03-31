@@ -19,13 +19,13 @@ from io import BytesIO
 #  STANDARD VOLUME LEVELS — SINGLE consistent level for ALL channels
 #  Female VO naturally louder → VO turun 1, Music naik 1 for female
 # ═══════════════════════════════════════════════════════════════════
-MUSIC_VOLUME = 0.30      # Background music (default / male VO)
+MUSIC_VOLUME = 0.22      # Background music (default / male VO)
 SFX_VOLUME = 0.25        # Sound effects (subtle)
-VOICEOVER_VOLUME = 0.90  # Voiceover default (male = clearly dominant)
+VOICEOVER_VOLUME = 0.95  # Voiceover default (male = clearly dominant)
 
 # Female VO: slightly softer VO + louder music
-FEMALE_VO_VOLUME = 0.80      # Female VO (turun 1 tingkat)
-FEMALE_MUSIC_VOLUME = 0.38   # Music for female VO (naik 1 tingkat)
+FEMALE_VO_VOLUME = 0.88      # Female VO (turun 1 tingkat)
+FEMALE_MUSIC_VOLUME = 0.25   # Music for female VO (naik 1 tingkat)
 
 # Which accounts use female voice (GadisNeural)
 FEMALE_ACCOUNTS = {'yt_1', 'yt_3', 'yt_5', 'tt_1'}
