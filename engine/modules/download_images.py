@@ -701,9 +701,268 @@ def download_images(produk_file, output_dir):
     print(f"  Skipped (failed): {stats['skipped']}")
     print(f"  Total:            {sum(stats.values())}")
 
+def _save_image_raw(img, img_path, min_target=1080):
+    """Save image WITHOUT background removal (for slideshow).
+    Keeps original seller image as-is."""
+    w, h = img.size
+    if w < 200 or h < 200:
+        return False
+    img = img.convert('RGB')
+    if w < min_target or h < min_target:
+        scale = max(min_target / w, min_target / h)
+        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+    img.save(img_path, 'JPEG', quality=92)
+    return True
+
+
+def _download_multi_from_shopee(product_name, produk_id, output_dir, count=4):
+    """Download up to `count` images from the BEST matching Shopee product.
+    Saves as {produk_id}_1.jpg, {produk_id}_2.jpg, etc.
+    Uses ORIGINAL seller images (no background removal).
+    Returns number of images saved."""
+    session = _build_shopee_session()
+    saved = 0
+
+    # Check if already downloaded
+    existing = sum(1 for i in range(1, count + 1)
+                   if os.path.exists(os.path.join(output_dir, f"{produk_id}_{i}.jpg")))
+    if existing >= count:
+        return existing
+
+    # Try Shopee API with cookies
+    if session:
+        try:
+            url = 'https://shopee.co.id/api/v4/search/search_items'
+            params = {
+                'by': 'relevancy', 'keyword': product_name,
+                'limit': 3, 'newest': 0, 'order': 'desc',
+                'page_type': 'search', 'scenario': 'PAGE_GLOBAL_SEARCH',
+                'version': 2,
+            }
+            time.sleep(random.uniform(0.3, 1.0))
+
+            cookies_str = '; '.join([f"{c.name}={c.value}" for c in session.cookies])
+            headers = {
+                'User-Agent': random.choice(_USER_AGENTS),
+                'Accept': 'application/json',
+                'Referer': f'https://shopee.co.id/search?keyword={product_name.replace(" ", "+")}',
+                'X-Shopee-Language': 'id',
+            }
+
+            items = None
+            if _HAS_PROXY and is_proxy_available():
+                from urllib.parse import urlencode
+                full_url = f"{url}?{urlencode(params)}"
+                resp = proxy_get(full_url, headers=headers, cookies_str=cookies_str)
+                if resp.status_code == 200:
+                    items = resp.json().get('items', [])
+            else:
+                resp = session.get(url, params=params, timeout=15)
+                if resp.status_code == 200:
+                    items = resp.json().get('items', [])
+
+            if items:
+                # Use the FIRST matching product's images (don't mix products)
+                for item in items[:3]:
+                    info = item.get('item_basic', {})
+                    image_hashes = info.get('images', [])
+                    if not image_hashes:
+                        single = info.get('image', '')
+                        if single:
+                            image_hashes = [single]
+
+                    if len(image_hashes) >= 2:
+                        # Good product with multiple images
+                        downloaded = []
+                        for img_hash in image_hashes[:count + 2]:
+                            if not img_hash:
+                                continue
+                            cdn_url = f"https://down-id.img.susercontent.com/file/{img_hash}"
+                            img = _download_single_image(cdn_url)
+                            if img is not None:
+                                downloaded.append(img)
+                            if len(downloaded) >= count:
+                                break
+
+                        # Save downloaded images
+                        for i, img in enumerate(downloaded[:count], 1):
+                            path = os.path.join(output_dir, f"{produk_id}_{i}.jpg")
+                            if _save_image_raw(img, path):
+                                saved += 1
+
+                        if saved >= 2:
+                            tag = 'Cookies+Proxy' if (_HAS_PROXY and is_proxy_available()) else 'Cookies'
+                            print(f"    [MULTI-OK] Shopee {tag} — {saved} images saved")
+                            break
+
+        except Exception as e:
+            print(f"    [MULTI-WARN] Shopee cookies failed: {e}")
+
+    # Fallback: try Shopee page scrape for image hashes
+    if saved < 2:
+        try:
+            import re
+            query = product_name.replace(' ', '+')
+            scrape_url = f"https://shopee.co.id/search?keyword={query}"
+            headers = {
+                'User-Agent': random.choice(_USER_AGENTS),
+                'Accept': 'text/html',
+            }
+            time.sleep(random.uniform(0.5, 1.5))
+            resp = requests.get(scrape_url, headers=headers, timeout=15)
+            if resp.status_code == 200:
+                img_hashes = re.findall(r'([a-f0-9]{32})', resp.text)
+                for img_hash in img_hashes[:count * 2]:
+                    if saved >= count:
+                        break
+                    cdn_url = f"https://down-id.img.susercontent.com/file/{img_hash}"
+                    img = _download_single_image(cdn_url)
+                    if img is not None:
+                        idx = saved + 1
+                        path = os.path.join(output_dir, f"{produk_id}_{idx}.jpg")
+                        if not os.path.exists(path) and _save_image_raw(img, path):
+                            saved += 1
+                if saved >= 2:
+                    print(f"    [MULTI-OK] Shopee scrape — {saved} images saved")
+        except Exception:
+            pass
+
+    # Fallback: if we have the main image but not multi, duplicate it
+    if saved == 0:
+        main_img = None
+        for ext in ['jpg', 'png', 'webp']:
+            p = os.path.join(output_dir, f"{produk_id}.{ext}")
+            if os.path.exists(p):
+                try:
+                    main_img = Image.open(p).convert('RGB')
+                    break
+                except Exception:
+                    pass
+
+        if main_img:
+            path = os.path.join(output_dir, f"{produk_id}_1.jpg")
+            if _save_image_raw(main_img, path):
+                saved = 1
+                print(f"    [MULTI-FALLBACK] Using main image as _1")
+
+    # Fill remaining slots with mirrors/copies of existing
+    if 0 < saved < count:
+        existing_paths = []
+        for i in range(1, saved + 1):
+            p = os.path.join(output_dir, f"{produk_id}_{i}.jpg")
+            if os.path.exists(p):
+                existing_paths.append(p)
+
+        for i in range(saved + 1, count + 1):
+            src_path = existing_paths[(i - 1) % len(existing_paths)]
+            try:
+                src_img = Image.open(src_path).convert('RGB')
+                # Mirror for visual variety
+                if i % 2 == 0:
+                    src_img = src_img.transpose(Image.FLIP_LEFT_RIGHT)
+                dest_path = os.path.join(output_dir, f"{produk_id}_{i}.jpg")
+                if not os.path.exists(dest_path):
+                    _save_image_raw(src_img, dest_path)
+                    saved += 1
+            except Exception:
+                pass
+
+    return saved
+
+
+def download_multi_images(produk_file, output_dir, count=4):
+    """Download multiple product images for slideshow videos.
+    Each product gets up to `count` images saved as {pid}_1.jpg ... {pid}_4.jpg.
+    Uses ORIGINAL seller images (no background removal)."""
+    print("=== Downloading Multi-Image for Slideshow ===")
+
+    if not os.path.exists(produk_file):
+        # Try queue files instead
+        queue_files = [
+            'engine/queue/yt_queue.jsonl',
+            'engine/queue/tt_queue.jsonl',
+            'engine/queue/fb_queue.jsonl',
+        ]
+        products = []
+        for qf in queue_files:
+            if os.path.exists(qf):
+                with open(qf, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip():
+                            job = json.loads(line.strip())
+                            pid = job.get('produk_id', '')
+                            nama = job.get('nama', pid)
+                            if pid and pid not in [p[0] for p in products]:
+                                products.append((pid, nama))
+
+        if not products:
+            print("  No products found in queue files")
+            return
+
+        os.makedirs(output_dir, exist_ok=True)
+        stats = {'downloaded': 0, 'cached': 0, 'failed': 0}
+
+        for pid, nama in products:
+            # Check if already have all images
+            existing = sum(1 for i in range(1, count + 1)
+                           if os.path.exists(os.path.join(output_dir, f"{pid}_{i}.jpg")))
+            if existing >= count:
+                stats['cached'] += 1
+                continue
+
+            print(f"  [{pid}] {nama[:40]}...")
+            n = _download_multi_from_shopee(nama, pid, output_dir, count)
+            if n >= 2:
+                stats['downloaded'] += 1
+            else:
+                stats['failed'] += 1
+
+        print(f"\n  === Multi-Image Summary ===")
+        print(f"  Downloaded: {stats['downloaded']}")
+        print(f"  Cached:     {stats['cached']}")
+        print(f"  Failed:     {stats['failed']}")
+        return
+
+    # CSV-based download
+    df = pd.read_csv(produk_file)
+    os.makedirs(output_dir, exist_ok=True)
+    stats = {'downloaded': 0, 'cached': 0, 'failed': 0}
+
+    for _, row in df.iterrows():
+        pid = row['produk_id']
+        name = str(row.get('nama', pid))
+
+        existing = sum(1 for i in range(1, count + 1)
+                       if os.path.exists(os.path.join(output_dir, f"{pid}_{i}.jpg")))
+        if existing >= count:
+            stats['cached'] += 1
+            continue
+
+        print(f"  [{pid}] {name[:40]}...")
+        n = _download_multi_from_shopee(name, pid, output_dir, count)
+        if n >= 2:
+            stats['downloaded'] += 1
+        else:
+            stats['failed'] += 1
+
+    print(f"\n  === Multi-Image Summary ===")
+    print(f"  Downloaded: {stats['downloaded']}")
+    print(f"  Cached:     {stats['cached']}")
+    print(f"  Failed:     {stats['failed']}")
+
+
 if __name__ == "__main__":
-    download_images(
-        "engine/data/produk_valid.csv",
-        "engine/data/images"
-    )
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == '--multi':
+        # Multi-image mode for slideshow
+        download_multi_images(
+            "engine/data/produk_valid.csv",
+            "engine/data/images",
+            count=4
+        )
+    else:
+        download_images(
+            "engine/data/produk_valid.csv",
+            "engine/data/images"
+        )
 

@@ -61,19 +61,11 @@ def main():
         if slot_arg in ['pagi', 'siang', 'sore', 'malam']:
             v2_steps[0] += f" --slot {slot_arg}"
     
-    # V3: Hook Selection & Variation (per YT and TT queue)
-    v3_steps = [
-        "python engine/modules/hook_selector.py",
-        "python engine/modules/hook_variant_generator.py"
-    ]
+    # V3: REMOVED — no more hook selection (slideshow format, no text overlay)
+    v3_steps = []
     
-    # V4: CTA Selection & Variation (per YT and TT queue)
-    v4_steps = [
-        "python engine/modules/cta_selector.py",
-        "python engine/modules/cta_variant_generator.py",
-        # AI Copywriter: generate unique hooks, CTAs, descriptions
-        "python engine/modules/cf_copywriter.py --queue engine/queue/storyboard_queue.jsonl",
-    ]
+    # V4: REMOVED — no more CTA/copywriter (slideshow format, no text overlay)
+    v4_steps = []
     
     # V5: Video Production Pipeline
     # Jika QC mode (SKIP_YT_UPLOAD=true) → SELALU generate video, tidak peduli slot
@@ -84,65 +76,37 @@ def main():
     force_render = skip_upload  # QC mode = selalu render untuk review
     
     v5_steps = [
-        # Pre-production: Fonts + SFX cache + backgrounds (photos + videos)
-        # NOTE: music_downloader.py REMOVED — generate_music.py picks from
-        #       existing library or generates on-demand (no bulk restock)
+        # Pre-production: Fonts + SFX cache
         "python engine/modules/font_helper.py",
         "python engine/modules/sound_manager.py",
-        # Visual pipeline: composite product images → enhance/beautify
-        "python engine/modules/image_enhancer.py",
-        "python engine/modules/image_compositor.py",
-        # Beautify all composites (local PIL + CF SD img2img)
-        "python engine/modules/cf_image_enhancer.py --input engine/data/composites",
-        # Deduplication + planning
+        # Download 4 product images per product (original Shopee seller images)
+        "python engine/modules/download_images.py --multi",
+        # Deduplication tracking
         "python engine/modules/dedup_tracker.py",
-        "python engine/modules/micro_cut_planner.py",
-        "python engine/modules/body_micro_editor.py",
-        # Pre-rendering QC
-        "python engine/modules/body_retention_evaluator.py",
-        # Generate per-video music (unique track per video)
+        # Generate per-video background music
         "python engine/modules/generate_music.py",
-        # CLEANUP: wipe ALL old voiceover files to prevent stale theme/scene bleed
-        "python -c \"import os, glob; [os.remove(f) for f in glob.glob('engine/data/voiceovers/**/vo_*.mp3', recursive=True)]\"",
-        # AI TTS: generate voiceover per PLATFORM queue (each has correct account_id)
-        # YT queue → yt_short + yt_long VOs (account_id = yt_1..yt_5)
-        "python engine/modules/tts_voiceover.py --queue engine/queue/yt_queue.jsonl --platform yt",
-        # TT queue → tt VOs (account_id = tt_1)
-        "python engine/modules/tts_voiceover.py --queue engine/queue/tt_queue.jsonl --platform tt",
-        # FB queue → fb VOs (account_id = fb_1)
-        "python engine/modules/tts_voiceover.py --queue engine/queue/fb_queue.jsonl --platform fb",
     ]
     
     if is_long_slot or force_render:
-        # ── PRODUCTION or QC MODE: render ALL ──
+        # ── PRODUCTION or QC MODE: render ALL platforms ──
         if force_render and not is_long_slot:
             print(f"[QC MODE] Slot={slot_arg} tapi force render karena SKIP_YT_UPLOAD=true")
         v5_steps.extend([
-            # YouTube: Long-form + auto-extract Shorts
-            "python engine/modules/generate_video_yt_long.py",
-            "python engine/modules/generate_video_yt_short.py",
-            # TikTok + Facebook: generated here too
-            "python engine/modules/generate_video_tt.py",
-            "python engine/modules/generate_video_fb.py",
+            # SLIDESHOW: single generator for ALL platforms (YT Long, YT Short, TT, FB)
+            "python engine/modules/generate_video_slideshow.py",
         ])
     # Short slots (production only): skip ALL video rendering
     # YT Shorts already uploaded with scheduled time by Long slot
     # TT+FB already emailed from Long slot
     
     v5_steps.extend([
-        # Post-render: color grading per category
-        "python engine/modules/color_grading.py",
         # Post-render QC (handles empty gracefully)
-        "python engine/modules/body_drop_detector.py",
         "python engine/modules/qc_engine.py",
         # Metadata (Gemini-powered + legacy)
         "python engine/modules/metadata_generator.py",
         "python engine/modules/generate_yt_metadata.py",
         "python engine/modules/generate_fb_metadata.py",
         "python engine/modules/generate_ttfb_metadata.py",
-        # Metrics tracking
-        "python engine/modules/hook_metrics_collector.py",
-        "python engine/modules/cta_metrics_collector.py",
         # Generate pipeline report
         "python engine/modules/generate_report.py",
     ])
