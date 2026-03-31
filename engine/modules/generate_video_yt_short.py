@@ -558,10 +558,6 @@ def generate_shorts(queue_file, output_dir):
                     frame = paste_overlay_on_frame(frame, cta_img,
                         (center_x - cta_img.width // 2 + cx_off, cta_y))
                     frame = _render_bottom_bar(frame)
-                    
-                            font_bold or font_path or "arial.ttf", (220, 53, 69), cta_t, 0.6)
-                        frame = paste_overlay_on_frame(frame, blink,
-                            (center_x - blink.width // 2, cta_y + cta_img.height + 25))
                 
                 return frame
 
