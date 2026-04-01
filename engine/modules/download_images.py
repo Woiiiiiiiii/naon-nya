@@ -750,6 +750,13 @@ def _download_multi_from_shopee(product_name, produk_id, output_dir, count=5):
                 m = _re.search(r'product/(\d+)/(\d+)', shopee_url)
                 if m:
                     shopid, itemid = m.group(1), m.group(2)
+                    print(f"    [TIER0] Found shopid={shopid} itemid={itemid}")
+                else:
+                    print(f"    [TIER0] No shopid/itemid in URL: {shopee_url[:60]}")
+            else:
+                print(f"    [TIER0] produk_id '{produk_id}' not found in produk.csv ({len(_df)} rows)")
+        else:
+            print(f"    [TIER0] produk.csv not found at {csv_path}")
 
         if shopid and itemid:
             detail_url = f"https://shopee.co.id/api/v4/item/get?shopid={shopid}&itemid={itemid}"
@@ -1019,6 +1026,8 @@ def download_multi_images(produk_file, output_dir, count=5):
                             job = json.loads(line.strip())
                             pid = job.get('produk_id', '')
                             nama = job.get('nama', pid)
+                            shopee_url_q = job.get('shopee_url', '')
+                            print(f"    [QUEUE] {pid}: {nama[:40]} url={'YES' if shopee_url_q else 'NO'}")
                             if pid and pid not in [p[0] for p in products]:
                                 products.append((pid, nama))
 
