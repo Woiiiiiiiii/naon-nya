@@ -715,11 +715,18 @@ def _save_image_raw(img, img_path, min_target=1080):
     return True
 
 
-def _download_multi_from_shopee(product_name, produk_id, output_dir, count=4):
+def _download_multi_from_shopee(product_name, produk_id, output_dir, count=5):
     """Download up to `count` images from the BEST matching Shopee product.
     Saves as {produk_id}_1.jpg, {produk_id}_2.jpg, etc.
     Uses ORIGINAL seller images (no background removal).
-    Returns number of images saved."""
+    Returns number of images saved.
+
+    Download tiers (in order):
+      Tier 0: Direct Item Detail API (shopid/itemid from produk.csv) — most reliable
+      Tier 1: Shopee Search API with cookies
+      Tier 2: Shopee page scrape (regex hash extraction)
+      Fallback: Duplicate existing main image with mirror
+    """
     session = _build_shopee_session()
     saved = 0
 
@@ -728,6 +735,92 @@ def _download_multi_from_shopee(product_name, produk_id, output_dir, count=4):
                    if os.path.exists(os.path.join(output_dir, f"{produk_id}_{i}.jpg")))
     if existing >= count:
         return existing
+
+    # ═══ TIER 0: Direct Item Detail API (most reliable) ═══
+    # Look up shopee_url from produk.csv → extract shopid/itemid → fetch item gallery
+    try:
+        import re as _re
+        csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'produk.csv')
+        shopid, itemid = None, None
+        if os.path.exists(csv_path):
+            _df = pd.read_csv(csv_path)
+            _row = _df[_df['produk_id'] == produk_id]
+            if not _row.empty:
+                shopee_url = str(_row.iloc[0].get('shopee_url', ''))
+                m = _re.search(r'product/(\d+)/(\d+)', shopee_url)
+                if m:
+                    shopid, itemid = m.group(1), m.group(2)
+
+        if shopid and itemid:
+            detail_url = f"https://shopee.co.id/api/v4/item/get?shopid={shopid}&itemid={itemid}"
+            headers = {
+                'User-Agent': random.choice(_USER_AGENTS),
+                'Accept': 'application/json',
+                'Referer': f'https://shopee.co.id/product/{shopid}/{itemid}',
+                'X-Shopee-Language': 'id',
+            }
+            time.sleep(random.uniform(0.3, 0.8))
+
+            resp = None
+            # Try with proxy first
+            if _HAS_PROXY and is_proxy_available():
+                try:
+                    resp = proxy_get(detail_url, headers=headers)
+                except Exception:
+                    pass
+
+            # Try with session cookies
+            if resp is None or resp.status_code != 200:
+                if session:
+                    try:
+                        resp = session.get(detail_url, headers=headers, timeout=15)
+                    except Exception:
+                        pass
+
+            # Try without cookies (public API)
+            if resp is None or resp.status_code != 200:
+                try:
+                    resp = requests.get(detail_url, headers=headers, timeout=15)
+                except Exception:
+                    pass
+
+            if resp and resp.status_code == 200:
+                data = resp.json().get('data', {})
+                image_hashes = data.get('images', [])
+                if not image_hashes:
+                    # Some responses use 'item' wrapper
+                    item_data = data.get('item', data)
+                    image_hashes = item_data.get('images', [])
+
+                if image_hashes and len(image_hashes) >= 2:
+                    downloaded = []
+                    for img_hash in image_hashes[:count + 2]:
+                        if not img_hash:
+                            continue
+                        cdn_url = f"https://down-id.img.susercontent.com/file/{img_hash}"
+                        img = _download_single_image(cdn_url)
+                        if img is not None:
+                            downloaded.append(img)
+                        if len(downloaded) >= count:
+                            break
+
+                    for i, img in enumerate(downloaded[:count], 1):
+                        path = os.path.join(output_dir, f"{produk_id}_{i}.jpg")
+                        if _save_image_raw(img, path):
+                            saved += 1
+
+                    if saved >= 2:
+                        print(f"    [MULTI-OK] Shopee ItemDetail — {saved} images saved")
+                        return saved
+                    else:
+                        print(f"    [MULTI-WARN] ItemDetail: got hashes but download failed ({saved} saved)")
+                else:
+                    print(f"    [MULTI-WARN] ItemDetail: {len(image_hashes)} images in response")
+            else:
+                status = resp.status_code if resp else 'no response'
+                print(f"    [MULTI-WARN] ItemDetail API: {status}")
+    except Exception as e:
+        print(f"    [MULTI-WARN] Tier 0 (ItemDetail) failed: {e}")
 
     # Try Shopee API with cookies
     if session:
@@ -870,9 +963,9 @@ def _download_multi_from_shopee(product_name, produk_id, output_dir, count=4):
     return saved
 
 
-def download_multi_images(produk_file, output_dir, count=4):
+def download_multi_images(produk_file, output_dir, count=5):
     """Download multiple product images for slideshow videos.
-    Each product gets up to `count` images saved as {pid}_1.jpg ... {pid}_4.jpg.
+    Each product gets up to `count` images saved as {pid}_1.jpg ... {pid}_5.jpg.
     Uses ORIGINAL seller images (no background removal)."""
     print("=== Downloading Multi-Image for Slideshow ===")
 
@@ -958,7 +1051,7 @@ if __name__ == "__main__":
         download_multi_images(
             "engine/data/produk_valid.csv",
             "engine/data/images",
-            count=4
+            count=5
         )
     else:
         download_images(
