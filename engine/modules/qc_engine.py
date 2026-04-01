@@ -194,14 +194,15 @@ def run_qc(video_dir):
     # --- VIDEO CHECKS ---
     print(f"\n--- Video Quality Checks ({len(videos)} videos) ---")
 
-    # Per-platform duration rules (with tolerance margin)
+    # Per-platform duration rules (updated for slideshow format)
+    # Slideshow = shorter than narrated video (no voiceover)
     DURATION_RULES = {
-        '_yt_long':  {'min': 85,  'max': 125, 'label': 'YT Long (90-120s)'},
-        '_yt':       {'min': 40,  'max': 55,  'label': 'YT Short (45-50s)'},
+        '_yt_long':  {'min': 45,  'max': 75,  'label': 'YT Long (50-70s)'},
+        '_yt':       {'min': 18,  'max': 35,  'label': 'YT Short (20-30s)'},
         '_tt_short': {'min': 10,  'max': 20,  'label': 'TT Short (15s)'},
-        '_tt':       {'min': 20,  'max': 35,  'label': 'TT (25-30s)'},
+        '_tt':       {'min': 18,  'max': 40,  'label': 'TT (20-35s)'},
         '_fb_short': {'min': 18,  'max': 30,  'label': 'FB Short (25s)'},
-        '_fb':       {'min': 45,  'max': 65,  'label': 'FB (50-60s)'},
+        '_fb':       {'min': 25,  'max': 45,  'label': 'FB (28-40s)'},
     }
     MIN_FILE_SIZE = 1000 * 1024  # 1MB â€” 4000k bitrate video should be much larger
 
