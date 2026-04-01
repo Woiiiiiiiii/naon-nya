@@ -992,7 +992,18 @@ def download_multi_images(produk_file, output_dir, count=5):
     Uses ORIGINAL seller images (no background removal)."""
     print("=== Downloading Multi-Image for Slideshow ===")
 
-    if not os.path.exists(produk_file):
+    # Check if CSV file exists AND has data rows
+    _csv_has_data = False
+    if os.path.exists(produk_file):
+        try:
+            _df_check = pd.read_csv(produk_file)
+            _csv_has_data = len(_df_check) > 0
+            if not _csv_has_data:
+                print(f"  [INFO] {produk_file} exists but empty — using queue files")
+        except Exception:
+            pass
+
+    if not _csv_has_data:
         # Try queue files instead
         queue_files = [
             'engine/queue/yt_queue.jsonl',
