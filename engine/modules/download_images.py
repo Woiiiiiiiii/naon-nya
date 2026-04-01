@@ -797,8 +797,17 @@ def _download_multi_from_shopee(product_name, produk_id, output_dir, count=5):
                     for img_hash in image_hashes[:count + 2]:
                         if not img_hash:
                             continue
-                        cdn_url = f"https://down-id.img.susercontent.com/file/{img_hash}"
-                        img = _download_single_image(cdn_url)
+                        # Try cf.shopee.co.id first (not blocked by proxy),
+                        # then down-id.img.susercontent.com as fallback
+                        img = None
+                        for cdn_base in [
+                            'https://cf.shopee.co.id/file',
+                            'https://down-id.img.susercontent.com/file',
+                        ]:
+                            cdn_url = f"{cdn_base}/{img_hash}"
+                            img = _download_single_image(cdn_url)
+                            if img is not None:
+                                break
                         if img is not None:
                             downloaded.append(img)
                         if len(downloaded) >= count:
@@ -870,8 +879,15 @@ def _download_multi_from_shopee(product_name, produk_id, output_dir, count=5):
                         for img_hash in image_hashes[:count + 2]:
                             if not img_hash:
                                 continue
-                            cdn_url = f"https://down-id.img.susercontent.com/file/{img_hash}"
-                            img = _download_single_image(cdn_url)
+                            img = None
+                            for cdn_base in [
+                                'https://cf.shopee.co.id/file',
+                                'https://down-id.img.susercontent.com/file',
+                            ]:
+                                cdn_url = f"{cdn_base}/{img_hash}"
+                                img = _download_single_image(cdn_url)
+                                if img is not None:
+                                    break
                             if img is not None:
                                 downloaded.append(img)
                             if len(downloaded) >= count:
@@ -908,8 +924,15 @@ def _download_multi_from_shopee(product_name, produk_id, output_dir, count=5):
                 for img_hash in img_hashes[:count * 2]:
                     if saved >= count:
                         break
-                    cdn_url = f"https://down-id.img.susercontent.com/file/{img_hash}"
-                    img = _download_single_image(cdn_url)
+                    img = None
+                    for cdn_base in [
+                        'https://cf.shopee.co.id/file',
+                        'https://down-id.img.susercontent.com/file',
+                    ]:
+                        cdn_url = f"{cdn_base}/{img_hash}"
+                        img = _download_single_image(cdn_url)
+                        if img is not None:
+                            break
                     if img is not None:
                         idx = saved + 1
                         path = os.path.join(output_dir, f"{produk_id}_{idx}.jpg")
