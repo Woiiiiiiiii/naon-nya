@@ -208,25 +208,38 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     overlay = Image.new('RGBA', (w, h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
+    # Calculate product area (matches fit_image_to_frame sizing)
+    # Product is centered with ~88% scale
+    prod_scale = 0.88
+    # We don't know original aspect ratio, but frame sits at fixed margin
+    prod_margin_x = int(w * (1 - prod_scale) / 2)
+    prod_margin_y = int(h * (1 - prod_scale) / 2)
+
     margin = frame_width + 4
     fc = theme['frame_color']
     ic = theme['inner_color']
 
-    # Outer frame border
-    draw.rectangle([(0, 0), (w - 1, h - 1)], outline=(*fc, 255), width=frame_width)
+    # Frame around the PRODUCT area (not screen edges)
+    fx1 = max(0, prod_margin_x - frame_width - 4)
+    fy1 = max(0, prod_margin_y - frame_width - 4)
+    fx2 = min(w - 1, w - prod_margin_x + frame_width + 4)
+    fy2 = min(h - 1, h - prod_margin_y + frame_width + 4)
+
+    # Outer frame border around product
+    draw.rectangle([(fx1, fy1), (fx2, fy2)], outline=(*fc, 255), width=frame_width)
     # Inner accent line
-    inner_offset = frame_width - 2
-    draw.rectangle([(inner_offset, inner_offset),
-                     (w - 1 - inner_offset, h - 1 - inner_offset)],
+    inner_off = frame_width - 2
+    draw.rectangle([(fx1 + inner_off, fy1 + inner_off),
+                     (fx2 - inner_off, fy2 - inner_off)],
                     outline=(*ic, 180), width=2)
 
-    # Corner accents (small squares)
+    # Corner accents
     cs = frame_width + 4
-    for cx, cy in [(0, 0), (w - cs, 0), (0, h - cs), (w - cs, h - cs)]:
+    for cx, cy in [(fx1, fy1), (fx2 - cs, fy1), (fx1, fy2 - cs), (fx2 - cs, fy2 - cs)]:
         draw.rectangle([(cx, cy), (cx + cs, cy + cs)], fill=(*fc, 220))
 
-    # Running lights
-    positions = _get_light_positions(w, h, margin - 2, num_lights)
+    # Running lights around product frame
+    positions = _get_light_positions_rect(fx1, fy1, fx2, fy2, num_lights)
 
     for i, (lx, ly) in enumerate(positions):
         if pattern == 'chase':
@@ -257,7 +270,7 @@ def render_frame(img_arr, t, category='home', pattern='chase',
                        (lx + light_radius, ly + light_radius)],
                       fill=(r, g, b, alpha))
 
-        # Subtle glow around light (larger, dimmer)
+        # Subtle glow around light
         if brightness > 0.4:
             gr = light_radius * 2
             ga = int(60 * brightness)
@@ -318,30 +331,71 @@ def apply_ken_burns(img_arr, t, duration, direction='zoom_in'):
 
 
 def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
-    """Fit product image FULL SCREEN (cover mode).
-    Image fills ENTIRE screen — may crop edges if aspect ratio differs.
-    Center-crops to keep the most important area (center).
-    No black bars, no letterbox."""
+    """Fit product image with FROSTED MIRROR background.
+
+    Visual style:
+      1. Background = zoomed + heavily blurred version of same image (frosted glass)
+      2. Product image = FIT mode (max size, NO cropping, keeps full product visible)
+      3. Product centered with equal spacing on all sides
+
+    Result: product is crisp & complete, surrounded by glowing frosted mirror."""
+    from PIL import ImageEnhance
     w, h = img_pil.size
+    img_rgb = img_pil.convert('RGB')
 
-    # COVER mode: scale to FILL (crop overflow)
-    scale = max(target_w / w, target_h / h)
-    new_w = int(w * scale)
-    new_h = int(h * scale)
+    # ── Step 1: Frosted mirror background ──
+    # Scale to COVER the frame (cropping OK for background — it's blurred)
+    bg_scale = max(target_w / w, target_h / h) * 1.3  # 30% extra for coverage
+    bg_w = int(w * bg_scale)
+    bg_h = int(h * bg_scale)
+    bg_img = img_rgb.resize((bg_w, bg_h), Image.LANCZOS)
+    # Center-crop to exact target
+    crop_x = (bg_w - target_w) // 2
+    crop_y = (bg_h - target_h) // 2
+    bg_cropped = bg_img.crop((crop_x, crop_y, crop_x + target_w, crop_y + target_h))
+    # Heavy blur for frosted glass
+    frosted = bg_cropped.filter(ImageFilter.GaussianBlur(radius=35))
+    # Brighten slightly so it feels like a glowing mirror
+    frosted = ImageEnhance.Brightness(frosted).enhance(1.1)
+    # Reduce saturation slightly for softer look
+    frosted = ImageEnhance.Color(frosted).enhance(0.7)
 
-    resized = img_pil.resize((new_w, new_h), Image.LANCZOS)
+    # ── Step 2: FIT the product image (max size, no cropping) ──
+    fit_scale = min(target_w / w, target_h / h) * 0.88  # 88% to leave room for frame
+    new_w = int(w * fit_scale)
+    new_h = int(h * fit_scale)
+    product = img_rgb.resize((new_w, new_h), Image.LANCZOS)
 
-    # Center-crop to exact target size
-    crop_x = (new_w - target_w) // 2
-    crop_y = (new_h - target_h) // 2
+    # ── Step 3: Composite product centered on frosted background ──
+    canvas = frosted.copy()
+    paste_x = (target_w - new_w) // 2
+    paste_y = (target_h - new_h) // 2
+    canvas.paste(product, (paste_x, paste_y))
 
-    cropped = resized.crop((crop_x, crop_y, crop_x + target_w, crop_y + target_h))
+    return canvas
 
-    if cropped.mode == 'RGBA':
-        # Flatten alpha onto bg color
-        canvas = Image.new('RGB', (target_w, target_h), bg_color)
-        canvas.paste(cropped, (0, 0), cropped.split()[3])
-        return canvas
 
-    return cropped.convert('RGB')
+def _get_light_positions_rect(x1, y1, x2, y2, num_lights=28):
+    """Calculate light positions evenly distributed around a rectangle."""
+    positions = []
+    w = x2 - x1
+    h = y2 - y1
+    perimeter = 2 * w + 2 * h
+    seg = perimeter / num_lights
+
+    for i in range(num_lights):
+        d = i * seg
+        if d < w:  # Top edge
+            positions.append((int(x1 + d), y1))
+        elif d < w + h:  # Right edge
+            dd = d - w
+            positions.append((x2, int(y1 + dd)))
+        elif d < 2 * w + h:  # Bottom edge
+            dd = d - w - h
+            positions.append((int(x2 - dd), y2))
+        else:  # Left edge
+            dd = d - 2 * w - h
+            positions.append((x1, int(y2 - dd)))
+
+    return positions
 
