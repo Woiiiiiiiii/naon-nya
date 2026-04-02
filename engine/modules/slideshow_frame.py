@@ -223,27 +223,27 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     outer_margin = 2
     draw.rectangle([(outer_margin, outer_margin),
                      (w - 1 - outer_margin, h - 1 - outer_margin)],
-                    outline=(*fc, 220), width=frame_width)
+                    outline=(*fc, 255), width=3)  # 3px, full opacity
 
     # ════════════════════════════════════════════════════════════
     #  PIGURA DALAM — thicker frame around product, bold corners
     # ════════════════════════════════════════════════════════════
 
-    # Inner frame position (matches fit_image_to_frame product area)
-    # Product is at 94% scale, so margin = 3% on each side
-    inner_margin_x = int(w * 0.03)  # ~32px on 1080w
-    inner_margin_y = int(h * 0.03)  # ~58px on 1920h
+    # Inner frame position (matches fit_image_to_frame 97% product area)
+    # Product is at 97% scale, so margin = 1.5% on each side
+    inner_margin_x = int(w * 0.015)  # ~16px on 1080w
+    inner_margin_y = int(h * 0.015)  # ~29px on 1920h
     ix1, iy1 = inner_margin_x, inner_margin_y
     ix2, iy2 = w - inner_margin_x, h - inner_margin_y
 
-    # Inner frame border (3px, slightly thicker than outer)
-    inner_fw = 3
+    # Inner frame border (4px, clearly visible)
+    inner_fw = 4
     draw.rectangle([(ix1, iy1), (ix2, iy2)],
-                    outline=(*ic, 200), width=inner_fw)
+                    outline=(*ic, 255), width=inner_fw)
 
-    # Bold corner accents (thicker squares at 4 corners of inner frame)
-    corner_size = 20
-    corner_thick = 4
+    # Bold corner accents (thick L-shapes at 4 corners)
+    corner_size = 28
+    corner_thick = 6
     # Top-left
     draw.line([(ix1, iy1), (ix1 + corner_size, iy1)], fill=(*fc, 255), width=corner_thick)
     draw.line([(ix1, iy1), (ix1, iy1 + corner_size)], fill=(*fc, 255), width=corner_thick)
@@ -375,14 +375,14 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     crop_y = (bg_h - target_h) // 2
     bg_cropped = bg_img.crop((crop_x, crop_y, crop_x + target_w, crop_y + target_h))
     # Heavy blur for frosted glass
-    frosted = bg_cropped.filter(ImageFilter.GaussianBlur(radius=35))
-    # Brighten slightly so it feels like a glowing mirror
-    frosted = ImageEnhance.Brightness(frosted).enhance(1.1)
-    # Reduce saturation slightly for softer look
-    frosted = ImageEnhance.Color(frosted).enhance(0.7)
+    frosted = bg_cropped.filter(ImageFilter.GaussianBlur(radius=40))
+    # DARKEN the frosted mirror — reference video has dark background
+    frosted = ImageEnhance.Brightness(frosted).enhance(0.45)
+    # Lower saturation for muted look
+    frosted = ImageEnhance.Color(frosted).enhance(0.5)
 
     # ── Step 2: FIT the product image (max size, no cropping) ──
-    fit_scale = min(target_w / w, target_h / h) * 0.94  # 94% fill — big rectangle
+    fit_scale = min(target_w / w, target_h / h) * 0.97  # 97% fill for maximum size
     new_w = int(w * fit_scale)
     new_h = int(h * fit_scale)
     product = img_rgb.resize((new_w, new_h), Image.LANCZOS)
