@@ -232,6 +232,11 @@ def _shopee_search_with_cookies(session, keyword, limit=5):
             img_url = f"https://down-id.img.susercontent.com/file/{image_hash}"
             shopee_url = f"https://shopee.co.id/product/{shop_id}/{item_id}"
 
+            # Get ALL image hashes for multi-image slideshow
+            all_image_hashes = info.get('images', [])
+            if not all_image_hashes and image_hash:
+                all_image_hashes = [image_hash]
+
             products.append({
                 'nama': name[:80],
                 'price': f"Rp{price:,}".replace(',', '.'),
@@ -239,6 +244,7 @@ def _shopee_search_with_cookies(session, keyword, limit=5):
                 'image_url': img_url,
                 'shopee_url': shopee_url,
                 'source': 'shopee_affiliate',
+                'image_hashes': all_image_hashes,
             })
 
         print(f"    [Layer1] '{keyword}' → {len(products)} products")
@@ -310,6 +316,10 @@ def _shopee_public_search(keyword, limit=5):
             img_url = f"https://down-id.img.susercontent.com/file/{image_hash}"
             shopee_url = f"https://shopee.co.id/product/{shop_id}/{item_id}"
 
+            all_image_hashes = info.get('images', [])
+            if not all_image_hashes and image_hash:
+                all_image_hashes = [image_hash]
+
             products.append({
                 'nama': name[:80],
                 'price': f"Rp{price:,}".replace(',', '.'),
@@ -317,6 +327,7 @@ def _shopee_public_search(keyword, limit=5):
                 'image_url': img_url,
                 'shopee_url': shopee_url,
                 'source': 'shopee_public',
+                'image_hashes': all_image_hashes,
             })
 
         print(f"    [Layer2] '{keyword}' → {len(products)} products")
@@ -469,6 +480,10 @@ def _shopee_recommend_discover(category, limit=10):
                     img_url = f"https://down-id.img.susercontent.com/file/{image_hash}"
                     shopee_url = f"https://shopee.co.id/product/{shop_id}/{item_id}"
 
+                    all_image_hashes = info.get('images', [])
+                    if not all_image_hashes and image_hash:
+                        all_image_hashes = [image_hash]
+
                     products.append({
                         'nama': name[:80],
                         'price': f"Rp{price:,}".replace(',', '.'),
@@ -476,6 +491,7 @@ def _shopee_recommend_discover(category, limit=10):
                         'image_url': img_url,
                         'shopee_url': shopee_url,
                         'source': 'shopee_recommend',
+                        'image_hashes': all_image_hashes,
                     })
 
         except Exception as e:
@@ -546,6 +562,10 @@ def _shopee_category_scrape(category, limit=10):
                 img_url = f"https://down-id.img.susercontent.com/file/{image_hash}"
                 shopee_url = f"https://shopee.co.id/product/{shop_id}/{item_id}"
 
+                all_image_hashes = info.get('images', [])
+                if not all_image_hashes and image_hash:
+                    all_image_hashes = [image_hash]
+
                 products.append({
                     'nama': name[:80],
                     'price': f"Rp{price:,}".replace(',', '.'),
@@ -553,6 +573,7 @@ def _shopee_category_scrape(category, limit=10):
                     'image_url': img_url,
                     'shopee_url': shopee_url,
                     'source': 'shopee_category',
+                    'image_hashes': all_image_hashes,
                 })
 
             time.sleep(random.uniform(2.0, 4.0))
@@ -695,6 +716,31 @@ def _save_product(product, category, image_path):
         shutil.copy2(image_path, img_dest)
     elif product.get('image_url'):
         _download_product_image(product['image_url'], img_dest)
+
+    # ── MULTI-IMAGE: download additional seller images (2-5) ──
+    image_hashes = product.get('image_hashes', [])
+    if image_hashes and len(image_hashes) >= 2:
+        # Skip first hash (already downloaded as main image.jpg)
+        extra_hashes = image_hashes[1:5]  # up to 4 additional images
+        extra_saved = 0
+        for idx, img_hash in enumerate(extra_hashes, 2):
+            if not img_hash:
+                continue
+            extra_dest = os.path.join(product_dir, f'image_{idx}.jpg')
+            if os.path.exists(extra_dest):
+                extra_saved += 1
+                continue
+            # Try both CDN domains
+            for cdn_base in [
+                'https://cf.shopee.co.id/file',
+                'https://down-id.img.susercontent.com/file',
+            ]:
+                extra_url = f"{cdn_base}/{img_hash}"
+                if _download_product_image(extra_url, extra_dest):
+                    extra_saved += 1
+                    break
+        if extra_saved > 0:
+            print(f"      [{pid}] +{extra_saved} extra images saved")
 
     return pid, os.path.exists(os.path.join(product_dir, 'image.jpg'))
 
@@ -1139,10 +1185,25 @@ def copy_bank_images_to_pipeline(images_dir=None):
             if not os.path.exists(src_img):
                 continue
 
+            # Copy main image
             dst_img = os.path.join(images_dir, f"{pid_dir}.jpg")
             if not os.path.exists(dst_img):
                 shutil.copy2(src_img, dst_img)
                 copied += 1
+
+            # Also copy as _1 for slideshow generator compatibility
+            dst_img_1 = os.path.join(images_dir, f"{pid_dir}_1.jpg")
+            if not os.path.exists(dst_img_1):
+                shutil.copy2(src_img, dst_img_1)
+
+            # Copy additional numbered images (image_2.jpg → {pid}_2.jpg, etc.)
+            for i in range(2, 6):
+                src_extra = os.path.join(product_dir, f'image_{i}.jpg')
+                if os.path.exists(src_extra):
+                    dst_extra = os.path.join(images_dir, f"{pid_dir}_{i}.jpg")
+                    if not os.path.exists(dst_extra):
+                        shutil.copy2(src_extra, dst_extra)
+                        copied += 1
 
     print(f"Copied {copied} images to {images_dir}")
     return copied
