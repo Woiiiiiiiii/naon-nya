@@ -293,8 +293,8 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
     segments, total_dur = _calculate_timeline(config)
     print(f"    Timeline: {len(segments)} segments, {total_dur:.1f}s total")
 
-    # Choose running lights pattern
-    light_pattern = get_random_pattern()
+    # Running lights: always CHASE (berjalan, bukan kedip)
+    light_pattern = 'chase'
     print(f"    Frame: {category}, lights={light_pattern}")
 
     def make_frame(t):
@@ -308,9 +308,8 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
                     local_t = t - seg['start']
                     slide_dur = seg['end'] - seg['start']
 
-                    # Ken Burns
-                    frame = apply_ken_burns(fitted[idx], local_t, slide_dur,
-                                            seg['kb_dir'])
+                    # Product image is STATIC (no Ken Burns movement)
+                    frame = fitted[idx].copy()
 
                     # Frame + running lights
                     frame = render_frame(frame, t, category=category,
