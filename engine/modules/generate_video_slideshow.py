@@ -280,13 +280,14 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
         print(f"    [SKIP] No images for {produk_id}")
         return False
 
-    # Fit images to frame
+    # Fit images to frame — get product bounds for inner frame
     fitted = []
+    bounds_list = []  # product_bounds per image
     for img in images_pil:
-        fitted_img = fit_image_to_frame(img, W, H, bg_color=(15, 15, 20))
+        fitted_img, prod_bounds = fit_image_to_frame(img, W, H, bg_color=(15, 15, 20))
         fitted.append(np.array(fitted_img))
+        bounds_list.append(prod_bounds)
 
-    # Apply vignette to each
     # Apply very subtle vignette (don't make product blurry)
     fitted = [apply_vignette(f, strength=0.15) for f in fitted]
 
@@ -312,9 +313,10 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
                     # Product image is STATIC (no Ken Burns movement)
                     frame = fitted[idx].copy()
 
-                    # Frame + running lights
+                    # Frame + running lights (pass product bounds)
                     frame = render_frame(frame, t, category=category,
-                                          pattern=light_pattern)
+                                          pattern=light_pattern,
+                                          product_bounds=bounds_list[idx])
 
                 elif seg['type'] == 'transition':
                     from_idx = seg['from_idx']
@@ -323,11 +325,13 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
                     trans_dur = seg['end'] - seg['start']
                     progress = local_t / max(trans_dur, 0.01)
 
-                    # Apply frame to both source images first
+                    # Apply frame to both source images
                     img1 = render_frame(fitted[from_idx], t, category=category,
-                                         pattern=light_pattern)
+                                         pattern=light_pattern,
+                                         product_bounds=bounds_list[from_idx])
                     img2 = render_frame(fitted[to_idx], t, category=category,
-                                         pattern=light_pattern)
+                                         pattern=light_pattern,
+                                         product_bounds=bounds_list[to_idx])
 
                     frame = apply_transition(img1, img2, progress, seg['name'])
 
@@ -338,7 +342,8 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
             idx = segments[-1].get('image_idx',
                                     segments[-1].get('to_idx', 0))
             frame = render_frame(fitted[idx], t, category=category,
-                                  pattern=light_pattern)
+                                  pattern=light_pattern,
+                                  product_bounds=bounds_list[idx])
 
         # Fade in from black
         if t < FADE_IN_DUR:

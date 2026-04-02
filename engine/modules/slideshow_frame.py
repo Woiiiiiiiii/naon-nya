@@ -185,19 +185,20 @@ def get_random_pattern(rng=None):
 #  Main frame renderer
 # ═══════════════════════════════════════════════════════════════════
 def render_frame(img_arr, t, category='home', pattern='chase',
-                 frame_width=4, light_radius=4, num_lights=36):
+                 frame_width=4, light_radius=4, num_lights=36,
+                 product_bounds=None):
     """Render TWO-LAYER frame matching reference video:
 
     PIGURA LUAR (outer): Thin neon frame at screen edge + running chase lights
-    PIGURA DALAM (inner): Thicker frame around product area with bold corners
-                          Acts as visual boundary between product & frosted mirror
+    PIGURA DALAM (inner): Wraps directly ON the product image edges
+                          Bold corners, acts as border between product & mirror
 
-    Product image sits INSIDE the inner frame, static (no movement).
+    Args:
+        product_bounds: tuple (x1, y1, x2, y2) of product position on screen
     """
     h, w = img_arr.shape[:2]
     theme = FRAME_THEMES.get(category, FRAME_THEMES['home'])
 
-    # Work in RGBA for glow blending
     img_pil = Image.fromarray(img_arr).convert('RGBA')
     overlay = Image.new('RGBA', (w, h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
@@ -210,7 +211,6 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     #  PIGURA LUAR — thin neon frame at screen edge
     # ════════════════════════════════════════════════════════════
 
-    # Soft neon glow behind outer frame
     glow_layer = Image.new('RGBA', (w, h), (0, 0, 0, 0))
     glow_draw = ImageDraw.Draw(glow_layer)
     glow_draw.rectangle([(0, 0), (w - 1, h - 1)],
@@ -219,43 +219,37 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     overlay = Image.alpha_composite(overlay, glow_layer)
     draw = ImageDraw.Draw(overlay)
 
-    # Thin neon line at screen edge (rapat ke pinggir)
     outer_margin = 2
     draw.rectangle([(outer_margin, outer_margin),
                      (w - 1 - outer_margin, h - 1 - outer_margin)],
-                    outline=(*fc, 255), width=3)  # 3px, full opacity
+                    outline=(*fc, 255), width=3)
 
     # ════════════════════════════════════════════════════════════
-    #  PIGURA DALAM — thicker frame around product, bold corners
+    #  PIGURA DALAM — wraps ON product image edges
     # ════════════════════════════════════════════════════════════
 
-    # Inner frame position (matches fit_image_to_frame 97% product area)
-    # Product is at 97% scale, so margin = 1.5% on each side
-    inner_margin_x = int(w * 0.015)  # ~16px on 1080w
-    inner_margin_y = int(h * 0.015)  # ~29px on 1920h
-    ix1, iy1 = inner_margin_x, inner_margin_y
-    ix2, iy2 = w - inner_margin_x, h - inner_margin_y
+    if product_bounds:
+        px1, py1, px2, py2 = product_bounds
+        # Frame sits right on the product edges
+        inner_fw = 3
+        draw.rectangle([(px1, py1), (px2, py2)],
+                        outline=(*ic, 230), width=inner_fw)
 
-    # Inner frame border (4px, clearly visible)
-    inner_fw = 4
-    draw.rectangle([(ix1, iy1), (ix2, iy2)],
-                    outline=(*ic, 255), width=inner_fw)
-
-    # Bold corner accents (thick L-shapes at 4 corners)
-    corner_size = 28
-    corner_thick = 6
-    # Top-left
-    draw.line([(ix1, iy1), (ix1 + corner_size, iy1)], fill=(*fc, 255), width=corner_thick)
-    draw.line([(ix1, iy1), (ix1, iy1 + corner_size)], fill=(*fc, 255), width=corner_thick)
-    # Top-right
-    draw.line([(ix2, iy1), (ix2 - corner_size, iy1)], fill=(*fc, 255), width=corner_thick)
-    draw.line([(ix2, iy1), (ix2, iy1 + corner_size)], fill=(*fc, 255), width=corner_thick)
-    # Bottom-left
-    draw.line([(ix1, iy2), (ix1 + corner_size, iy2)], fill=(*fc, 255), width=corner_thick)
-    draw.line([(ix1, iy2), (ix1, iy2 - corner_size)], fill=(*fc, 255), width=corner_thick)
-    # Bottom-right
-    draw.line([(ix2, iy2), (ix2 - corner_size, iy2)], fill=(*fc, 255), width=corner_thick)
-    draw.line([(ix2, iy2), (ix2, iy2 - corner_size)], fill=(*fc, 255), width=corner_thick)
+        # Bold corner accents (L-shapes at 4 corners of PRODUCT)
+        corner_size = 25
+        corner_thick = 5
+        # Top-left
+        draw.line([(px1, py1), (px1 + corner_size, py1)], fill=(*fc, 255), width=corner_thick)
+        draw.line([(px1, py1), (px1, py1 + corner_size)], fill=(*fc, 255), width=corner_thick)
+        # Top-right
+        draw.line([(px2, py1), (px2 - corner_size, py1)], fill=(*fc, 255), width=corner_thick)
+        draw.line([(px2, py1), (px2, py1 + corner_size)], fill=(*fc, 255), width=corner_thick)
+        # Bottom-left
+        draw.line([(px1, py2), (px1 + corner_size, py2)], fill=(*fc, 255), width=corner_thick)
+        draw.line([(px1, py2), (px1, py2 - corner_size)], fill=(*fc, 255), width=corner_thick)
+        # Bottom-right
+        draw.line([(px2, py2), (px2 - corner_size, py2)], fill=(*fc, 255), width=corner_thick)
+        draw.line([(px2, py2), (px2, py2 - corner_size)], fill=(*fc, 255), width=corner_thick)
 
     # ════════════════════════════════════════════════════════════
     #  RUNNING LIGHTS — chase pattern along OUTER frame perimeter
@@ -352,48 +346,54 @@ def apply_ken_burns(img_arr, t, duration, direction='zoom_in'):
 
 
 def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
-    """Fit product image with FROSTED MIRROR background.
+    """Fit product image inside a PORTRAIT RECTANGLE with frosted mirror.
 
-    Visual style:
-      1. Background = zoomed + heavily blurred version of same image (frosted glass)
-      2. Product image = FIT mode (max size, NO cropping, keeps full product visible)
-      3. Product centered with equal spacing on all sides
-
-    Result: product is crisp & complete, surrounded by glowing frosted mirror."""
+    Layout (matching reference video):
+      1. Full screen = frosted mirror background (dark, blurred)
+      2. Fixed RECTANGLE area with proportional margins (4% each side)
+         - This rectangle has the same PROPORTIONS as the screen
+         - Product is FIT (max size, no cropping) INSIDE this rectangle
+         - Any empty space within the rectangle = frosted mirror showing through
+      3. Result: product centered in a well-proportioned portrait rectangle
+    """
     from PIL import ImageEnhance
     w, h = img_pil.size
     img_rgb = img_pil.convert('RGB')
 
-    # ── Step 1: Frosted mirror background ──
-    # Scale to COVER the frame (cropping OK for background — it's blurred)
-    bg_scale = max(target_w / w, target_h / h) * 1.3  # 30% extra for coverage
+    # ── Step 1: Full-screen frosted mirror background ──
+    bg_scale = max(target_w / w, target_h / h) * 1.3
     bg_w = int(w * bg_scale)
     bg_h = int(h * bg_scale)
     bg_img = img_rgb.resize((bg_w, bg_h), Image.LANCZOS)
-    # Center-crop to exact target
     crop_x = (bg_w - target_w) // 2
     crop_y = (bg_h - target_h) // 2
     bg_cropped = bg_img.crop((crop_x, crop_y, crop_x + target_w, crop_y + target_h))
-    # Heavy blur for frosted glass
     frosted = bg_cropped.filter(ImageFilter.GaussianBlur(radius=40))
-    # DARKEN the frosted mirror — reference video has dark background
     frosted = ImageEnhance.Brightness(frosted).enhance(0.45)
-    # Lower saturation for muted look
     frosted = ImageEnhance.Color(frosted).enhance(0.5)
 
-    # ── Step 2: FIT the product image (max size, no cropping) ──
-    fit_scale = min(target_w / w, target_h / h) * 0.97  # 97% fill for maximum size
+    # ── Step 2: Define product rectangle (proportional margins) ──
+    margin_pct = 0.04  # 4% margin on each side
+    rect_x = int(target_w * margin_pct)   # ~43px on 1080
+    rect_y = int(target_h * margin_pct)   # ~77px on 1920
+    rect_w = target_w - 2 * rect_x        # ~994px
+    rect_h = target_h - 2 * rect_y        # ~1766px
+
+    # ── Step 3: FIT product inside the rectangle (no cropping) ──
+    fit_scale = min(rect_w / w, rect_h / h)
     new_w = int(w * fit_scale)
     new_h = int(h * fit_scale)
     product = img_rgb.resize((new_w, new_h), Image.LANCZOS)
 
-    # ── Step 3: Composite product centered on frosted background ──
+    # ── Step 4: Center product within the rectangle, on frosted bg ──
     canvas = frosted.copy()
-    paste_x = (target_w - new_w) // 2
-    paste_y = (target_h - new_h) // 2
+    paste_x = rect_x + (rect_w - new_w) // 2
+    paste_y = rect_y + (rect_h - new_h) // 2
     canvas.paste(product, (paste_x, paste_y))
 
-    return canvas
+    # Return image AND product bounds (for inner frame positioning)
+    product_bounds = (paste_x, paste_y, paste_x + new_w, paste_y + new_h)
+    return canvas, product_bounds
 
 
 def _get_light_positions_rect(x1, y1, x2, y2, num_lights=28):
