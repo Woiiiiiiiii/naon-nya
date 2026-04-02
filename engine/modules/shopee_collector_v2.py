@@ -491,6 +491,7 @@ def _extract_from_offer(offer):
         'price': price,
         'image_hash': img_hash,
         'image_url': f"https://cf.shopee.co.id/file/{img_hash}",
+        'all_image_hashes': images if images else [image] if image else [],
     }
 
 
@@ -564,6 +565,7 @@ def _parse_item_detail(item):
         'price': price,
         'image_hash': img_hash,
         'image_url': f"https://cf.shopee.co.id/file/{img_hash}",
+        'all_image_hashes': images if images else [image] if image else [],
     }
 
 
@@ -798,6 +800,25 @@ def collect(categories=None, target=None):
                 total_new += 1
                 print(f"    ✓ {detail['name'][:45]} | {price_str} | {commission}")
 
+                # Download extra images (2-5) for slideshow
+                all_hashes = detail.get('all_image_hashes', [])
+                if len(all_hashes) >= 2:
+                    extra_saved = 0
+                    for idx, h in enumerate(all_hashes[1:5], 2):
+                        if not h:
+                            continue
+                        extra_path = os.path.join(product_dir, f'image_{idx}.jpg')
+                        if os.path.exists(extra_path):
+                            extra_saved += 1
+                            continue
+                        for cdn in ['https://cf.shopee.co.id/file',
+                                    'https://down-id.img.susercontent.com/file']:
+                            if _download_image(f"{cdn}/{h}", extra_path):
+                                extra_saved += 1
+                                break
+                    if extra_saved > 0:
+                        print(f"      +{extra_saved} extra images")
+
         print(f"  → {cat}: {collected} produk baru")
 
     # Summary
@@ -877,6 +898,17 @@ def _copy_images():
             if os.path.exists(src) and not os.path.exists(dst):
                 shutil.copy2(src, dst)
                 count += 1
+            # Also copy as _1 for slideshow compatibility
+            dst_1 = os.path.join(dst_dir, f"{d}_1.jpg")
+            if os.path.exists(src) and not os.path.exists(dst_1):
+                shutil.copy2(src, dst_1)
+            # Copy extra numbered images
+            for i in range(2, 6):
+                src_extra = os.path.join(cat_dir, d, f'image_{i}.jpg')
+                dst_extra = os.path.join(dst_dir, f"{d}_{i}.jpg")
+                if os.path.exists(src_extra) and not os.path.exists(dst_extra):
+                    shutil.copy2(src_extra, dst_extra)
+                    count += 1
     print(f"✅ Images: {count} copied ({skipped} used skipped)")
 
 
