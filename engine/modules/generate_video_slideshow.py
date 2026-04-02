@@ -364,16 +364,21 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
     audio_clips = []
 
     # Find music
-    # NOTE: MUSIC_VOLUME (0.22) is for background behind voiceover.
-    # Slideshow has NO voiceover — music is the ONLY audio = louder!
-    SLIDESHOW_MUSIC_VOL = 0.95
+    # Slideshow has NO voiceover — music is the ONLY audio track.
+    # Use LOUDER normalization (bypass the quiet background level).
     _acct = acct_id or 'yt_1'
     music_path, music_tier = find_music_file(music_dir, produk_id, _acct, category)
     if music_path:
         try:
-            music = prepare_music(AudioFileClip(music_path), total_dur,
-                                   music_vol=SLIDESHOW_MUSIC_VOL)
-            audio_clips.append(music)
+            raw_music = AudioFileClip(music_path)
+            # Loop if needed
+            if raw_music.duration < total_dur:
+                reps = int(total_dur / raw_music.duration) + 1
+                raw_music = concatenate_audioclips([raw_music] * reps)
+            raw_music = raw_music.subclipped(0, total_dur)
+            # Loud volume — music IS the audio (no VO to compete with)
+            raw_music = raw_music.with_effects([afx.MultiplyVolume(1.0)])
+            audio_clips.append(raw_music)
         except Exception as e:
             print(f"    [WARN] Music failed: {e}")
 
