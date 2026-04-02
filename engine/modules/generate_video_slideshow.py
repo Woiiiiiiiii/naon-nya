@@ -287,7 +287,8 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
         fitted.append(np.array(fitted_img))
 
     # Apply vignette to each
-    fitted = [apply_vignette(f, strength=0.3) for f in fitted]
+    # Apply very subtle vignette (don't make product blurry)
+    fitted = [apply_vignette(f, strength=0.15) for f in fitted]
 
     # Calculate timeline
     segments, total_dur = _calculate_timeline(config)
@@ -360,7 +361,7 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
     # Find music
     # NOTE: MUSIC_VOLUME (0.22) is for background behind voiceover.
     # Slideshow has NO voiceover — music is the ONLY audio = louder!
-    SLIDESHOW_MUSIC_VOL = 0.75
+    SLIDESHOW_MUSIC_VOL = 0.95
     _acct = acct_id or 'yt_1'
     music_path, music_tier = find_music_file(music_dir, produk_id, _acct, category)
     if music_path:
@@ -382,7 +383,8 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
     video.write_videofile(
         output_path, fps=30, codec='libx264',
         preset='medium', logger=None,
-        ffmpeg_params=['-profile:v', 'high', '-level', '4.1'],
+        ffmpeg_params=['-profile:v', 'high', '-level', '4.1',
+                       '-b:v', '5M', '-maxrate', '6M', '-bufsize', '8M'],
         **audio_params
     )
     video.close()

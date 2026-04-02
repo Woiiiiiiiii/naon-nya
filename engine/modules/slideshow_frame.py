@@ -186,22 +186,13 @@ def get_random_pattern(rng=None):
 # ═══════════════════════════════════════════════════════════════════
 def render_frame(img_arr, t, category='home', pattern='chase',
                  frame_width=4, light_radius=4, num_lights=36):
-    """Render thin neon frame with running lights at SCREEN EDGES.
+    """Render TWO-LAYER frame matching reference video:
 
-    Visual style (matching reference):
-      - Thin neon-glow frame at the outer edge of the screen
-      - Running chase lights along the screen perimeter
-      - Subtle corner glow accents
-      - Frame is OUTSIDE the product area (screen border)
+    PIGURA LUAR (outer): Thin neon frame at screen edge + running chase lights
+    PIGURA DALAM (inner): Thicker frame around product area with bold corners
+                          Acts as visual boundary between product & frosted mirror
 
-    Args:
-        img_arr: numpy array (H, W, 3) — the product image
-        t: float — current time in seconds (for animation)
-        category: str — category for color theme
-        pattern: str — 'chase', 'twinkle', 'pulse', 'rainbow'
-        frame_width: int — frame border thickness (thin neon = 4px)
-        light_radius: int — radius of each light dot
-        num_lights: int — number of lights around the frame
+    Product image sits INSIDE the inner frame, static (no movement).
     """
     h, w = img_arr.shape[:2]
     theme = FRAME_THEMES.get(category, FRAME_THEMES['home'])
@@ -215,35 +206,63 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     ic = theme['inner_color']
     gc = theme['glow_color']
 
-    # ── Outer neon glow (soft glow behind the frame line) ──
+    # ════════════════════════════════════════════════════════════
+    #  PIGURA LUAR — thin neon frame at screen edge
+    # ════════════════════════════════════════════════════════════
+
+    # Soft neon glow behind outer frame
     glow_layer = Image.new('RGBA', (w, h), (0, 0, 0, 0))
     glow_draw = ImageDraw.Draw(glow_layer)
-    glow_width = frame_width + 8
     glow_draw.rectangle([(0, 0), (w - 1, h - 1)],
-                         outline=gc, width=glow_width)
+                         outline=gc, width=frame_width + 8)
     glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=6))
     overlay = Image.alpha_composite(overlay, glow_layer)
     draw = ImageDraw.Draw(overlay)
 
-    # ── Thin frame border at screen edge ──
-    margin = 6  # small inset from edge
-    draw.rectangle([(margin, margin), (w - 1 - margin, h - 1 - margin)],
+    # Thin neon line at screen edge (rapat ke pinggir)
+    outer_margin = 2
+    draw.rectangle([(outer_margin, outer_margin),
+                     (w - 1 - outer_margin, h - 1 - outer_margin)],
                     outline=(*fc, 220), width=frame_width)
 
-    # ── Inner accent line ──
-    inner_m = margin + frame_width + 2
-    draw.rectangle([(inner_m, inner_m), (w - 1 - inner_m, h - 1 - inner_m)],
-                    outline=(*ic, 120), width=1)
+    # ════════════════════════════════════════════════════════════
+    #  PIGURA DALAM — thicker frame around product, bold corners
+    # ════════════════════════════════════════════════════════════
 
-    # ── Small corner accent dots ──
-    cs = 8
-    for cx, cy in [(margin, margin), (w - margin - cs, margin),
-                   (margin, h - margin - cs), (w - margin - cs, h - margin - cs)]:
-        draw.rectangle([(cx, cy), (cx + cs, cy + cs)], fill=(*fc, 200))
+    # Inner frame position (matches fit_image_to_frame product area)
+    # Product is at 94% scale, so margin = 3% on each side
+    inner_margin_x = int(w * 0.03)  # ~32px on 1080w
+    inner_margin_y = int(h * 0.03)  # ~58px on 1920h
+    ix1, iy1 = inner_margin_x, inner_margin_y
+    ix2, iy2 = w - inner_margin_x, h - inner_margin_y
 
-    # ── Running lights at screen perimeter ──
-    fx1, fy1 = margin, margin
-    fx2, fy2 = w - 1 - margin, h - 1 - margin
+    # Inner frame border (3px, slightly thicker than outer)
+    inner_fw = 3
+    draw.rectangle([(ix1, iy1), (ix2, iy2)],
+                    outline=(*ic, 200), width=inner_fw)
+
+    # Bold corner accents (thicker squares at 4 corners of inner frame)
+    corner_size = 20
+    corner_thick = 4
+    # Top-left
+    draw.line([(ix1, iy1), (ix1 + corner_size, iy1)], fill=(*fc, 255), width=corner_thick)
+    draw.line([(ix1, iy1), (ix1, iy1 + corner_size)], fill=(*fc, 255), width=corner_thick)
+    # Top-right
+    draw.line([(ix2, iy1), (ix2 - corner_size, iy1)], fill=(*fc, 255), width=corner_thick)
+    draw.line([(ix2, iy1), (ix2, iy1 + corner_size)], fill=(*fc, 255), width=corner_thick)
+    # Bottom-left
+    draw.line([(ix1, iy2), (ix1 + corner_size, iy2)], fill=(*fc, 255), width=corner_thick)
+    draw.line([(ix1, iy2), (ix1, iy2 - corner_size)], fill=(*fc, 255), width=corner_thick)
+    # Bottom-right
+    draw.line([(ix2, iy2), (ix2 - corner_size, iy2)], fill=(*fc, 255), width=corner_thick)
+    draw.line([(ix2, iy2), (ix2, iy2 - corner_size)], fill=(*fc, 255), width=corner_thick)
+
+    # ════════════════════════════════════════════════════════════
+    #  RUNNING LIGHTS — chase pattern along OUTER frame perimeter
+    # ════════════════════════════════════════════════════════════
+
+    fx1, fy1 = outer_margin, outer_margin
+    fx2, fy2 = w - 1 - outer_margin, h - 1 - outer_margin
     positions = _get_light_positions_rect(fx1, fy1, fx2, fy2, num_lights)
 
     for i, (lx, ly) in enumerate(positions):
@@ -258,31 +277,28 @@ def render_frame(img_arr, t, category='home', pattern='chase',
         else:
             brightness = 0.5
 
-        # Light color
+        lc = theme['light_color']
         if pattern == 'rainbow':
-            lc = _rainbow_color(i, num_lights, t, theme['light_color'])
-        else:
-            lc = theme['light_color']
+            lc = _rainbow_color(i, num_lights, t, lc)
 
-        # Scale color by brightness
         r = min(255, int(lc[0] * brightness))
         g = min(255, int(lc[1] * brightness))
         b = min(255, int(lc[2] * brightness))
         alpha = int(200 * brightness + 55)
 
-        # Bright core
+        # Bright core dot
         draw.ellipse([(lx - light_radius, ly - light_radius),
                        (lx + light_radius, ly + light_radius)],
                       fill=(r, g, b, alpha))
 
-        # Neon glow halo around bright lights
+        # Neon glow halo
         if brightness > 0.5:
             gr = light_radius * 3
             ga = int(40 * brightness)
             draw.ellipse([(lx - gr, ly - gr), (lx + gr, ly + gr)],
                           fill=(r, g, b, ga))
 
-    # Composite overlay onto image
+    # Composite
     result = Image.alpha_composite(img_pil, overlay)
     return np.array(result.convert('RGB'))
 
@@ -366,7 +382,7 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     frosted = ImageEnhance.Color(frosted).enhance(0.7)
 
     # ── Step 2: FIT the product image (max size, no cropping) ──
-    fit_scale = min(target_w / w, target_h / h) * 0.88  # 88% to leave room for frame
+    fit_scale = min(target_w / w, target_h / h) * 0.94  # 94% fill — big rectangle
     new_w = int(w * fit_scale)
     new_h = int(h * fit_scale)
     product = img_rgb.resize((new_w, new_h), Image.LANCZOS)
