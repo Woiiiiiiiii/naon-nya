@@ -376,7 +376,7 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
 
     # ── Step 2: Define product rectangle (matching reference layout) ──
     # Reference has MORE space top/bottom than left/right
-    margin_x_pct = 0.05   # 5% each side left/right  (~54px on 1080)
+    margin_x_pct = 0.08   # 8% each side left/right  (~86px on 1080)
     margin_y_pct = 0.12   # 12% each side top/bottom (~230px on 1920)
     rect_x = int(target_w * margin_x_pct)
     rect_y = int(target_h * margin_y_pct)
