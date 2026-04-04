@@ -288,8 +288,8 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
         fitted.append(np.array(fitted_img))
         bounds_list.append(prod_bounds)
 
-    # Apply very subtle vignette (don't make product blurry)
-    fitted = [apply_vignette(f, strength=0.15) for f in fitted]
+    # NO vignette — it darkens edges and makes product look blurry
+    # Product images are only 800x800 upscaled to 1460px, vignette makes it worse
 
     # Calculate timeline
     segments, total_dur = _calculate_timeline(config)
@@ -376,8 +376,8 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
                 reps = int(total_dur / raw_music.duration) + 1
                 raw_music = concatenate_audioclips([raw_music] * reps)
             raw_music = raw_music.subclipped(0, total_dur)
-            # Loud volume — music IS the audio (no VO to compete with)
-            raw_music = raw_music.with_effects([afx.MultiplyVolume(1.0)])
+            # Boost volume — raw music files are often quiet
+            raw_music = raw_music.with_effects([afx.MultiplyVolume(2.5)])
             audio_clips.append(raw_music)
         except Exception as e:
             print(f"    [WARN] Music failed: {e}")
@@ -392,7 +392,7 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
     audio_params = get_ffmpeg_audio_params()
     video.write_videofile(
         output_path, fps=30, codec='libx264',
-        preset='medium', logger=None,
+        preset='slow', logger=None,  # 'slow' = better quality encoding
         ffmpeg_params=['-profile:v', 'high', '-level', '4.1',
                        '-b:v', '5M', '-maxrate', '6M', '-bufsize', '8M'],
         **audio_params

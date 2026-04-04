@@ -396,6 +396,9 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     cy = (scaled_h - rect_h) // 2
     product = product_full.crop((cx, cy, cx + rect_w, cy + rect_h))
 
+    # Sharpen to combat blur from upscaling (800→1460 = ~1.8x upscale)
+    product = product.filter(ImageFilter.UnsharpMask(radius=1.5, percent=80, threshold=2))
+
     # ── Step 4: Paste product rectangle onto frosted background ──
     canvas = frosted.copy()
     canvas.paste(product, (rect_x, rect_y))
