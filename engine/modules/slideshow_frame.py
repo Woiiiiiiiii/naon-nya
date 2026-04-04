@@ -374,12 +374,14 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     frosted = ImageEnhance.Brightness(frosted).enhance(0.45)
     frosted = ImageEnhance.Color(frosted).enhance(0.5)
 
-    # ── Step 2: Define product rectangle (proportional margins) ──
-    margin_pct = 0.04  # 4% margin on each side
-    rect_x = int(target_w * margin_pct)   # ~43px on 1080
-    rect_y = int(target_h * margin_pct)   # ~77px on 1920
-    rect_w = target_w - 2 * rect_x        # ~994px
-    rect_h = target_h - 2 * rect_y        # ~1766px
+    # ── Step 2: Define product rectangle (matching reference layout) ──
+    # Reference has MORE space top/bottom than left/right
+    margin_x_pct = 0.05   # 5% each side left/right  (~54px on 1080)
+    margin_y_pct = 0.12   # 12% each side top/bottom (~230px on 1920)
+    rect_x = int(target_w * margin_x_pct)
+    rect_y = int(target_h * margin_y_pct)
+    rect_w = target_w - 2 * rect_x        # ~972px
+    rect_h = target_h - 2 * rect_y        # ~1460px
 
     # ── Step 3: COVER mode — fill rectangle completely ──
     # Scale product up so it FILLS the entire rectangle (crop overflow)
