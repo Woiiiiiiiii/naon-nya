@@ -129,13 +129,15 @@ def _get_light_positions(w, h, margin, num_lights=24):
     return positions
 
 
-def _chase_brightness(light_index, num_lights, t, speed=3.0):
-    """Chase pattern: bright dot moves clockwise."""
+def _chase_brightness(light_index, num_lights, t, speed=1.5):
+    """Chase pattern: bright dot moves clockwise around the frame.
+    speed=1.5 means 1.5 full loops per second (visible, not too fast).
+    Wider Gaussian tail (0.04) so ~4-5 lights glow at once."""
     phase = (t * speed - light_index / num_lights) % 1.0
-    # Gaussian-like brightness falloff
-    b = math.exp(-((phase - 0.5) ** 2) / 0.02)
-    # Also a base brightness so lights aren't fully off
-    return max(0.15, min(1.0, b * 0.85 + 0.15))
+    # Wide Gaussian so multiple lights glow (visible chase tail)
+    b = math.exp(-((phase - 0.5) ** 2) / 0.04)
+    # Base brightness so lights aren't fully dark
+    return max(0.08, min(1.0, b * 0.92 + 0.08))
 
 
 def _twinkle_brightness(light_index, num_lights, t, seed=42):
@@ -346,21 +348,21 @@ def apply_ken_burns(img_arr, t, duration, direction='zoom_in'):
 
 
 def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
-    """Fit product image inside a PORTRAIT RECTANGLE with frosted mirror.
+    """Place product as PORTRAIT RECTANGLE using COVER mode.
 
-    Layout (matching reference video):
-      1. Full screen = frosted mirror background (dark, blurred)
-      2. Fixed RECTANGLE area with proportional margins (4% each side)
-         - This rectangle has the same PROPORTIONS as the screen
-         - Product is FIT (max size, no cropping) INSIDE this rectangle
-         - Any empty space within the rectangle = frosted mirror showing through
-      3. Result: product centered in a well-proportioned portrait rectangle
+    ALL Shopee product images are 800x800 (square). To make them
+    fill a portrait rectangle (matching screen shape):
+      1. Full screen = dark frosted mirror background
+      2. Product rectangle = proportional margins (4% each side)
+      3. Product COVER mode = scale up + center-crop to fill rectangle
+         → Square images become portrait by cropping sides slightly
+         → Product center stays intact
     """
     from PIL import ImageEnhance
     w, h = img_pil.size
     img_rgb = img_pil.convert('RGB')
 
-    # ── Step 1: Full-screen frosted mirror background ──
+    # ── Step 1: Full-screen frosted mirror background (dark) ──
     bg_scale = max(target_w / w, target_h / h) * 1.3
     bg_w = int(w * bg_scale)
     bg_h = int(h * bg_scale)
@@ -379,20 +381,25 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     rect_w = target_w - 2 * rect_x        # ~994px
     rect_h = target_h - 2 * rect_y        # ~1766px
 
-    # ── Step 3: FIT product inside the rectangle (no cropping) ──
-    fit_scale = min(rect_w / w, rect_h / h)
-    new_w = int(w * fit_scale)
-    new_h = int(h * fit_scale)
-    product = img_rgb.resize((new_w, new_h), Image.LANCZOS)
+    # ── Step 3: COVER mode — fill rectangle completely ──
+    # Scale product up so it FILLS the entire rectangle (crop overflow)
+    # For 800x800 on 994x1766: scales to 1766x1766 then center-crops to 994x1766
+    cover_scale = max(rect_w / w, rect_h / h)
+    scaled_w = int(w * cover_scale)
+    scaled_h = int(h * cover_scale)
+    product_full = img_rgb.resize((scaled_w, scaled_h), Image.LANCZOS)
 
-    # ── Step 4: Center product within the rectangle, on frosted bg ──
+    # Center-crop to exact rectangle dimensions
+    cx = (scaled_w - rect_w) // 2
+    cy = (scaled_h - rect_h) // 2
+    product = product_full.crop((cx, cy, cx + rect_w, cy + rect_h))
+
+    # ── Step 4: Paste product rectangle onto frosted background ──
     canvas = frosted.copy()
-    paste_x = rect_x + (rect_w - new_w) // 2
-    paste_y = rect_y + (rect_h - new_h) // 2
-    canvas.paste(product, (paste_x, paste_y))
+    canvas.paste(product, (rect_x, rect_y))
 
-    # Return image AND product bounds (for inner frame positioning)
-    product_bounds = (paste_x, paste_y, paste_x + new_w, paste_y + new_h)
+    # Product bounds = the full rectangle area
+    product_bounds = (rect_x, rect_y, rect_x + rect_w, rect_y + rect_h)
     return canvas, product_bounds
 
 
