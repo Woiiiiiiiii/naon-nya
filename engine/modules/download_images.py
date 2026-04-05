@@ -980,9 +980,7 @@ def _download_multi_from_shopee(product_name, produk_id, output_dir, count=5):
             src_path = existing_paths[(i - 1) % len(existing_paths)]
             try:
                 src_img = Image.open(src_path).convert('RGB')
-                # Mirror for visual variety
-                if i % 2 == 0:
-                    src_img = src_img.transpose(Image.FLIP_LEFT_RIGHT)
+                # NO mirror — flipping makes text/branding unreadable
                 dest_path = os.path.join(output_dir, f"{produk_id}_{i}.jpg")
                 if not os.path.exists(dest_path):
                     _save_image_raw(src_img, dest_path)

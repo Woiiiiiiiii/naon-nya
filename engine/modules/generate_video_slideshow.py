@@ -195,11 +195,9 @@ def _load_product_images(produk_id, count=4):
     # If we have fewer than needed, duplicate with variations
     while len(images) < count:
         src = images[len(images) % unique_count].copy()
-        # Apply mirror for visual variety on duplicates
-        if len(images) % 2 == 0:
-            src = src.transpose(Image.FLIP_LEFT_RIGHT)
+        # NO mirror — flipping makes text unreadable (e.g. product info reversed)
         images.append(src)
-        print(f"    [QC] Slot {len(images)}: duplicated from image {(len(images)-1) % unique_count + 1} (mirrored)")
+        print(f"    [QC] Slot {len(images)}: duplicated from image {(len(images)-1) % unique_count + 1}")
 
     return images[:count]
 
