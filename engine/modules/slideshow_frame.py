@@ -216,14 +216,19 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     draw.rectangle([(fx1, fy1), (fx2, fy2)],
                     outline=(*fc, 150), width=2)
 
-    # ── TWO LASER BEAMS chasing each other (burning fuse style) ──
+    # ── TWO FIRE BEAMS chasing each other (burning fuse style) ──
     frame_w = fx2 - fx1
     frame_h = fy2 - fy1
     perimeter = 2 * frame_w + 2 * frame_h
 
-    speed = 0.8  # loops per second (visible speed)
-    beam_length = perimeter * 0.18  # 18% of perimeter lit
-    num_segments = 80  # smooth resolution
+    speed = 0.35  # loops per second (slow, comfortable to watch)
+    beam_length = perimeter * 0.20  # 20% of perimeter lit
+    num_segments = 100  # smooth resolution
+
+    # Fire colors: head = bright orange/yellow, tail = fades to frame silver
+    fire_head = (255, 180, 40)    # bright orange-yellow (api)
+    fire_mid = (255, 120, 20)     # amber/orange
+    fire_tail = fc                 # fades to frame silver color
 
     def _dist_to_xy(d):
         """Convert distance along perimeter to (x, y) coordinates."""
@@ -249,23 +254,32 @@ def render_frame(img_arr, t, category='home', pattern='chase',
             seg_dist = (head_dist - seg_frac * beam_length) % perimeter
             sx, sy = _dist_to_xy(seg_dist)
 
-            # Brightness fades: head=1.0, tail→0.0 (like burning fuse)
+            # Brightness fades: head=1.0, tail→0.0
             brightness = 1.0 - (seg_frac ** 0.5)
             if brightness < 0.03:
                 prev_pt = None
                 continue
 
-            # Line width: head=5px (thick fire), tail=1px (ember)
-            line_w = max(1, int(1 + 5 * brightness))
+            # Line width: head=10px (bigger than frame), tail=2px
+            line_w = max(2, int(2 + 8 * brightness))
             alpha = int(255 * brightness)
 
-            r = min(255, int(lc[0] * brightness + fc[0] * (1 - brightness)))
-            g = min(255, int(lc[1] * brightness + fc[1] * (1 - brightness)))
-            b_c = min(255, int(lc[2] * brightness + fc[2] * (1 - brightness)))
+            # Fire color gradient: head=orange → mid=amber → tail=silver
+            if seg_frac < 0.3:
+                # Head zone: bright orange-yellow
+                mix = seg_frac / 0.3  # 0→1 within head zone
+                r = int(fire_head[0] * (1 - mix) + fire_mid[0] * mix)
+                g = int(fire_head[1] * (1 - mix) + fire_mid[1] * mix)
+                b_c = int(fire_head[2] * (1 - mix) + fire_mid[2] * mix)
+            else:
+                # Tail zone: amber → fades to frame silver
+                mix = (seg_frac - 0.3) / 0.7  # 0→1 within tail zone
+                r = int(fire_mid[0] * (1 - mix) + fire_tail[0] * mix)
+                g = int(fire_mid[1] * (1 - mix) + fire_tail[1] * mix)
+                b_c = int(fire_mid[2] * (1 - mix) + fire_tail[2] * mix)
 
             pt = (int(sx), int(sy))
             if prev_pt:
-                # Connected line segment (burning fuse, not dots)
                 draw.line([prev_pt, pt], fill=(r, g, b_c, alpha), width=line_w)
             prev_pt = pt
 
