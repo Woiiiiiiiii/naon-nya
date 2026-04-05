@@ -404,15 +404,16 @@ def _auto_trim_whitespace(img_rgb):
 
 
 def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
-    """Place product image using FIT mode — 100% content preserved, ZERO cropping.
+    """Place product image — STRETCH to fill rectangle 100%.
 
-    Strategy:
-      1. Full screen = frosted mirror background (blurred product reflection)
+    Simple and reliable:
+      1. Full screen = frosted mirror background
       2. Product rectangle = proportional margins
-      3. FIT mode = scale to fit WITHIN rectangle, maintain aspect ratio
-         → Image is NEVER cropped — all text, branding, product details visible
-         → Any gap between product and frame is filled by frosted mirror
-         → Frosted mirror creates elegant seamless extension
+      3. STRETCH raw image to fill rectangle exactly
+         → NO auto-trim (was removing text/headers)
+         → NO edge-crop (was cutting content)
+         → NO FIT mode (was leaving empty space)
+         → Gambar SELALU penuh, tidak ada space kosong
     """
     from PIL import ImageEnhance
     w, h = img_pil.size
@@ -438,25 +439,19 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     rect_w = target_w - 2 * rect_x
     rect_h = target_h - 2 * rect_y
 
-    # ── Step 3: FIT mode — scale to fit, center, NO cropping ──
-    # Maintain original aspect ratio — product is NEVER distorted or cropped
-    fit_scale = min(rect_w / w, rect_h / h)
-    scaled_w = int(w * fit_scale)
-    scaled_h = int(h * fit_scale)
-    product = img_rgb.resize((scaled_w, scaled_h), Image.LANCZOS)
+    # ── Step 3: STRETCH raw image to fill rectangle 100% ──
+    # Direct resize — no trimming, no cropping, just fill
+    product = img_rgb.resize((rect_w, rect_h), Image.LANCZOS)
 
     # Sharpen after resize
     product = product.filter(ImageFilter.UnsharpMask(radius=1.5, percent=80, threshold=2))
 
-    # ── Step 4: Center product on frosted mirror background ──
-    # Gap areas are filled by frosted mirror (elegant seamless extension)
+    # ── Step 4: Paste product onto frosted background ──
     canvas = frosted.copy()
-    paste_x = rect_x + (rect_w - scaled_w) // 2
-    paste_y = rect_y + (rect_h - scaled_h) // 2
-    canvas.paste(product, (paste_x, paste_y))
+    canvas.paste(product, (rect_x, rect_y))
 
-    # Product bounds = actual product edges (for inner frame drawing)
-    product_bounds = (paste_x, paste_y, paste_x + scaled_w, paste_y + scaled_h)
+    # Product bounds = fixed rectangle (always full)
+    product_bounds = (rect_x, rect_y, rect_x + rect_w, rect_y + rect_h)
     return canvas, product_bounds
 
 
