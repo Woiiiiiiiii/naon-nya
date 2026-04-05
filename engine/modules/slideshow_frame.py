@@ -275,13 +275,13 @@ def render_frame(img_arr, t, category='home', pattern='chase',
 
     if product_bounds:
         px1, py1, px2, py2 = product_bounds
-        inner_fw = 5  # THICKER than outer frame (2px)
+        inner_fw = 8  # THICK frame wrapping product
         draw.rectangle([(px1, py1), (px2, py2)],
-                        outline=(*ic, 230), width=inner_fw)
+                        outline=(*ic, 240), width=inner_fw)
 
         # Bold corner accents (L-shapes at 4 corners)
-        corner_size = 25
-        corner_thick = 5
+        corner_size = 30
+        corner_thick = 7
         draw.line([(px1, py1), (px1 + corner_size, py1)], fill=(*fc, 255), width=corner_thick)
         draw.line([(px1, py1), (px1, py1 + corner_size)], fill=(*fc, 255), width=corner_thick)
         draw.line([(px2, py1), (px2 - corner_size, py1)], fill=(*fc, 255), width=corner_thick)
@@ -404,9 +404,9 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     crop_x = (bg_w - target_w) // 2
     crop_y = (bg_h - target_h) // 2
     bg_cropped = bg_img.crop((crop_x, crop_y, crop_x + target_w, crop_y + target_h))
-    frosted = bg_cropped.filter(ImageFilter.GaussianBlur(radius=25))
-    frosted = ImageEnhance.Brightness(frosted).enhance(0.65)
-    frosted = ImageEnhance.Color(frosted).enhance(0.7)
+    frosted = bg_cropped.filter(ImageFilter.GaussianBlur(radius=18))
+    frosted = ImageEnhance.Brightness(frosted).enhance(0.80)  # transparan, benda terlihat jelas
+    frosted = ImageEnhance.Color(frosted).enhance(0.75)
 
     # ── Step 2: Define product rectangle (matching reference layout) ──
     margin_x_pct = 0.10   # 10% each side left/right (~108px on 1080)
