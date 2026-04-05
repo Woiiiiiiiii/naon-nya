@@ -376,27 +376,19 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
 
     # ── Step 2: Define product rectangle (matching reference layout) ──
     # Reference has MORE space top/bottom than left/right
-    margin_x_pct = 0.08   # 8% each side left/right  (~86px on 1080)
+    margin_x_pct = 0.10   # 10% each side left/right (~108px on 1080)
     margin_y_pct = 0.12   # 12% each side top/bottom (~230px on 1920)
     rect_x = int(target_w * margin_x_pct)
     rect_y = int(target_h * margin_y_pct)
     rect_w = target_w - 2 * rect_x        # ~972px
     rect_h = target_h - 2 * rect_y        # ~1460px
 
-    # ── Step 3: COVER mode — fill rectangle completely ──
-    # Scale product up so it FILLS the entire rectangle (crop overflow)
-    # For 800x800 on 994x1766: scales to 1766x1766 then center-crops to 994x1766
-    cover_scale = max(rect_w / w, rect_h / h)
-    scaled_w = int(w * cover_scale)
-    scaled_h = int(h * cover_scale)
-    product_full = img_rgb.resize((scaled_w, scaled_h), Image.LANCZOS)
+    # ── Step 3: STRETCH to fill rectangle (NO cropping, NO loss) ──
+    # Square 800x800 → stretched to fill 908×1460 portrait rectangle
+    # ALL product content is preserved, just reshaped to portrait
+    product = img_rgb.resize((rect_w, rect_h), Image.LANCZOS)
 
-    # Center-crop to exact rectangle dimensions
-    cx = (scaled_w - rect_w) // 2
-    cy = (scaled_h - rect_h) // 2
-    product = product_full.crop((cx, cy, cx + rect_w, cy + rect_h))
-
-    # Sharpen to combat blur from upscaling (800→1460 = ~1.8x upscale)
+    # Sharpen to combat any softness from stretching
     product = product.filter(ImageFilter.UnsharpMask(radius=1.5, percent=80, threshold=2))
 
     # ── Step 4: Paste product rectangle onto frosted background ──
