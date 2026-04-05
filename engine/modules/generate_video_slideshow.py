@@ -284,8 +284,17 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
     # Product images are only 800x800 upscaled to 1460px, vignette makes it worse
 
     # Calculate timeline with per-channel transitions
-    segments, total_dur = _calculate_timeline(config, platform=platform)
-    print(f"    Timeline: {len(segments)} segments, {total_dur:.1f}s total")
+    segments, content_dur = _calculate_timeline(config, platform=platform)
+
+    # Fades are EXTRA TIME — they don't eat into slide durations
+    # Offset all segments forward by FADE_IN_DUR
+    for seg in segments:
+        seg['start'] += FADE_IN_DUR
+        seg['end'] += FADE_IN_DUR
+
+    # Total video = fade_in + content + fade_out
+    total_dur = FADE_IN_DUR + content_dur + FADE_OUT_DUR
+    print(f"    Timeline: {len(segments)} segments, {content_dur:.1f}s content + {FADE_IN_DUR}s fade_in + {FADE_OUT_DUR}s fade_out = {total_dur:.1f}s total")
 
     # Running lights: always CHASE (berjalan, bukan kedip)
     light_pattern = 'chase'
@@ -299,8 +308,6 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
             if seg['start'] <= t < seg['end']:
                 if seg['type'] == 'slide':
                     idx = seg['image_idx']
-                    local_t = t - seg['start']
-                    slide_dur = seg['end'] - seg['start']
 
                     # Product image is STATIC (no Ken Burns movement)
                     frame = fitted[idx].copy()
@@ -329,7 +336,14 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
 
                 break
 
-        # After last segment — show last image
+        # Before first segment — show first image (during fade-in time)
+        if t < segments[0]['start']:
+            frame = fitted[0].copy()
+            frame = render_frame(frame, t, category=category,
+                                  pattern=light_pattern,
+                                  product_bounds=bounds_list[0])
+
+        # After last segment — show last image (during fade-out time)
         if t >= segments[-1]['end']:
             idx = segments[-1].get('image_idx',
                                     segments[-1].get('to_idx', 0))
@@ -337,12 +351,12 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
                                   pattern=light_pattern,
                                   product_bounds=bounds_list[idx])
 
-        # Fade in from black
+        # Fade in from black (EXTRA TIME before content)
         if t < FADE_IN_DUR:
             fade = t / FADE_IN_DUR
             frame = np.clip(frame * fade, 0, 255).astype(np.uint8)
 
-        # Fade out to black
+        # Fade out to black (EXTRA TIME after content)
         if t > total_dur - FADE_OUT_DUR:
             fade = max(0, (total_dur - t) / FADE_OUT_DUR)
             frame = np.clip(frame * fade, 0, 255).astype(np.uint8)
