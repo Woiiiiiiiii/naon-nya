@@ -347,15 +347,18 @@ def apply_ken_burns(img_arr, t, duration, direction='zoom_in'):
 def _auto_trim_whitespace(img_rgb):
     """Remove white/light borders from product images.
 
-    Many Shopee seller images have white padding around the product.
-    This trims those borders so COVER mode crops actual content minimally.
+    Many Shopee seller images have white/light padding around the product.
+    This trims those borders so the product fills the frame completely.
     """
     arr = np.array(img_rgb)
-    # Find non-white pixels (threshold: any channel < 235)
+    oh, ow = arr.shape[:2]
+
+    # Find non-white/non-light pixels (threshold: any channel < 245)
+    # More aggressive than before to catch light gray borders too
     if len(arr.shape) == 3:
-        mask = np.any(arr < 235, axis=2)
+        mask = np.any(arr < 245, axis=2)
     else:
-        mask = arr < 235
+        mask = arr < 245
 
     if not mask.any():
         return img_rgb  # All white/light — return as-is
@@ -369,33 +372,25 @@ def _auto_trim_whitespace(img_rgb):
     rmin, rmax = np.where(rows)[0][[0, -1]]
     cmin, cmax = np.where(cols)[0][[0, -1]]
 
-    # Add small padding (2%) to avoid cutting too tight
-    oh, ow = arr.shape[:2]
-    pad_x = int(ow * 0.02)
-    pad_y = int(oh * 0.02)
-    rmin = max(0, rmin - pad_y)
-    rmax = min(oh - 1, rmax + pad_y)
-    cmin = max(0, cmin - pad_x)
-    cmax = min(ow - 1, cmax + pad_x)
-
+    # NO re-padding — trim tight to content (padding caused border gaps)
     trimmed = img_rgb.crop((cmin, rmin, cmax + 1, rmax + 1))
 
-    # Only use trimmed if it removed significant padding (>10% on any side)
+    # Only use trimmed if it didn't remove too much (>50% = too aggressive)
     tw, th = trimmed.size
     if tw < ow * 0.5 or th < oh * 0.5:
-        return img_rgb  # Too aggressive trim, use original
+        return img_rgb
     return trimmed
 
 
 def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
-    """Place product as PORTRAIT RECTANGLE using auto-trim + STRETCH.
+    """Place product as PORTRAIT RECTANGLE using edge-crop + auto-trim + STRETCH.
 
-    Handles ALL image sizes — NOTHING is ever cropped:
-      1. Auto-trim white/light borders (removes useless padding)
-      2. Full screen = frosted mirror background
-      3. Product rectangle = proportional margins
+    Handles ALL image sizes — NOTHING is ever cropped except useless borders:
+      1. Edge-crop: remove 3px from each edge (kills thin colored borders)
+      2. Auto-trim: remove white/light padding
+      3. Full screen = frosted mirror background
       4. STRETCH trimmed image to fill rectangle 100%
-         → No cropping, no gaps, all content preserved
+         → No content lost, no gaps, guaranteed full coverage
     """
     from PIL import ImageEnhance
     w, h = img_pil.size
@@ -421,12 +416,18 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     rect_w = target_w - 2 * rect_x
     rect_h = target_h - 2 * rect_y
 
-    # ── Step 3: Auto-trim white borders + STRETCH to fill ──
-    # Trim removes useless white padding (the cause of previous empty space)
-    # Then STRETCH fills the rectangle — ALL content preserved, NOTHING cropped
-    img_trimmed = _auto_trim_whitespace(img_rgb)
+    # ── Step 3: Edge-crop + Auto-trim + STRETCH to fill ──
+    # 3a: Always crop 3px from each edge (removes thin borders of any color)
+    edge = 3
+    if w > edge * 4 and h > edge * 4:
+        img_clean = img_rgb.crop((edge, edge, w - edge, h - edge))
+    else:
+        img_clean = img_rgb
 
-    # STRETCH: resize to exact rect dimensions (no crop, no gaps)
+    # 3b: Auto-trim white/light padding
+    img_trimmed = _auto_trim_whitespace(img_clean)
+
+    # 3c: STRETCH to exact rect dimensions (no crop, no gaps)
     product = img_trimmed.resize((rect_w, rect_h), Image.LANCZOS)
 
     # Sharpen after resize
