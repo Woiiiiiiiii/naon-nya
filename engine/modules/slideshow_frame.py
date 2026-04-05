@@ -344,22 +344,64 @@ def apply_ken_burns(img_arr, t, duration, direction='zoom_in'):
     return np.array(Image.fromarray(cropped).resize((w, h), Image.BILINEAR))
 
 
-def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
-    """Place product as PORTRAIT RECTANGLE using COVER mode.
+def _auto_trim_whitespace(img_rgb):
+    """Remove white/light borders from product images.
 
-    ALL Shopee product images are 800x800 (square). To make them
-    fill a portrait rectangle (matching screen shape):
-      1. Full screen = dark frosted mirror background
-      2. Product rectangle = proportional margins (4% each side)
-      3. Product COVER mode = scale up + center-crop to fill rectangle
-         → Square images become portrait by cropping sides slightly
-         → Product center stays intact
+    Many Shopee seller images have white padding around the product.
+    This trims those borders so COVER mode crops actual content minimally.
+    """
+    arr = np.array(img_rgb)
+    # Find non-white pixels (threshold: any channel < 235)
+    if len(arr.shape) == 3:
+        mask = np.any(arr < 235, axis=2)
+    else:
+        mask = arr < 235
+
+    if not mask.any():
+        return img_rgb  # All white/light — return as-is
+
+    rows = np.any(mask, axis=1)
+    cols = np.any(mask, axis=0)
+
+    if not rows.any() or not cols.any():
+        return img_rgb
+
+    rmin, rmax = np.where(rows)[0][[0, -1]]
+    cmin, cmax = np.where(cols)[0][[0, -1]]
+
+    # Add small padding (2%) to avoid cutting too tight
+    oh, ow = arr.shape[:2]
+    pad_x = int(ow * 0.02)
+    pad_y = int(oh * 0.02)
+    rmin = max(0, rmin - pad_y)
+    rmax = min(oh - 1, rmax + pad_y)
+    cmin = max(0, cmin - pad_x)
+    cmax = min(ow - 1, cmax + pad_x)
+
+    trimmed = img_rgb.crop((cmin, rmin, cmax + 1, rmax + 1))
+
+    # Only use trimmed if it removed significant padding (>10% on any side)
+    tw, th = trimmed.size
+    if tw < ow * 0.5 or th < oh * 0.5:
+        return img_rgb  # Too aggressive trim, use original
+    return trimmed
+
+
+def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
+    """Place product as PORTRAIT RECTANGLE using auto-trim + COVER mode.
+
+    Handles ALL image sizes (square, landscape, portrait, any aspect ratio):
+      1. Auto-trim white/light borders from source image
+      2. Full screen = frosted mirror background (transparent, benda terlihat)
+      3. Product rectangle = proportional margins
+      4. Product COVER mode = scale up + center-crop to FILL rectangle 100%
+         → NO empty space, NO white gaps, GUARANTEED full coverage
     """
     from PIL import ImageEnhance
     w, h = img_pil.size
     img_rgb = img_pil.convert('RGB')
 
-    # ── Step 1: Full-screen frosted mirror background (dark) ──
+    # ── Step 1: Full-screen frosted mirror background ──
     bg_scale = max(target_w / w, target_h / h) * 1.3
     bg_w = int(w * bg_scale)
     bg_h = int(h * bg_scale)
@@ -368,24 +410,34 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     crop_y = (bg_h - target_h) // 2
     bg_cropped = bg_img.crop((crop_x, crop_y, crop_x + target_w, crop_y + target_h))
     frosted = bg_cropped.filter(ImageFilter.GaussianBlur(radius=25))
-    frosted = ImageEnhance.Brightness(frosted).enhance(0.65)  # more transparent, benda terlihat
+    frosted = ImageEnhance.Brightness(frosted).enhance(0.65)
     frosted = ImageEnhance.Color(frosted).enhance(0.7)
 
     # ── Step 2: Define product rectangle (matching reference layout) ──
-    # Reference has MORE space top/bottom than left/right
     margin_x_pct = 0.10   # 10% each side left/right (~108px on 1080)
     margin_y_pct = 0.12   # 12% each side top/bottom (~230px on 1920)
     rect_x = int(target_w * margin_x_pct)
     rect_y = int(target_h * margin_y_pct)
-    rect_w = target_w - 2 * rect_x        # ~972px
-    rect_h = target_h - 2 * rect_y        # ~1460px
+    rect_w = target_w - 2 * rect_x
+    rect_h = target_h - 2 * rect_y
 
-    # ── Step 3: STRETCH to fill rectangle (NO cropping, NO loss) ──
-    # Square 800x800 → stretched to fill 908×1460 portrait rectangle
-    # ALL product content is preserved, just reshaped to portrait
-    product = img_rgb.resize((rect_w, rect_h), Image.LANCZOS)
+    # ── Step 3: Auto-trim white borders + COVER mode ──
+    # Trim removes useless white padding so COVER crops actual content minimally
+    img_trimmed = _auto_trim_whitespace(img_rgb)
+    tw, th = img_trimmed.size
 
-    # Sharpen to combat any softness from stretching
+    # COVER: scale up to FILL the entire rectangle, crop overflow
+    cover_scale = max(rect_w / tw, rect_h / th)
+    scaled_w = int(tw * cover_scale)
+    scaled_h = int(th * cover_scale)
+    product_full = img_trimmed.resize((scaled_w, scaled_h), Image.LANCZOS)
+
+    # Center-crop to exact rectangle dimensions
+    cx = (scaled_w - rect_w) // 2
+    cy = (scaled_h - rect_h) // 2
+    product = product_full.crop((cx, cy, cx + rect_w, cy + rect_h))
+
+    # Sharpen after upscale
     product = product.filter(ImageFilter.UnsharpMask(radius=1.5, percent=80, threshold=2))
 
     # ── Step 4: Paste product rectangle onto frosted background ──
