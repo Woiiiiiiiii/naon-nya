@@ -15,39 +15,23 @@ import random as _random
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  Frame color themes per category
+#  Frame color themes — SILVER/PEWTER matching frosted mirror
+#  Both frames use silver tones that blend with the dark mirror bg
+#  Slightly brighter than the frosted glass for subtle visibility
 # ═══════════════════════════════════════════════════════════════════
+_SILVER_THEME = {
+    'frame_color': (180, 185, 190),         # Silver (pigura luar)
+    'light_color': (210, 215, 220),         # Light silver (lampu)
+    'glow_color': (170, 175, 180, 50),      # Soft silver glow
+    'inner_color': (155, 160, 165),         # Darker pewter (pigura dalam)
+}
+
 FRAME_THEMES = {
-    'fashion': {
-        'frame_color': (200, 150, 130),        # Rose gold
-        'light_color': (255, 180, 200),         # Pink lights
-        'glow_color': (255, 120, 180, 60),      # Pink glow
-        'inner_color': (180, 130, 110),         # Darker rose
-    },
-    'gadget': {
-        'frame_color': (60, 140, 220),          # Neon blue
-        'light_color': (100, 220, 255),         # Cyan lights
-        'glow_color': (0, 180, 255, 60),        # Cyan glow
-        'inner_color': (40, 100, 180),          # Darker blue
-    },
-    'beauty': {
-        'frame_color': (210, 180, 120),         # Soft gold
-        'light_color': (255, 240, 200),         # Warm white lights
-        'glow_color': (255, 200, 150, 60),      # Gold glow
-        'inner_color': (180, 150, 90),          # Darker gold
-    },
-    'home': {
-        'frame_color': (160, 120, 80),          # Wood tone
-        'light_color': (255, 220, 150),         # Warm yellow lights
-        'glow_color': (255, 180, 100, 60),      # Warm glow
-        'inner_color': (130, 90, 60),           # Darker wood
-    },
-    'wellness': {
-        'frame_color': (80, 160, 100),          # Fresh green
-        'light_color': (150, 255, 200),         # Mint lights
-        'glow_color': (100, 220, 150, 60),      # Green glow
-        'inner_color': (60, 130, 80),           # Darker green
-    },
+    'fashion':  _SILVER_THEME,
+    'gadget':   _SILVER_THEME,
+    'beauty':   _SILVER_THEME,
+    'home':     _SILVER_THEME,
+    'wellness': _SILVER_THEME,
 }
 
 
