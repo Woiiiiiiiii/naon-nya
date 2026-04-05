@@ -212,65 +212,62 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     overlay = Image.alpha_composite(overlay, glow_layer)
     draw = ImageDraw.Draw(overlay)
 
-    # Solid continuous line (base frame — always visible)
+    # Solid continuous line (base frame — always visible, thin)
     draw.rectangle([(fx1, fy1), (fx2, fy2)],
-                    outline=(*fc, 180), width=2)
+                    outline=(*fc, 150), width=2)
 
-    # ── LASER BEAM traveling along frame perimeter ──
-    # Calculate perimeter for laser position
+    # ── TWO LASER BEAMS chasing each other (burning fuse style) ──
     frame_w = fx2 - fx1
     frame_h = fy2 - fy1
     perimeter = 2 * frame_w + 2 * frame_h
 
-    # Laser position (0.0 to 1.0 along perimeter)
-    speed = 1.2  # loops per second
-    laser_pos = (t * speed) % 1.0
-    laser_dist = laser_pos * perimeter
+    speed = 0.8  # loops per second (visible speed)
+    beam_length = perimeter * 0.18  # 18% of perimeter lit
+    num_segments = 80  # smooth resolution
 
-    # Laser beam: HEAD (bright, thick) → TAIL (fading)
-    beam_length = perimeter * 0.15  # 15% of perimeter
-    num_segments = 60  # resolution of beam
-
-    for seg in range(num_segments):
-        # Distance along perimeter for this segment
-        seg_frac = seg / num_segments  # 0=head, 1=tail
-        seg_dist = (laser_dist - seg_frac * beam_length) % perimeter
-
-        # Convert distance to (x, y) on perimeter
-        if seg_dist < frame_w:
-            # Top edge: left to right
-            sx = fx1 + seg_dist
-            sy = fy1
-        elif seg_dist < frame_w + frame_h:
-            # Right edge: top to bottom
-            sx = fx2
-            sy = fy1 + (seg_dist - frame_w)
-        elif seg_dist < 2 * frame_w + frame_h:
-            # Bottom edge: right to left
-            sx = fx2 - (seg_dist - frame_w - frame_h)
-            sy = fy2
+    def _dist_to_xy(d):
+        """Convert distance along perimeter to (x, y) coordinates."""
+        d = d % perimeter
+        if d < frame_w:
+            return fx1 + d, fy1
+        elif d < frame_w + frame_h:
+            return fx2, fy1 + (d - frame_w)
+        elif d < 2 * frame_w + frame_h:
+            return fx2 - (d - frame_w - frame_h), fy2
         else:
-            # Left edge: bottom to top
-            sx = fx1
-            sy = fy2 - (seg_dist - 2 * frame_w - frame_h)
+            return fx1, fy2 - (d - 2 * frame_w - frame_h)
 
-        # Brightness: head=1.0, tail=0.0
-        brightness = 1.0 - (seg_frac ** 0.6)  # fast falloff for visible head
-        if brightness < 0.05:
-            continue
+    # Two beams: 180° apart (half perimeter offset)
+    for beam_offset in [0.0, 0.5]:
+        laser_pos = ((t * speed) + beam_offset) % 1.0
+        head_dist = laser_pos * perimeter
 
-        # Size: head=thicker, tail=thinner
-        radius = int(2 + 4 * brightness)  # head=6px, tail=2px
-        alpha = int(255 * brightness)
+        # Draw burning fuse: connected line segments from head to tail
+        prev_pt = None
+        for seg in range(num_segments):
+            seg_frac = seg / num_segments  # 0=head, 1=tail
+            seg_dist = (head_dist - seg_frac * beam_length) % perimeter
+            sx, sy = _dist_to_xy(seg_dist)
 
-        r = min(255, int(lc[0] * brightness + fc[0] * (1 - brightness)))
-        g = min(255, int(lc[1] * brightness + fc[1] * (1 - brightness)))
-        b = min(255, int(lc[2] * brightness + fc[2] * (1 - brightness)))
+            # Brightness fades: head=1.0, tail→0.0 (like burning fuse)
+            brightness = 1.0 - (seg_frac ** 0.5)
+            if brightness < 0.03:
+                prev_pt = None
+                continue
 
-        # Draw laser segment as filled circle
-        draw.ellipse([(int(sx) - radius, int(sy) - radius),
-                       (int(sx) + radius, int(sy) + radius)],
-                      fill=(r, g, b, alpha))
+            # Line width: head=5px (thick fire), tail=1px (ember)
+            line_w = max(1, int(1 + 5 * brightness))
+            alpha = int(255 * brightness)
+
+            r = min(255, int(lc[0] * brightness + fc[0] * (1 - brightness)))
+            g = min(255, int(lc[1] * brightness + fc[1] * (1 - brightness)))
+            b_c = min(255, int(lc[2] * brightness + fc[2] * (1 - brightness)))
+
+            pt = (int(sx), int(sy))
+            if prev_pt:
+                # Connected line segment (burning fuse, not dots)
+                draw.line([prev_pt, pt], fill=(r, g, b_c, alpha), width=line_w)
+            prev_pt = pt
 
     # ════════════════════════════════════════════════════════════
     #  PIGURA DALAM — wraps ON product image edges
@@ -278,7 +275,7 @@ def render_frame(img_arr, t, category='home', pattern='chase',
 
     if product_bounds:
         px1, py1, px2, py2 = product_bounds
-        inner_fw = 3
+        inner_fw = 5  # THICKER than outer frame (2px)
         draw.rectangle([(px1, py1), (px2, py2)],
                         outline=(*ic, 230), width=inner_fw)
 
@@ -370,9 +367,9 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     crop_x = (bg_w - target_w) // 2
     crop_y = (bg_h - target_h) // 2
     bg_cropped = bg_img.crop((crop_x, crop_y, crop_x + target_w, crop_y + target_h))
-    frosted = bg_cropped.filter(ImageFilter.GaussianBlur(radius=40))
-    frosted = ImageEnhance.Brightness(frosted).enhance(0.45)
-    frosted = ImageEnhance.Color(frosted).enhance(0.5)
+    frosted = bg_cropped.filter(ImageFilter.GaussianBlur(radius=25))
+    frosted = ImageEnhance.Brightness(frosted).enhance(0.65)  # more transparent, benda terlihat
+    frosted = ImageEnhance.Color(frosted).enhance(0.7)
 
     # ── Step 2: Define product rectangle (matching reference layout) ──
     # Reference has MORE space top/bottom than left/right
