@@ -388,14 +388,14 @@ def _auto_trim_whitespace(img_rgb):
 
 
 def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
-    """Place product as PORTRAIT RECTANGLE using auto-trim + COVER mode.
+    """Place product as PORTRAIT RECTANGLE using auto-trim + STRETCH.
 
-    Handles ALL image sizes (square, landscape, portrait, any aspect ratio):
-      1. Auto-trim white/light borders from source image
-      2. Full screen = frosted mirror background (transparent, benda terlihat)
+    Handles ALL image sizes — NOTHING is ever cropped:
+      1. Auto-trim white/light borders (removes useless padding)
+      2. Full screen = frosted mirror background
       3. Product rectangle = proportional margins
-      4. Product COVER mode = scale up + center-crop to FILL rectangle 100%
-         → NO empty space, NO white gaps, GUARANTEED full coverage
+      4. STRETCH trimmed image to fill rectangle 100%
+         → No cropping, no gaps, all content preserved
     """
     from PIL import ImageEnhance
     w, h = img_pil.size
@@ -421,23 +421,15 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     rect_w = target_w - 2 * rect_x
     rect_h = target_h - 2 * rect_y
 
-    # ── Step 3: Auto-trim white borders + COVER mode ──
-    # Trim removes useless white padding so COVER crops actual content minimally
+    # ── Step 3: Auto-trim white borders + STRETCH to fill ──
+    # Trim removes useless white padding (the cause of previous empty space)
+    # Then STRETCH fills the rectangle — ALL content preserved, NOTHING cropped
     img_trimmed = _auto_trim_whitespace(img_rgb)
-    tw, th = img_trimmed.size
 
-    # COVER: scale up to FILL the entire rectangle, crop overflow
-    cover_scale = max(rect_w / tw, rect_h / th)
-    scaled_w = int(tw * cover_scale)
-    scaled_h = int(th * cover_scale)
-    product_full = img_trimmed.resize((scaled_w, scaled_h), Image.LANCZOS)
+    # STRETCH: resize to exact rect dimensions (no crop, no gaps)
+    product = img_trimmed.resize((rect_w, rect_h), Image.LANCZOS)
 
-    # Center-crop to exact rectangle dimensions
-    cx = (scaled_w - rect_w) // 2
-    cy = (scaled_h - rect_h) // 2
-    product = product_full.crop((cx, cy, cx + rect_w, cy + rect_h))
-
-    # Sharpen after upscale
+    # Sharpen after resize
     product = product.filter(ImageFilter.UnsharpMask(radius=1.5, percent=80, threshold=2))
 
     # ── Step 4: Paste product rectangle onto frosted background ──
