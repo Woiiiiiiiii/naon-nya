@@ -1,17 +1,25 @@
 """
 slideshow_transitions.py
-Creative transition effects for product slideshow videos.
+Elegant transition effects for product slideshow videos.
 
-6 transitions:
-  1. Cube Rotate — 3D perspective rotate to next face
+7 transitions (NO spinning/rotating — looks tacky):
+  1. Fade Dissolve — smooth crossfade between slides
   2. Page Roll — horizontal scroll (old out, new in)
-  3. Split Horizontal — split from center, reveal behind
+  3. Split Horizontal — split from center horizontally
   4. Split Vertical — split from center vertically
   5. Zoom Punch — zoom in, flash, zoom out new
-  6. Slide Push — new pushes old off screen
+  6. Slide Push — new pushes old off screen (vertical)
+  7. Wipe Down — vertical wipe reveals new from top
+  8. Blur Morph — blur out old, blur in new
+
+Per-channel transition sequences (unique order per channel):
+  TT:       fade_dissolve → split_vertical → zoom_punch
+  YT Short: wipe_down → blur_morph → split_horizontal
+  FB:       split_horizontal → zoom_punch → wipe_down
+  YT Long:  blur_morph → fade_dissolve → slide_push → wipe_down → split_vertical → zoom_punch → split_horizontal
 """
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 import math
 
 
@@ -32,69 +40,18 @@ def _ease_in_cubic(t):
     return t ** 3
 
 
-def cube_rotate(img1_arr, img2_arr, progress):
-    """3D cube rotation transition.
-    img1 rotates away, img2 appears from the side.
-    progress: 0.0 → 1.0
-    """
-    h, w = img1_arr.shape[:2]
+# ═══════════════════════════════════════════════════════════════════
+#  Transition effects
+# ═══════════════════════════════════════════════════════════════════
+
+def fade_dissolve(img1_arr, img2_arr, progress):
+    """Smooth crossfade dissolve — classic and elegant.
+    Works perfectly with any music tempo."""
     p = _ease_in_out(progress)
-
-    result = np.zeros_like(img1_arr)
-
-    if p < 0.5:
-        # First half: img1 shrinks from right side (perspective)
-        squeeze = p * 2  # 0→1
-        # Left edge stays, right edge moves inward
-        right_x = int(w * (1 - squeeze * 0.6))
-        if right_x < 10:
-            right_x = 10
-        # Top/bottom squeeze on right side for perspective
-        top_squeeze = int(h * squeeze * 0.15)
-        bot_squeeze = h - top_squeeze
-
-        img1_pil = Image.fromarray(img1_arr)
-        # Create perspective transform
-        src = [(0, 0), (w, 0), (w, h), (0, h)]
-        dst = [(0, 0), (right_x, top_squeeze), (right_x, bot_squeeze), (0, h)]
-        try:
-            coeffs = _find_perspective_coeffs(src, dst)
-            transformed = img1_pil.transform((w, h), Image.PERSPECTIVE, coeffs, Image.BILINEAR)
-            result = np.array(transformed)
-        except Exception:
-            # Fallback: simple horizontal squeeze
-            crop_w = max(1, int(w * (1 - squeeze * 0.5)))
-            resized = Image.fromarray(img1_arr).resize((crop_w, h), Image.BILINEAR)
-            result[:, :crop_w] = np.array(resized)
-
-        # Darken based on progress (shadow on rotating face)
-        shadow = max(0.5, 1.0 - squeeze * 0.4)
-        result = np.clip(result * shadow, 0, 255).astype(np.uint8)
-    else:
-        # Second half: img2 appears from right side
-        expand = (p - 0.5) * 2  # 0→1
-        left_x = int(w * (1 - expand) * 0.6)
-        top_squeeze = int(h * (1 - expand) * 0.15)
-        bot_squeeze = h - top_squeeze
-
-        img2_pil = Image.fromarray(img2_arr)
-        src = [(0, 0), (w, 0), (w, h), (0, h)]
-        dst = [(left_x, top_squeeze), (w, 0), (w, h), (left_x, bot_squeeze)]
-        try:
-            coeffs = _find_perspective_coeffs(src, dst)
-            transformed = img2_pil.transform((w, h), Image.PERSPECTIVE, coeffs, Image.BILINEAR)
-            result = np.array(transformed)
-        except Exception:
-            start_x = max(0, int(w * (1 - expand)))
-            visible_w = w - start_x
-            if visible_w > 0:
-                resized = Image.fromarray(img2_arr).resize((visible_w, h), Image.BILINEAR)
-                result[:, start_x:start_x + visible_w] = np.array(resized)
-
-        shadow = max(0.5, expand * 0.5 + 0.5)
-        result = np.clip(result * shadow, 0, 255).astype(np.uint8)
-
-    return result
+    return np.clip(
+        img1_arr.astype(float) * (1 - p) + img2_arr.astype(float) * p,
+        0, 255
+    ).astype(np.uint8)
 
 
 def page_roll(img1_arr, img2_arr, progress):
@@ -120,141 +77,223 @@ def page_roll(img1_arr, img2_arr, progress):
 
 
 def split_horizontal(img1_arr, img2_arr, progress):
-    """Top and bottom halves of img1 split apart, revealing img2 behind."""
+    """Split from center horizontally — doors opening effect."""
     h, w = img1_arr.shape[:2]
     p = _ease_out_cubic(progress)
+    split = int(h * p * 0.5)
 
-    # Start with img2 as background
     result = img2_arr.copy()
 
-    gap = int(h * 0.5 * p)  # How far each half has moved
-
-    mid = h // 2
-
-    if gap < mid:
-        # Top half moves up
-        top_src_start = gap
-        top_remaining = mid - gap
-        if top_remaining > 0:
-            result[:top_remaining] = img1_arr[top_src_start:top_src_start + top_remaining]
-
-        # Bottom half moves down
-        bot_dst_start = mid + gap
-        bot_remaining = h - bot_dst_start
-        if bot_remaining > 0 and mid + bot_remaining <= h:
-            result[bot_dst_start:bot_dst_start + bot_remaining] = img1_arr[mid:mid + bot_remaining]
+    if split < h // 2:
+        # Top half of img1 moves up
+        result[:h // 2 - split] = img1_arr[split:h // 2]
+        # Bottom half of img1 moves down
+        result[h // 2 + split:] = img1_arr[h // 2:h - split]
 
     return result
 
 
 def split_vertical(img1_arr, img2_arr, progress):
-    """Left and right halves of img1 split apart, revealing img2 behind."""
+    """Split from center vertically — curtain opening effect."""
     h, w = img1_arr.shape[:2]
     p = _ease_out_cubic(progress)
+    split = int(w * p * 0.5)
 
     result = img2_arr.copy()
 
-    gap = int(w * 0.5 * p)
-    mid = w // 2
-
-    if gap < mid:
-        # Left half moves left
-        left_remaining = mid - gap
-        if left_remaining > 0:
-            result[:, :left_remaining] = img1_arr[:, gap:gap + left_remaining]
-
-        # Right half moves right
-        right_start = mid + gap
-        right_remaining = w - right_start
-        if right_remaining > 0 and mid + right_remaining <= w:
-            result[:, right_start:right_start + right_remaining] = img1_arr[:, mid:mid + right_remaining]
+    if split < w // 2:
+        result[:, :w // 2 - split] = img1_arr[:, split:w // 2]
+        result[:, w // 2 + split:] = img2_arr[:, w // 2 + split:]
+        # Keep img1 in the middle area that hasn't split yet
+        mid_left = w // 2 - split
+        mid_right = w // 2 + split
+        if mid_right > mid_left:
+            result[:, mid_left:mid_right] = img1_arr[:, mid_left:mid_right]
 
     return result
 
 
 def zoom_punch(img1_arr, img2_arr, progress):
-    """Zoom into img1, flash white, zoom out from img2."""
-    h, w = img1_arr.shape[:2]
-    p = progress
-
-    if p < 0.4:
-        # Zoom into img1
-        zoom_p = p / 0.4  # 0→1
-        scale = 1.0 + zoom_p * 0.4  # 1.0→1.4
-        cw = max(1, int(w / scale))
-        ch = max(1, int(h / scale))
-        x1 = (w - cw) // 2
-        y1 = (h - ch) // 2
-        x1 = max(0, min(x1, w - cw))
-        y1 = max(0, min(y1, h - ch))
-        cropped = img1_arr[y1:y1 + ch, x1:x1 + cw]
-        result = np.array(Image.fromarray(cropped).resize((w, h), Image.BILINEAR))
-        # Fade to white
-        white_blend = zoom_p * zoom_p  # Accelerating
-        result = np.clip(result * (1 - white_blend) + 255 * white_blend, 0, 255).astype(np.uint8)
-        return result
-
-    elif p < 0.6:
-        # White flash
-        return np.full_like(img1_arr, 255)
-
-    else:
-        # Zoom out from img2
-        zoom_p = (p - 0.6) / 0.4  # 0→1
-        ep = _ease_out_cubic(zoom_p)
-        scale = 1.4 - ep * 0.4  # 1.4→1.0
-        cw = max(1, int(w / scale))
-        ch = max(1, int(h / scale))
-        x1 = (w - cw) // 2
-        y1 = (h - ch) // 2
-        x1 = max(0, min(x1, w - cw))
-        y1 = max(0, min(y1, h - ch))
-        cropped = img2_arr[y1:y1 + ch, x1:x1 + cw]
-        result = np.array(Image.fromarray(cropped).resize((w, h), Image.BILINEAR))
-        # Fade from white
-        white_blend = (1 - zoom_p) ** 2
-        result = np.clip(result * (1 - white_blend) + 255 * white_blend, 0, 255).astype(np.uint8)
-        return result
-
-
-def slide_push(img1_arr, img2_arr, progress):
-    """img2 pushes img1 off to the left (carousel style)."""
+    """Zoom in with flash, then reveal new image — impactful beat sync."""
     h, w = img1_arr.shape[:2]
     p = _ease_in_out(progress)
 
-    offset = int(w * p)
+    if p < 0.4:
+        # Phase 1: img1 zooms in (0.4 of transition)
+        zoom = 1.0 + (p / 0.4) * 0.3  # 1.0 → 1.3
+        zh = int(h / zoom)
+        zw = int(w / zoom)
+        y1 = (h - zh) // 2
+        x1 = (w - zw) // 2
+        cropped = img1_arr[y1:y1 + zh, x1:x1 + zw]
+        result = np.array(Image.fromarray(cropped).resize((w, h), Image.BILINEAR))
+        # Slight brightness increase (building to flash)
+        bright = 1.0 + (p / 0.4) * 0.3
+        result = np.clip(result * bright, 0, 255).astype(np.uint8)
+    elif p < 0.6:
+        # Phase 2: white flash (0.2 of transition)
+        flash_p = (p - 0.4) / 0.2
+        if flash_p < 0.5:
+            # Flash brightening
+            alpha = flash_p * 2
+            result = np.clip(
+                img1_arr.astype(float) * (1 - alpha) + 255 * alpha,
+                0, 255
+            ).astype(np.uint8)
+        else:
+            # Flash fading to img2
+            alpha = (flash_p - 0.5) * 2
+            result = np.clip(
+                255 * (1 - alpha) + img2_arr.astype(float) * alpha,
+                0, 255
+            ).astype(np.uint8)
+    else:
+        # Phase 3: img2 zooms out from enlarged (0.4 of transition)
+        remain = (p - 0.6) / 0.4
+        zoom = 1.3 - remain * 0.3  # 1.3 → 1.0
+        zh = int(h / zoom)
+        zw = int(w / zoom)
+        y1 = (h - zh) // 2
+        x1 = (w - zw) // 2
+        cropped = img2_arr[y1:y1 + zh, x1:x1 + zw]
+        result = np.array(Image.fromarray(cropped).resize((w, h), Image.BILINEAR))
+
+    return result
+
+
+def slide_push(img1_arr, img2_arr, progress):
+    """Vertical slide: new image pushes old upward — clean and smooth."""
+    h, w = img1_arr.shape[:2]
+    p = _ease_in_out(progress)
+
+    offset = int(h * p)
     result = np.zeros_like(img1_arr)
 
-    # img1 being pushed left
-    if offset < w:
-        visible = w - offset
-        result[:, :visible] = img1_arr[:, offset:]
+    # img1 pushed up
+    if offset < h:
+        remaining = h - offset
+        result[:remaining] = img1_arr[offset:]
 
-    # img2 coming in from right
+    # img2 enters from bottom
     if offset > 0:
-        visible = min(offset, w)
-        result[:, w - visible:] = img2_arr[:, :visible]
+        visible = min(offset, h)
+        result[h - visible:] = img2_arr[:visible]
+
+    return result
+
+
+def wipe_down(img1_arr, img2_arr, progress):
+    """Vertical wipe from top to bottom — reveals new image underneath.
+    Smooth and cinematic, works well with flowing music."""
+    h, w = img1_arr.shape[:2]
+    p = _ease_in_out(progress)
+
+    wipe_pos = int(h * p)
+    result = img1_arr.copy()
+
+    if wipe_pos > 0:
+        result[:wipe_pos] = img2_arr[:wipe_pos]
+
+    # Soft edge at wipe line (10px gradient blend)
+    edge_size = 10
+    if 0 < wipe_pos < h - edge_size:
+        for i in range(edge_size):
+            y = wipe_pos + i
+            if y < h:
+                alpha = 1.0 - (i / edge_size)
+                result[y] = np.clip(
+                    img2_arr[y].astype(float) * alpha +
+                    img1_arr[y].astype(float) * (1 - alpha),
+                    0, 255
+                ).astype(np.uint8)
+
+    return result
+
+
+def blur_morph(img1_arr, img2_arr, progress):
+    """Blur out old image, blur in new — dreamy and elegant.
+    Best for slower, ambient music sections."""
+    h, w = img1_arr.shape[:2]
+    p = _ease_in_out(progress)
+
+    if p < 0.5:
+        # Phase 1: img1 blurs out
+        blur_amount = p * 2  # 0→1
+        radius = int(blur_amount * 20) + 1
+        img1_pil = Image.fromarray(img1_arr)
+        blurred = img1_pil.filter(ImageFilter.GaussianBlur(radius=radius))
+        # Fade brightness down slightly
+        bright = 1.0 - blur_amount * 0.2
+        result = np.clip(np.array(blurred) * bright, 0, 255).astype(np.uint8)
+    else:
+        # Phase 2: img2 un-blurs in
+        unblur = (p - 0.5) * 2  # 0→1
+        radius = int((1 - unblur) * 20) + 1
+        img2_pil = Image.fromarray(img2_arr)
+        blurred = img2_pil.filter(ImageFilter.GaussianBlur(radius=radius))
+        bright = 0.8 + unblur * 0.2
+        result = np.clip(np.array(blurred) * bright, 0, 255).astype(np.uint8)
 
     return result
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  Transition registry
+#  Transition registry — NO cube_rotate (spinning = norak)
 # ═══════════════════════════════════════════════════════════════════
 TRANSITIONS = {
-    'cube_rotate': cube_rotate,
+    'fade_dissolve': fade_dissolve,
     'page_roll': page_roll,
     'split_horizontal': split_horizontal,
     'split_vertical': split_vertical,
     'zoom_punch': zoom_punch,
     'slide_push': slide_push,
+    'wipe_down': wipe_down,
+    'blur_morph': blur_morph,
 }
 
 TRANSITION_NAMES = list(TRANSITIONS.keys())
 
+# ═══════════════════════════════════════════════════════════════════
+#  Per-channel transition sequences (unique order per channel)
+#  - No duplicate transitions within a single video
+#  - Each channel has a different fixed order
+#  - Ordered for aesthetic flow with typical music
+# ═══════════════════════════════════════════════════════════════════
+CHANNEL_TRANSITIONS = {
+    # TikTok: short, punchy, 3 transitions max
+    'tt': ['fade_dissolve', 'split_vertical', 'zoom_punch',
+           'wipe_down', 'blur_morph', 'slide_push', 'page_roll', 'split_horizontal'],
+
+    # YouTube Short: cinematic feel
+    'yt_short': ['wipe_down', 'blur_morph', 'split_horizontal',
+                 'fade_dissolve', 'zoom_punch', 'slide_push', 'page_roll', 'split_vertical'],
+
+    # Facebook: engaging, varied
+    'fb': ['split_horizontal', 'zoom_punch', 'wipe_down',
+           'blur_morph', 'fade_dissolve', 'page_roll', 'split_vertical', 'slide_push'],
+
+    # YouTube Long: most transitions needed (2 passes × 4 images)
+    'yt_long': ['blur_morph', 'fade_dissolve', 'slide_push',
+                'wipe_down', 'split_vertical', 'zoom_punch', 'split_horizontal', 'page_roll'],
+}
+
+
+def get_channel_transitions(platform, count):
+    """Get transition sequence for a specific channel.
+
+    Returns exactly `count` transitions, all unique (no repeats).
+    Each channel has its own fixed order for consistency.
+    """
+    sequence = CHANNEL_TRANSITIONS.get(platform, CHANNEL_TRANSITIONS['tt'])
+    # Take first `count` transitions (all unique by design)
+    result = []
+    for i in range(count):
+        result.append(sequence[i % len(sequence)])
+    return result
+
 
 def get_random_transitions(count=3, rng=None):
-    """Pick `count` random unique transitions."""
+    """Pick `count` random unique transitions (legacy fallback)."""
     import random
     _rng = rng or random
     pool = TRANSITION_NAMES.copy()
@@ -264,23 +303,6 @@ def get_random_transitions(count=3, rng=None):
 
 def apply_transition(img1_arr, img2_arr, progress, transition_name):
     """Apply a named transition. progress: 0.0→1.0."""
-    fn = TRANSITIONS.get(transition_name, slide_push)
+    fn = TRANSITIONS.get(transition_name, fade_dissolve)
     progress = max(0.0, min(1.0, progress))
     return fn(img1_arr, img2_arr, progress)
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  Perspective transform helper
-# ═══════════════════════════════════════════════════════════════════
-def _find_perspective_coeffs(src, dst):
-    """Find coefficients for PIL Image.PERSPECTIVE transform.
-    src and dst are lists of 4 (x,y) corner points."""
-    import numpy as np
-    matrix = []
-    for s, d in zip(src, dst):
-        matrix.append([d[0], d[1], 1, 0, 0, 0, -s[0]*d[0], -s[0]*d[1]])
-        matrix.append([0, 0, 0, d[0], d[1], 1, -s[1]*d[0], -s[1]*d[1]])
-    A = np.array(matrix, dtype=float)
-    B = np.array([p for pair in src for p in pair], dtype=float)
-    res = np.linalg.solve(A, B)
-    return tuple(res.flatten())

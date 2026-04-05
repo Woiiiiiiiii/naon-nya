@@ -31,7 +31,7 @@ from category_router import (
     get_category, get_accent_color, VIDEO_DURATION
 )
 from slideshow_transitions import (
-    get_random_transitions, apply_transition, TRANSITION_NAMES
+    get_channel_transitions, apply_transition, TRANSITION_NAMES
 )
 from slideshow_frame import (
     render_frame, apply_vignette, apply_ken_burns,
@@ -202,12 +202,14 @@ def _load_product_images(produk_id, count=4):
     return images[:count]
 
 
-def _calculate_timeline(config):
+def _calculate_timeline(config, platform='tt'):
     """Calculate the timeline (start/end times for each slide and transition).
+
+    Each platform gets its own unique transition order (no duplicates).
 
     Returns list of segments:
       [{'type': 'slide', 'image_idx': 0, 'start': 0.0, 'end': 5.5, 'kb_dir': 'zoom_in'},
-       {'type': 'transition', 'from_idx': 0, 'to_idx': 1, 'start': 5.5, 'end': 6.5, 'name': 'cube_rotate'},
+       {'type': 'transition', 'from_idx': 0, 'to_idx': 1, 'start': 5.5, 'end': 6.5, 'name': 'fade_dissolve'},
        {'type': 'slide', 'image_idx': 1, 'start': 6.5, 'end': 12.0, 'kb_dir': 'pan_left'},
        ...]
     """
@@ -216,23 +218,15 @@ def _calculate_timeline(config):
     trans_dur = config['transition_duration']
     passes = config['passes']
 
+    total_slides = num_imgs * passes
+    total_transitions = total_slides - 1
+
+    # Get per-channel transition sequence (unique order, no duplicates)
+    all_transitions = get_channel_transitions(platform, total_transitions)
+    print(f"    Transitions ({platform}): {' → '.join(all_transitions[:total_transitions])}")
+
     segments = []
     t = 0.0
-    img_idx = 0
-    total_slides = num_imgs * passes
-
-    # Prepare transitions (different set per pass)
-    all_transitions = []
-    for p in range(passes):
-        trans = get_random_transitions(count=num_imgs - 1)
-        # Pad if needed
-        while len(trans) < num_imgs - 1:
-            trans.append(random.choice(TRANSITION_NAMES))
-        all_transitions.extend(trans)
-        # Between passes, add one extra transition
-        if p < passes - 1:
-            all_transitions.append(random.choice(TRANSITION_NAMES))
-
     trans_idx = 0
     for slide_num in range(total_slides):
         # Slide segment
@@ -289,8 +283,8 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
     # NO vignette — it darkens edges and makes product look blurry
     # Product images are only 800x800 upscaled to 1460px, vignette makes it worse
 
-    # Calculate timeline
-    segments, total_dur = _calculate_timeline(config)
+    # Calculate timeline with per-channel transitions
+    segments, total_dur = _calculate_timeline(config, platform=platform)
     print(f"    Timeline: {len(segments)} segments, {total_dur:.1f}s total")
 
     # Running lights: always CHASE (berjalan, bukan kedip)
