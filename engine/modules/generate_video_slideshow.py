@@ -192,12 +192,51 @@ def _load_product_images(produk_id, count=4):
     unique_count = len(images)
     print(f"    [QC] {unique_count} unique images loaded (need {count})")
 
-    # If we have fewer than needed, duplicate with variations
+    # If we have fewer than needed, duplicate with VISUAL VARIATIONS
+    # Each copy looks different: zoom, brightness, contrast, warmth
+    # This makes single-image products interesting (not monotonous)
+    variation_styles = [
+        {'zoom': 1.15, 'bright': 1.05, 'contrast': 1.0, 'warmth': 0},
+        {'zoom': 1.0, 'bright': 0.95, 'contrast': 1.10, 'warmth': 10},
+        {'zoom': 1.10, 'bright': 1.0, 'contrast': 1.05, 'warmth': -8},
+        {'zoom': 1.20, 'bright': 1.08, 'contrast': 0.95, 'warmth': 5},
+        {'zoom': 1.05, 'bright': 0.98, 'contrast': 1.08, 'warmth': -5},
+        {'zoom': 1.12, 'bright': 1.03, 'contrast': 1.0, 'warmth': 8},
+        {'zoom': 1.08, 'bright': 1.0, 'contrast': 1.12, 'warmth': -3},
+    ]
+    var_idx = 0
     while len(images) < count:
         src = images[len(images) % unique_count].copy()
-        # NO mirror — flipping makes text unreadable (e.g. product info reversed)
+        # Apply visual variation
+        style = variation_styles[var_idx % len(variation_styles)]
+        var_idx += 1
+        w, h = src.size
+
+        # Zoom: crop center then resize back
+        z = style['zoom']
+        if z > 1.0:
+            cw, ch = int(w / z), int(h / z)
+            x1, y1 = (w - cw) // 2, (h - ch) // 2
+            src = src.crop((x1, y1, x1 + cw, y1 + ch)).resize((w, h), Image.LANCZOS)
+
+        # Brightness
+        if style['bright'] != 1.0:
+            from PIL import ImageEnhance
+            src = ImageEnhance.Brightness(src).enhance(style['bright'])
+
+        # Contrast
+        if style['contrast'] != 1.0:
+            from PIL import ImageEnhance
+            src = ImageEnhance.Contrast(src).enhance(style['contrast'])
+
+        # Warmth shift (add/subtract from red channel)
+        if style['warmth'] != 0:
+            arr = np.array(src)
+            arr[:,:,0] = np.clip(arr[:,:,0].astype(int) + style['warmth'], 0, 255).astype(np.uint8)
+            src = Image.fromarray(arr)
+
         images.append(src)
-        print(f"    [QC] Slot {len(images)}: duplicated from image {(len(images)-1) % unique_count + 1}")
+        print(f"    [QC] Slot {len(images)}: variation {var_idx} (zoom={z:.2f}, bright={style['bright']}, contrast={style['contrast']})")
 
     return images[:count]
 
@@ -272,6 +311,12 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
         print(f"    [SKIP] No images for {produk_id}")
         return False
 
+    # Count truly unique images (before duplication fills slots)
+    unique_count = len(set(id(img) for img in images_pil))
+    # If all are same object copies, treat as 1 unique
+    if unique_count <= 1 or len(images_pil) == 1:
+        unique_count = 1
+
     # Fit images to frame — get product bounds for inner frame
     fitted = []
     bounds_list = []  # product_bounds per image
@@ -283,7 +328,8 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
     # NO vignette — it darkens edges and makes product look blurry
     # Product images are only 800x800 upscaled to 1460px, vignette makes it worse
 
-    # Calculate timeline with per-channel transitions
+    # Calculate timeline — same structure for ALL products
+    # Single-image products use visual variations, so transitions still look good
     segments, content_dur = _calculate_timeline(config, platform=platform)
 
     # Fades are EXTRA TIME — they don't eat into slide durations
