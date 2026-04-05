@@ -192,23 +192,85 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     fc = theme['frame_color']
     ic = theme['inner_color']
     gc = theme['glow_color']
+    lc = theme['light_color']
 
     # ════════════════════════════════════════════════════════════
-    #  PIGURA LUAR — thin neon frame at screen edge
+    #  PIGURA LUAR — solid line frame with laser beam chase
+    #  Position: 12px inward from screen edge (visible gap)
     # ════════════════════════════════════════════════════════════
 
+    outer_margin = 12  # visible gap between screen edge and frame
+    fx1, fy1 = outer_margin, outer_margin
+    fx2, fy2 = w - 1 - outer_margin, h - 1 - outer_margin
+
+    # Soft glow behind frame
     glow_layer = Image.new('RGBA', (w, h), (0, 0, 0, 0))
     glow_draw = ImageDraw.Draw(glow_layer)
-    glow_draw.rectangle([(0, 0), (w - 1, h - 1)],
-                         outline=gc, width=frame_width + 8)
-    glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=6))
+    glow_draw.rectangle([(fx1 - 4, fy1 - 4), (fx2 + 4, fy2 + 4)],
+                         outline=gc, width=10)
+    glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=5))
     overlay = Image.alpha_composite(overlay, glow_layer)
     draw = ImageDraw.Draw(overlay)
 
-    outer_margin = 2
-    draw.rectangle([(outer_margin, outer_margin),
-                     (w - 1 - outer_margin, h - 1 - outer_margin)],
-                    outline=(*fc, 255), width=3)
+    # Solid continuous line (base frame — always visible)
+    draw.rectangle([(fx1, fy1), (fx2, fy2)],
+                    outline=(*fc, 180), width=2)
+
+    # ── LASER BEAM traveling along frame perimeter ──
+    # Calculate perimeter for laser position
+    frame_w = fx2 - fx1
+    frame_h = fy2 - fy1
+    perimeter = 2 * frame_w + 2 * frame_h
+
+    # Laser position (0.0 to 1.0 along perimeter)
+    speed = 1.2  # loops per second
+    laser_pos = (t * speed) % 1.0
+    laser_dist = laser_pos * perimeter
+
+    # Laser beam: HEAD (bright, thick) → TAIL (fading)
+    beam_length = perimeter * 0.15  # 15% of perimeter
+    num_segments = 60  # resolution of beam
+
+    for seg in range(num_segments):
+        # Distance along perimeter for this segment
+        seg_frac = seg / num_segments  # 0=head, 1=tail
+        seg_dist = (laser_dist - seg_frac * beam_length) % perimeter
+
+        # Convert distance to (x, y) on perimeter
+        if seg_dist < frame_w:
+            # Top edge: left to right
+            sx = fx1 + seg_dist
+            sy = fy1
+        elif seg_dist < frame_w + frame_h:
+            # Right edge: top to bottom
+            sx = fx2
+            sy = fy1 + (seg_dist - frame_w)
+        elif seg_dist < 2 * frame_w + frame_h:
+            # Bottom edge: right to left
+            sx = fx2 - (seg_dist - frame_w - frame_h)
+            sy = fy2
+        else:
+            # Left edge: bottom to top
+            sx = fx1
+            sy = fy2 - (seg_dist - 2 * frame_w - frame_h)
+
+        # Brightness: head=1.0, tail=0.0
+        brightness = 1.0 - (seg_frac ** 0.6)  # fast falloff for visible head
+        if brightness < 0.05:
+            continue
+
+        # Size: head=thicker, tail=thinner
+        radius = int(2 + 4 * brightness)  # head=6px, tail=2px
+        alpha = int(255 * brightness)
+
+        r = min(255, int(lc[0] * brightness + fc[0] * (1 - brightness)))
+        g = min(255, int(lc[1] * brightness + fc[1] * (1 - brightness)))
+        b = min(255, int(lc[2] * brightness + fc[2] * (1 - brightness)))
+
+        # Draw laser segment as filled circle
+        draw.ellipse([(int(sx) - radius, int(sy) - radius),
+                       (int(sx) + radius, int(sy) + radius)],
+                      fill=(r, g, b, alpha))
 
     # ════════════════════════════════════════════════════════════
     #  PIGURA DALAM — wraps ON product image edges
@@ -216,67 +278,21 @@ def render_frame(img_arr, t, category='home', pattern='chase',
 
     if product_bounds:
         px1, py1, px2, py2 = product_bounds
-        # Frame sits right on the product edges
         inner_fw = 3
         draw.rectangle([(px1, py1), (px2, py2)],
                         outline=(*ic, 230), width=inner_fw)
 
-        # Bold corner accents (L-shapes at 4 corners of PRODUCT)
+        # Bold corner accents (L-shapes at 4 corners)
         corner_size = 25
         corner_thick = 5
-        # Top-left
         draw.line([(px1, py1), (px1 + corner_size, py1)], fill=(*fc, 255), width=corner_thick)
         draw.line([(px1, py1), (px1, py1 + corner_size)], fill=(*fc, 255), width=corner_thick)
-        # Top-right
         draw.line([(px2, py1), (px2 - corner_size, py1)], fill=(*fc, 255), width=corner_thick)
         draw.line([(px2, py1), (px2, py1 + corner_size)], fill=(*fc, 255), width=corner_thick)
-        # Bottom-left
         draw.line([(px1, py2), (px1 + corner_size, py2)], fill=(*fc, 255), width=corner_thick)
         draw.line([(px1, py2), (px1, py2 - corner_size)], fill=(*fc, 255), width=corner_thick)
-        # Bottom-right
         draw.line([(px2, py2), (px2 - corner_size, py2)], fill=(*fc, 255), width=corner_thick)
         draw.line([(px2, py2), (px2, py2 - corner_size)], fill=(*fc, 255), width=corner_thick)
-
-    # ════════════════════════════════════════════════════════════
-    #  RUNNING LIGHTS — chase pattern along OUTER frame perimeter
-    # ════════════════════════════════════════════════════════════
-
-    fx1, fy1 = outer_margin, outer_margin
-    fx2, fy2 = w - 1 - outer_margin, h - 1 - outer_margin
-    positions = _get_light_positions_rect(fx1, fy1, fx2, fy2, num_lights)
-
-    for i, (lx, ly) in enumerate(positions):
-        if pattern == 'chase':
-            brightness = _chase_brightness(i, num_lights, t)
-        elif pattern == 'twinkle':
-            brightness = _twinkle_brightness(i, num_lights, t)
-        elif pattern == 'pulse':
-            brightness = _pulse_brightness(i, num_lights, t)
-        elif pattern == 'rainbow':
-            brightness = _rainbow_brightness(i, num_lights, t)
-        else:
-            brightness = 0.5
-
-        lc = theme['light_color']
-        if pattern == 'rainbow':
-            lc = _rainbow_color(i, num_lights, t, lc)
-
-        r = min(255, int(lc[0] * brightness))
-        g = min(255, int(lc[1] * brightness))
-        b = min(255, int(lc[2] * brightness))
-        alpha = int(200 * brightness + 55)
-
-        # Bright core dot
-        draw.ellipse([(lx - light_radius, ly - light_radius),
-                       (lx + light_radius, ly + light_radius)],
-                      fill=(r, g, b, alpha))
-
-        # Neon glow halo
-        if brightness > 0.5:
-            gr = light_radius * 3
-            ga = int(40 * brightness)
-            draw.ellipse([(lx - gr, ly - gr), (lx + gr, ly + gr)],
-                          fill=(r, g, b, ga))
 
     # Composite
     result = Image.alpha_composite(img_pil, overlay)
