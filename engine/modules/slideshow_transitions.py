@@ -264,9 +264,11 @@ CHANNEL_TRANSITIONS = {
     'tt': ['fade_dissolve', 'split_vertical', 'zoom_punch',
            'wipe_down', 'blur_morph', 'slide_push', 'page_roll', 'split_horizontal'],
 
-    # YouTube Short: cinematic feel
+    # YouTube Short: cinematic feel (suffix '_yt' → stripped to 'yt')
     'yt_short': ['wipe_down', 'blur_morph', 'split_horizontal',
                  'fade_dissolve', 'zoom_punch', 'slide_push', 'page_roll', 'split_vertical'],
+    'yt': ['wipe_down', 'blur_morph', 'split_horizontal',
+           'fade_dissolve', 'zoom_punch', 'slide_push', 'page_roll', 'split_vertical'],
 
     # Facebook: engaging, varied
     'fb': ['split_horizontal', 'zoom_punch', 'wipe_down',
