@@ -227,13 +227,28 @@ def find_music_file(platform_dir, produk_id, acct_id, category='home'):
         'elektronik': 'gadget', 'kosmetik': 'beauty',
         'alat_rumah_tangga': 'home', 'kesehatan': 'wellness',
     }
+
+    # Load global used music to avoid reuse
+    used_music_file = os.path.join(os.path.dirname(__file__), '..', 'state', 'used_music.json')
+    used_set = set()
+    if os.path.exists(used_music_file):
+        try:
+            import json as _json
+            with open(used_music_file, 'r') as _f:
+                used_set = set(_json.load(_f))
+        except Exception:
+            pass
+
     mapped = cat_map.get(category, category)
     lib_dir = os.path.join(music_lib, mapped)
     if os.path.isdir(lib_dir):
         tracks = [f for f in os.listdir(lib_dir)
                    if f.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a'))]
-        if tracks:
-            pick = os.path.join(lib_dir, random.choice(tracks))
+        # Prefer unused tracks
+        unused = [f for f in tracks if f not in used_set]
+        pick_pool = unused if unused else tracks
+        if pick_pool:
+            pick = os.path.join(lib_dir, random.choice(pick_pool))
             print(f"    [MUSIC T4] {acct_id}: using library {os.path.basename(pick)}")
             return pick, 4
 
@@ -242,8 +257,10 @@ def find_music_file(platform_dir, produk_id, acct_id, category='home'):
     if os.path.isdir(gen_dir):
         tracks = [f for f in os.listdir(gen_dir)
                    if f.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a'))]
-        if tracks:
-            pick = os.path.join(gen_dir, random.choice(tracks))
+        unused = [f for f in tracks if f not in used_set]
+        pick_pool = unused if unused else tracks
+        if pick_pool:
+            pick = os.path.join(gen_dir, random.choice(pick_pool))
             print(f"    [MUSIC T4-gen] {acct_id}: using general {os.path.basename(pick)}")
             return pick, 4
 

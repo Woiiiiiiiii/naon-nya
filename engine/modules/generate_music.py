@@ -93,22 +93,36 @@ def _list_music_files(category):
 
 
 # SESSION-LEVEL music dedup: tracks used in this pipeline run
-# Prevents same track being assigned to multiple videos (within or across channels)
-_used_tracks = set()
+# Dict keyed by platform — ensures no cross-channel sharing
+_used_tracks = {}           # {'tt': {abs_path1}, 'yt': {abs_path2}, ...}
+_globally_used = set()       # Filenames used in ALL previous runs
 
 
 def _reset_used_tracks():
     """Reset music tracking (call at start of new pipeline run)."""
-    global _used_tracks
-    _used_tracks = set()
+    global _used_tracks, _globally_used
+    _used_tracks = {}
+    _globally_used = set()
 
 
-def _select_music_from_library(category, produk_id, account_id):
+def _select_music_from_library(category, produk_id, account_id, platform='tt'):
     """Select a UNIQUE music file from local library based on category.
-    DEDUP: each track can only be used ONCE per pipeline run, across ALL channels.
+    DEDUP RULES:
+      1. Each track can only be used ONCE per platform (per-channel unique)
+      2. Each track can only be used ONCE across ALL platforms in this run
+      3. Tracks used in previous runs (used_music.json) are skipped
     PREFERS API-downloaded files (.mp3/.ogg) over synth (.wav with _synth_).
     Returns path to selected file or None if no files available."""
-    global _used_tracks
+    global _used_tracks, _globally_used
+
+    # Ensure platform bucket exists
+    if platform not in _used_tracks:
+        _used_tracks[platform] = set()
+
+    # ALL tracks used across ALL platforms in this session
+    all_session_used = set()
+    for plat_set in _used_tracks.values():
+        all_session_used |= plat_set
 
     files = _list_music_files(category)
     if not files:
@@ -133,43 +147,62 @@ def _select_music_from_library(category, produk_id, account_id):
     seed = int(hashlib.md5(run_id.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
 
-    # DEDUP: filter out tracks already used in this pipeline run
-    available_api = [f for f in api_files if os.path.abspath(f) not in _used_tracks]
-    available_synth = [f for f in synth_files if os.path.abspath(f) not in _used_tracks]
+    # DEDUP: filter out tracks used in ANY channel this session + previous runs
+    def _is_available(f):
+        abs_f = os.path.abspath(f)
+        base_f = os.path.basename(f)
+        if abs_f in all_session_used:       # Used in another channel this run
+            return False
+        if base_f in _globally_used:        # Used in a previous run
+            return False
+        return True
 
-    # If ALL tracks exhausted in this session, restock 1 new track (don't reuse)
+    available_api = [f for f in api_files if _is_available(f)]
+    available_synth = [f for f in synth_files if _is_available(f)]
+
+    # If ALL tracks exhausted, try relaxing global dedup (allow reuse from old runs)
+    if not available_api and not available_synth:
+        print(f"      [DEDUP] All tracks used globally, relaxing cross-run dedup...")
+        available_api = [f for f in api_files if os.path.abspath(f) not in all_session_used]
+        available_synth = [f for f in synth_files if os.path.abspath(f) not in all_session_used]
+
+    # If STILL exhausted, restock 1 new track
     if not available_api and not available_synth:
         print(f"      [WARN] All {len(files)} tracks used in session, restocking 1 new...")
         _ensure_category_has_music(category, force=True)
-        # Re-check after restock
         files = _list_music_files(category)
-        available_api = [f for f in files if '_synth_' not in os.path.basename(f) and os.path.abspath(f) not in _used_tracks]
-        available_synth = [f for f in files if '_synth_' in os.path.basename(f) and os.path.abspath(f) not in _used_tracks]
+        available_api = [f for f in files if '_synth_' not in os.path.basename(f) and _is_available(f)]
+        available_synth = [f for f in files if '_synth_' in os.path.basename(f) and _is_available(f)]
         if not available_api and not available_synth:
-            # Last resort: reset dedup and reuse
-            print(f"      [WARN] Restock failed, resetting dedup pool")
+            # Last resort: reset session dedup and reuse
+            print(f"      [WARN] Restock failed, resetting session dedup pool")
             _used_tracks.clear()
+            _used_tracks[platform] = set()
+            all_session_used = set()
             available_api = [f for f in files if '_synth_' not in os.path.basename(f)]
             available_synth = [f for f in files if '_synth_' in os.path.basename(f)]
 
     if available_api:
         rng.shuffle(available_api)
         pick = available_api[0]
-        _used_tracks.add(os.path.abspath(pick))
+        abs_pick = os.path.abspath(pick)
+        _used_tracks[platform].add(abs_pick)
         remaining = len(available_api) - 1
-        print(f"      [MUSIC] {os.path.basename(pick)} ({remaining} remaining in {category})")
+        print(f"      [MUSIC] {platform}: {os.path.basename(pick)} ({remaining} remaining in {category})")
         return pick
     elif available_synth:
         rng.shuffle(available_synth)
         pick = available_synth[0]
-        _used_tracks.add(os.path.abspath(pick))
-        print(f"      [MUSIC] Synth: {os.path.basename(pick)}")
+        abs_pick = os.path.abspath(pick)
+        _used_tracks[platform].add(abs_pick)
+        print(f"      [MUSIC] {platform}: Synth: {os.path.basename(pick)}")
         return pick
 
     # Absolute fallback
     rng.shuffle(files)
     pick = files[0]
-    _used_tracks.add(os.path.abspath(pick))
+    abs_pick = os.path.abspath(pick)
+    _used_tracks[platform].add(abs_pick)
     return pick
 
 
@@ -509,6 +542,8 @@ def generate_all_music(queue_dir, output_dir):
     _reset_used_tracks()
 
     globally_used = _load_used_music()
+    global _globally_used
+    _globally_used = globally_used  # Make available to _select_music_from_library
 
     print("=== Music Generator (Tier System + Dedup) ===")
     print(f"  Music library: {os.path.abspath(MUSIC_DIR)}")
@@ -591,7 +626,7 @@ def generate_all_music(queue_dir, output_dir):
                     if got > 0:
                         print(f"    [TIER 1] Freesound: +{got} fresh track for {category}")
                         # Pick the newly downloaded track
-                        library_file = _select_music_from_library(category, produk_id, acct_id)
+                        library_file = _select_music_from_library(category, produk_id, acct_id, platform=platform)
                         if library_file:
                             success = _process_music_file(
                                 library_file, music_file, target_dur, produk_id, acct_id
@@ -611,7 +646,7 @@ def generate_all_music(queue_dir, output_dir):
                         got = fetch_youtube_audio_library(category, count=1)
                         if got > 0:
                             print(f"    [TIER 2] YouTube: +{got} fresh track for {category}")
-                            library_file = _select_music_from_library(category, produk_id, acct_id)
+                            library_file = _select_music_from_library(category, produk_id, acct_id, platform=platform)
                             if library_file:
                                 success = _process_music_file(
                                     library_file, music_file, target_dur, produk_id, acct_id
@@ -626,7 +661,7 @@ def generate_all_music(queue_dir, output_dir):
 
             # FALLBACK: pakai existing library (API tracks dari run sebelumnya)
             if not got_music:
-                library_file = _select_music_from_library(category, produk_id, acct_id)
+                library_file = _select_music_from_library(category, produk_id, acct_id, platform=platform)
                 if library_file and '_synth_' not in os.path.basename(library_file):
                     success = _process_music_file(
                         library_file, music_file, target_dur, produk_id, acct_id
