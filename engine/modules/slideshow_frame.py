@@ -289,21 +289,30 @@ def render_frame(img_arr, t, category='home', pattern='chase',
 
     if product_bounds:
         px1, py1, px2, py2 = product_bounds
-        inner_fw = 8  # THICK frame wrapping product
-        draw.rectangle([(px1, py1), (px2, py2)],
-                        outline=(*fc, 240), width=inner_fw)
 
-        # Bold corner accents (L-shapes at 4 corners)
-        corner_size = 30
-        corner_thick = 7
-        draw.line([(px1, py1), (px1 + corner_size, py1)], fill=(*fc, 255), width=corner_thick)
-        draw.line([(px1, py1), (px1, py1 + corner_size)], fill=(*fc, 255), width=corner_thick)
-        draw.line([(px2, py1), (px2 - corner_size, py1)], fill=(*fc, 255), width=corner_thick)
-        draw.line([(px2, py1), (px2, py1 + corner_size)], fill=(*fc, 255), width=corner_thick)
-        draw.line([(px1, py2), (px1 + corner_size, py2)], fill=(*fc, 255), width=corner_thick)
-        draw.line([(px1, py2), (px1, py2 - corner_size)], fill=(*fc, 255), width=corner_thick)
-        draw.line([(px2, py2), (px2 - corner_size, py2)], fill=(*fc, 255), width=corner_thick)
-        draw.line([(px2, py2), (px2, py2 - corner_size)], fill=(*fc, 255), width=corner_thick)
+        # Thin WHITE TRANSPARENT frame line (subtle, elegant)
+        inner_fw = 2  # thin line
+        white_alpha = 100  # semi-transparent white
+        draw.rectangle([(px1, py1), (px2, py2)],
+                        outline=(255, 255, 255, white_alpha), width=inner_fw)
+
+        # THICK WHITE SOLID corner accents (L-shapes, longer than frame line)
+        corner_len = 60   # panjang sudut (lebih panjang dari sebelumnya)
+        corner_thick = 4  # tebal sudut (lebih tebal dari garis frame)
+        corner_color = (255, 255, 255, 220)  # white, nearly opaque
+
+        # Top-left corner
+        draw.line([(px1, py1), (px1 + corner_len, py1)], fill=corner_color, width=corner_thick)
+        draw.line([(px1, py1), (px1, py1 + corner_len)], fill=corner_color, width=corner_thick)
+        # Top-right corner
+        draw.line([(px2, py1), (px2 - corner_len, py1)], fill=corner_color, width=corner_thick)
+        draw.line([(px2, py1), (px2, py1 + corner_len)], fill=corner_color, width=corner_thick)
+        # Bottom-left corner
+        draw.line([(px1, py2), (px1 + corner_len, py2)], fill=corner_color, width=corner_thick)
+        draw.line([(px1, py2), (px1, py2 - corner_len)], fill=corner_color, width=corner_thick)
+        # Bottom-right corner
+        draw.line([(px2, py2), (px2 - corner_len, py2)], fill=corner_color, width=corner_thick)
+        draw.line([(px2, py2), (px2, py2 - corner_len)], fill=corner_color, width=corner_thick)
 
     # Composite
     result = Image.alpha_composite(img_pil, overlay)
