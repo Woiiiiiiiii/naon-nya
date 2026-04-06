@@ -676,70 +676,30 @@ def generate_all_music(queue_dir, output_dir):
             else:
                 target_dur = MUSIC_DURATIONS.get(platform, 50)
 
-            # === MUSIK: Tier 1 dulu (Freesound = kualitas terbaik) ===
-            # Flow: Tier1 Freesound → Tier2 YouTube → Library existing → Tier3 Synth
+            # === Phase 2: Select from pre-restocked library ===
+            # Phase 1 already downloaded API tracks (Freesound/YouTube)
+            # _select_music_from_library PREFERS API tracks over synth
             got_music = False
 
-            if HAS_DOWNLOADER:
-                # TIER 1: Freesound API (kualitas terbaik, royalty-free)
-                try:
-                    from music_downloader import fetch_freesound, count_local
-                    got = fetch_freesound(category, count=1)
-                    if got > 0:
-                        print(f"    [TIER 1] Freesound: +{got} fresh track for {category}")
-                        # Pick the newly downloaded track
-                        library_file = _select_music_from_library(category, produk_id, acct_id, platform=platform)
-                        if library_file:
-                            success = _process_music_file(
-                                library_file, music_file, target_dur, produk_id, acct_id
-                            )
-                            if success:
-                                globally_used.add(os.path.basename(library_file))
-                                print(f"    [OK] {os.path.basename(music_file)} <- Freesound ({target_dur}s)")
-                                total_lib += 1
-                                got_music = True
-                except Exception as e:
-                    print(f"    [TIER 1] Freesound failed: {e}")
+            library_file = _select_music_from_library(category, produk_id, acct_id, platform=platform)
+            if library_file:
+                is_api = '_synth_' not in os.path.basename(library_file)
+                source = "API" if is_api else "Synth"
+                success = _process_music_file(
+                    library_file, music_file, target_dur, produk_id, acct_id
+                )
+                if success:
+                    globally_used.add(os.path.basename(library_file))
+                    print(f"    [{source.upper()}] {os.path.basename(music_file)} <- {os.path.basename(library_file)} ({target_dur}s)")
+                    total_lib += 1
+                    got_music = True
 
-                # TIER 2: YouTube Audio (kalau Freesound gagal)
-                if not got_music:
-                    try:
-                        from music_downloader import fetch_youtube_audio_library
-                        got = fetch_youtube_audio_library(category, count=1)
-                        if got > 0:
-                            print(f"    [TIER 2] YouTube: +{got} fresh track for {category}")
-                            library_file = _select_music_from_library(category, produk_id, acct_id, platform=platform)
-                            if library_file:
-                                success = _process_music_file(
-                                    library_file, music_file, target_dur, produk_id, acct_id
-                                )
-                                if success:
-                                    globally_used.add(os.path.basename(library_file))
-                                    print(f"    [OK] {os.path.basename(music_file)} <- YouTube ({target_dur}s)")
-                                    total_lib += 1
-                                    got_music = True
-                    except Exception as e:
-                        print(f"    [TIER 2] YouTube failed: {e}")
-
-            # FALLBACK: pakai existing library (API tracks dari run sebelumnya)
-            if not got_music:
-                library_file = _select_music_from_library(category, produk_id, acct_id, platform=platform)
-                if library_file and '_synth_' not in os.path.basename(library_file):
-                    success = _process_music_file(
-                        library_file, music_file, target_dur, produk_id, acct_id
-                    )
-                    if success:
-                        globally_used.add(os.path.basename(library_file))
-                        print(f"    [LIBRARY] {os.path.basename(music_file)} <- {os.path.basename(library_file)} ({target_dur}s)")
-                        total_lib += 1
-                        got_music = True
-
-            # TIER 3 (LAST RESORT): Synth procedural
+            # LAST RESORT: Generate procedural synth on-the-fly
             if not got_music:
                 info = _generate_procedural_track(
                     music_file, produk_id, acct_id, category, duration=target_dur
                 )
-                print(f"    [SYNTH] {os.path.basename(music_file)} | {info} ({target_dur}s)")
+                print(f"    [SYNTH-NEW] {os.path.basename(music_file)} | {info} ({target_dur}s)")
                 total_proc += 1
 
     # Save global used music tracking
