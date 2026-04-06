@@ -397,16 +397,17 @@ def _auto_trim_whitespace(img_rgb):
 
 
 def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
-    """Place product image — auto-trim white padding + STRETCH to fill.
+    """Place product image — auto-trim + STRETCH to fill rectangle EXACTLY.
 
-    Pipeline:
-      1. Auto-trim: remove Shopee's white padding (very conservative, threshold 252)
-         → Only trims pure white borders, NEVER touches text or product content
-         → Safety limit: max 20% removed from any edge
-      2. Frosted mirror background (blurred product reflection)
-      3. Define product rectangle with margins
-      4. INSET product by inner frame width (8px) so frame draws OUTSIDE
-      5. STRETCH trimmed image to fill 100% — no gaps, no cropping
+    DEFINITIVE approach (ZERO gaps guaranteed):
+      1. Auto-trim white padding from Shopee images (threshold 252, max 20%)
+      2. Frosted mirror background
+      3. Define product rectangle (10% x-margin, 12% y-margin)
+      4. STRETCH product to EXACT rectangle size — fills 100%
+      5. Frame draws ON TOP as overlay (never creates gaps)
+         → Product fills every pixel of the rectangle
+         → Frame overlaps product edges by a few pixels (like real picture frame)
+         → IMPOSSIBLE to have gaps between product and frame
     """
     from PIL import ImageEnhance
     w, h = img_pil.size
@@ -436,26 +437,18 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     rect_w = target_w - 2 * rect_x
     rect_h = target_h - 2 * rect_y
 
-    # ── Step 4: INSET by inner frame width ──
-    # Inner frame is 8px thick, drawn centered on bounds → 4px inside
-    # Inset product so frame draws OUTSIDE, never covers content
-    inset = 8  # = inner frame width, ensures frame is fully outside product
-    prod_x = rect_x + inset
-    prod_y = rect_y + inset
-    prod_w = rect_w - 2 * inset
-    prod_h = rect_h - 2 * inset
-
-    # ── Step 5: STRETCH trimmed image to fill inset area 100% ──
-    product = img_trimmed.resize((prod_w, prod_h), Image.LANCZOS)
+    # ── Step 4: STRETCH to EXACT rectangle — NO inset, ZERO gaps ──
+    # Product fills every single pixel of the rectangle
+    product = img_trimmed.resize((rect_w, rect_h), Image.LANCZOS)
 
     # Sharpen after resize
     product = product.filter(ImageFilter.UnsharpMask(radius=1.5, percent=80, threshold=2))
 
-    # ── Step 6: Paste product onto frosted background ──
+    # ── Step 5: Paste product at EXACT rect position ──
     canvas = frosted.copy()
-    canvas.paste(product, (prod_x, prod_y))
+    canvas.paste(product, (rect_x, rect_y))
 
-    # Product bounds = outer rect (for inner frame drawing AROUND product)
+    # Product bounds = exact rectangle (frame draws ON TOP as overlay)
     product_bounds = (rect_x, rect_y, rect_x + rect_w, rect_y + rect_h)
     return canvas, product_bounds
 
