@@ -591,65 +591,73 @@ def generate_all_music(queue_dir, output_dir):
             total_files = len(api_files) + len(synth_files)
             print(f"  [{cat}] {len(api_files)} API + {len(synth_files)} synth = {total_files} | need {jobs_need} unique tracks")
 
-            # If we don't have enough TOTAL tracks, restock
-            if total_files < jobs_need:
-                need = jobs_need - total_files
-                print(f"    Need {need} more tracks, trying tiers...")
+            # ALWAYS try Tier 1 + 2 first if we don't have ENOUGH API tracks
+            # Even if synth stock is sufficient, we PREFER API quality
+            api_need = max(0, jobs_need - len(api_files))
 
-                # Tier 1: Freesound
+            if api_need > 0:
+                print(f"    Need {api_need} API tracks (have {len(api_files)}, need {jobs_need})...")
+
+                # ── TIER 1: Freesound API (highest quality) ──
                 got_api = 0
                 try:
                     from music_downloader import fetch_freesound
-                    got = fetch_freesound(cat, count=need)
+                    got = fetch_freesound(cat, count=api_need)
                     if got > 0:
                         print(f"    [TIER 1] Freesound: +{got} tracks")
                         got_api += got
-                        need -= got
+                        api_need -= got
                 except Exception as e:
                     print(f"    [TIER 1] Freesound failed: {e}")
 
-                # Tier 2: YouTube Audio (only if still need more)
-                if need > 0:
+                # ── TIER 2: YouTube Audio (only if Tier 1 didn't fill) ──
+                if api_need > 0:
                     try:
                         from music_downloader import fetch_youtube_audio_library
-                        got = fetch_youtube_audio_library(cat, count=need)
+                        got = fetch_youtube_audio_library(cat, count=api_need)
                         if got > 0:
                             print(f"    [TIER 2] YouTube: +{got} tracks")
                             got_api += got
-                            need -= got
+                            api_need -= got
                     except Exception as e:
                         print(f"    [TIER 2] YouTube failed: {e}")
 
-                # Tier 3: Synth — generate ALL remaining needed tracks
-                # Use FAST numpy version from music_downloader (not slow per-sample loop)
-                if need > 0:
-                    print(f"    [TIER 3] Generating {need} synth tracks (API tiers failed)...")
-                    folder = _get_music_folder(cat)
-                    fast_synth = None
-                    try:
-                        from music_downloader import generate_procedural_track as fast_synth
-                    except ImportError:
-                        pass
-
-                    for i in range(need):
-                        existing = len(_list_music_files(cat))
-                        synth_path = os.path.join(folder, f"{cat}_synth_{existing+1:02d}.wav")
-                        if not os.path.exists(synth_path):
-                            seed = hash(f"{cat}_{existing}_{i}")
-                            dur = random.randint(25, 45)
-                            if fast_synth:
-                                # FAST: numpy vectorized (~1 sec per track)
-                                fast_synth(synth_path, cat, seed_val=seed, duration=dur)
-                            else:
-                                # SLOW fallback: per-sample Python loop
-                                _generate_procedural_track(
-                                    synth_path, f"restock_{existing}", f"lib_{cat}",
-                                    category=cat, duration=dur
-                                )
-                    final = len(_list_music_files(cat))
-                    print(f"    [TIER 3] Generated, now {final} total tracks")
+                if got_api > 0:
+                    print(f"    API download: +{got_api} tracks")
             else:
-                print(f"    Stock OK — {total_files} tracks available")
+                print(f"    API stock OK ({len(api_files)} API tracks)")
+
+            # ── TIER 3: Synth fallback — only if TOTAL stock insufficient ──
+            # Re-count after potential API downloads
+            files = _list_music_files(cat)
+            total_after = len(files)
+            if total_after < jobs_need:
+                synth_need = jobs_need - total_after
+                print(f"    [TIER 3] Generating {synth_need} synth tracks (APIs got insufficient)...")
+                folder = _get_music_folder(cat)
+                fast_synth = None
+                try:
+                    from music_downloader import generate_procedural_track as fast_synth
+                except ImportError:
+                    pass
+
+                for i in range(synth_need):
+                    existing = len(_list_music_files(cat))
+                    synth_path = os.path.join(folder, f"{cat}_synth_{existing+1:02d}.wav")
+                    if not os.path.exists(synth_path):
+                        seed = hash(f"{cat}_{existing}_{i}")
+                        dur = random.randint(25, 45)
+                        if fast_synth:
+                            fast_synth(synth_path, cat, seed_val=seed, duration=dur)
+                        else:
+                            _generate_procedural_track(
+                                synth_path, f"restock_{existing}", f"lib_{cat}",
+                                category=cat, duration=dur
+                            )
+                final = len(_list_music_files(cat))
+                print(f"    [TIER 3] Generated, now {final} total tracks")
+            else:
+                print(f"    Total stock sufficient: {total_after} tracks")
     else:
         for cat in sorted(categories_seen):
             files = _list_music_files(cat)
