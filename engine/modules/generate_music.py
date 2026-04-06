@@ -621,17 +621,31 @@ def generate_all_music(queue_dir, output_dir):
                         print(f"    [TIER 2] YouTube failed: {e}")
 
                 # Tier 3: Synth — generate ALL remaining needed tracks
+                # Use FAST numpy version from music_downloader (not slow per-sample loop)
                 if need > 0:
                     print(f"    [TIER 3] Generating {need} synth tracks (API tiers failed)...")
                     folder = _get_music_folder(cat)
+                    fast_synth = None
+                    try:
+                        from music_downloader import generate_procedural_track as fast_synth
+                    except ImportError:
+                        pass
+
                     for i in range(need):
                         existing = len(_list_music_files(cat))
                         synth_path = os.path.join(folder, f"{cat}_synth_{existing+1:02d}.wav")
                         if not os.path.exists(synth_path):
-                            _generate_procedural_track(
-                                synth_path, f"restock_{existing}", f"lib_{cat}",
-                                category=cat, duration=random.randint(25, 45)
-                            )
+                            seed = hash(f"{cat}_{existing}_{i}")
+                            dur = random.randint(25, 45)
+                            if fast_synth:
+                                # FAST: numpy vectorized (~1 sec per track)
+                                fast_synth(synth_path, cat, seed_val=seed, duration=dur)
+                            else:
+                                # SLOW fallback: per-sample Python loop
+                                _generate_procedural_track(
+                                    synth_path, f"restock_{existing}", f"lib_{cat}",
+                                    category=cat, duration=dur
+                                )
                     final = len(_list_music_files(cat))
                     print(f"    [TIER 3] Generated, now {final} total tracks")
             else:
