@@ -404,26 +404,30 @@ def _auto_trim_whitespace(img_rgb):
 
 
 def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
-    """Place product image — STRETCH to fill rectangle 100%.
+    """Place product image — auto-trim white padding + STRETCH to fill.
 
-    Simple and reliable:
-      1. Full screen = frosted mirror background
-      2. Product rectangle = proportional margins
-      3. STRETCH raw image to fill rectangle exactly
-         → NO auto-trim (was removing text/headers)
-         → NO edge-crop (was cutting content)
-         → NO FIT mode (was leaving empty space)
-         → Gambar SELALU penuh, tidak ada space kosong
+    Pipeline:
+      1. Auto-trim: remove Shopee's white padding (very conservative, threshold 252)
+         → Only trims pure white borders, NEVER touches text or product content
+         → Safety limit: max 20% removed from any edge
+      2. Frosted mirror background (blurred product reflection)
+      3. Define product rectangle with margins
+      4. INSET product by inner frame width (8px) so frame draws OUTSIDE
+      5. STRETCH trimmed image to fill 100% — no gaps, no cropping
     """
     from PIL import ImageEnhance
     w, h = img_pil.size
     img_rgb = img_pil.convert('RGB')
 
-    # ── Step 1: Full-screen frosted mirror background ──
-    bg_scale = max(target_w / w, target_h / h) * 1.3
-    bg_w = int(w * bg_scale)
-    bg_h = int(h * bg_scale)
-    bg_img = img_rgb.resize((bg_w, bg_h), Image.LANCZOS)
+    # ── Step 1: Auto-trim ONLY pure white padding (very safe) ──
+    img_trimmed = _safe_trim_white(img_rgb)
+
+    # ── Step 2: Full-screen frosted mirror background ──
+    tw, th = img_trimmed.size
+    bg_scale = max(target_w / tw, target_h / th) * 1.3
+    bg_w = int(tw * bg_scale)
+    bg_h = int(th * bg_scale)
+    bg_img = img_trimmed.resize((bg_w, bg_h), Image.LANCZOS)
     crop_x = (bg_w - target_w) // 2
     crop_y = (bg_h - target_h) // 2
     bg_cropped = bg_img.crop((crop_x, crop_y, crop_x + target_w, crop_y + target_h))
@@ -431,28 +435,84 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     frosted = ImageEnhance.Brightness(frosted).enhance(0.80)
     frosted = ImageEnhance.Color(frosted).enhance(0.75)
 
-    # ── Step 2: Define product rectangle (matching reference layout) ──
-    margin_x_pct = 0.10   # 10% each side left/right (~108px on 1080)
-    margin_y_pct = 0.12   # 12% each side top/bottom (~230px on 1920)
+    # ── Step 3: Define product rectangle ──
+    margin_x_pct = 0.10   # 10% each side left/right
+    margin_y_pct = 0.12   # 12% each side top/bottom
     rect_x = int(target_w * margin_x_pct)
     rect_y = int(target_h * margin_y_pct)
     rect_w = target_w - 2 * rect_x
     rect_h = target_h - 2 * rect_y
 
-    # ── Step 3: STRETCH raw image to fill rectangle 100% ──
-    # Direct resize — no trimming, no cropping, just fill
-    product = img_rgb.resize((rect_w, rect_h), Image.LANCZOS)
+    # ── Step 4: INSET by inner frame width ──
+    # Inner frame is 8px thick, drawn centered on bounds → 4px inside
+    # Inset product so frame draws OUTSIDE, never covers content
+    inset = 8  # = inner frame width, ensures frame is fully outside product
+    prod_x = rect_x + inset
+    prod_y = rect_y + inset
+    prod_w = rect_w - 2 * inset
+    prod_h = rect_h - 2 * inset
+
+    # ── Step 5: STRETCH trimmed image to fill inset area 100% ──
+    product = img_trimmed.resize((prod_w, prod_h), Image.LANCZOS)
 
     # Sharpen after resize
     product = product.filter(ImageFilter.UnsharpMask(radius=1.5, percent=80, threshold=2))
 
-    # ── Step 4: Paste product onto frosted background ──
+    # ── Step 6: Paste product onto frosted background ──
     canvas = frosted.copy()
-    canvas.paste(product, (rect_x, rect_y))
+    canvas.paste(product, (prod_x, prod_y))
 
-    # Product bounds = fixed rectangle (always full)
+    # Product bounds = outer rect (for inner frame drawing AROUND product)
     product_bounds = (rect_x, rect_y, rect_x + rect_w, rect_y + rect_h)
     return canvas, product_bounds
+
+
+def _safe_trim_white(img_rgb):
+    """Trim ONLY pure white/near-white padding from Shopee images.
+
+    Very conservative:
+    - Threshold 252 (only near-pure-white counts as 'border')
+    - Max 20% trim from any edge (safety guard)
+    - If image has no white padding, returns unchanged
+    """
+    arr = np.array(img_rgb)
+    oh, ow = arr.shape[:2]
+
+    # Only pixels where ALL channels >= 252 are considered 'white padding'
+    if len(arr.shape) == 3:
+        is_white = np.all(arr >= 252, axis=2)
+    else:
+        is_white = arr >= 252
+
+    has_content = ~is_white  # non-white = content
+
+    if not has_content.any():
+        return img_rgb  # All white — return as-is
+
+    rows = np.any(has_content, axis=1)
+    cols = np.any(has_content, axis=0)
+
+    if not rows.any() or not cols.any():
+        return img_rgb
+
+    rmin, rmax = np.where(rows)[0][[0, -1]]
+    cmin, cmax = np.where(cols)[0][[0, -1]]
+
+    # Safety: don't trim more than 20% from any edge
+    max_trim_y = int(oh * 0.20)
+    max_trim_x = int(ow * 0.20)
+    rmin = min(rmin, max_trim_y)
+    rmax = max(rmax, oh - 1 - max_trim_y)
+    cmin = min(cmin, max_trim_x)
+    cmax = max(cmax, ow - 1 - max_trim_x)
+
+    trimmed = img_rgb.crop((cmin, rmin, cmax + 1, rmax + 1))
+
+    tw, th = trimmed.size
+    if tw < ow * 0.5 or th < oh * 0.5:
+        return img_rgb  # Too aggressive — skip
+
+    return trimmed
 
 
 def _get_light_positions_rect(x1, y1, x2, y2, num_lights=28):
