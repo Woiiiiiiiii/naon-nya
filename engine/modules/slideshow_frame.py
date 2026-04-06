@@ -209,22 +209,24 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     draw.rectangle([(fx1, fy1), (fx2, fy2)],
                     outline=(*fc, 150), width=2)
 
-    # ── TWO FIRE BEAMS chasing each other (burning fuse / sumbu petasan) ──
+    # ── TWO FIRE BEAMS (burning fuse / sumbu petasan) ──
+    # Reference: kepala besar merah, badan kuning panjang, ekor tipis menghilang
     frame_w = fx2 - fx1
     frame_h = fy2 - fy1
     perimeter = 2 * frame_w + 2 * frame_h
 
-    speed = 0.25  # loops per second (moderate pace)
-    beam_length = perimeter * 0.33  # 1/3 of perimeter lit (panjang)
-    num_segments = 120  # smooth resolution
+    speed = 0.25          # loops per second
+    beam_length = perimeter * 0.45   # 45% of perimeter (panjang, sesuai referensi)
+    num_segments = 150    # ultra-smooth rendering
 
-    # Fire colors: head = RED (api), mid = YELLOW, tail = frame silver
+    # Colors: RED head → YELLOW body → SILVER tail (menyatu frame)
     fire_head = (255, 30, 10)      # bright red (kepala api)
-    fire_mid = (255, 200, 30)      # yellow (tengah)
-    fire_tail = fc                  # fades to frame silver (ekor menyatu)
+    fire_mid = (255, 200, 30)      # warm yellow (badan)
+    fire_tail = fc                  # frame silver (ekor menyatu)
 
-    # Outer frame line width (for reference — tail matches this)
-    frame_line_w = 2
+    # Size: head 20px → tail 2px (LINEAR gradient, smooth)
+    head_width = 20       # kepala besar/prominent (sesuai referensi)
+    tail_width = 2        # ekor = garis frame
 
     def _dist_to_xy(d):
         """Convert distance along perimeter to (x, y) coordinates."""
@@ -243,40 +245,43 @@ def render_frame(img_arr, t, category='home', pattern='chase',
         laser_pos = ((t * speed) + beam_offset) % 1.0
         head_dist = laser_pos * perimeter
 
-        # Draw burning fuse: connected line segments from head to tail
+        # Draw beam: connected segments from head (seg_frac=0) to tail (seg_frac=1)
         prev_pt = None
         for seg in range(num_segments):
-            seg_frac = seg / num_segments  # 0=head, 1=tail
+            seg_frac = seg / num_segments  # 0.0=head, 1.0=tail
             seg_dist = (head_dist - seg_frac * beam_length) % perimeter
             sx, sy = _dist_to_xy(seg_dist)
 
-            # Brightness fades: head=1.0, tail→0.0 (faster fade so tail disappears)
-            brightness = 1.0 - (seg_frac ** 0.45)
+            # ── Brightness: gentle fade head→tail (power 0.7 = visible body) ──
+            brightness = max(0.0, 1.0 - seg_frac ** 0.7)
             if brightness < 0.02:
                 prev_pt = None
                 continue
 
-            # Line width: head=14px (BIGGER than frame), tail=2px (= frame line)
-            # Kepala membakar garis frame, ekor kembali ke ukuran garis
-            line_w = max(frame_line_w, int(frame_line_w + 12 * brightness))
-            alpha = int(255 * brightness)
+            # ── Size: LINEAR gradient head→tail ──
+            # 20px at head → 2px at tail, smooth proportional shrink
+            line_w = max(tail_width, int(head_width - (head_width - tail_width) * seg_frac))
 
-            # Color gradient: RED (head) → YELLOW (mid) → SILVER (tail)
-            if seg_frac < 0.15:
-                # Head zone: bright RED (api menyala)
-                mix = seg_frac / 0.15
+            alpha = int(255 * min(1.0, brightness * 1.2))  # slightly boosted alpha
+
+            # ── Color: RED (0-10%) → YELLOW (10-40%) → SILVER (40-100%) ──
+            if seg_frac < 0.10:
+                # Head zone: bright RED → YELLOW
+                mix = seg_frac / 0.10
                 r = int(fire_head[0] * (1 - mix) + fire_mid[0] * mix)
                 g = int(fire_head[1] * (1 - mix) + fire_mid[1] * mix)
                 b_c = int(fire_head[2] * (1 - mix) + fire_mid[2] * mix)
-            elif seg_frac < 0.45:
-                # Mid zone: YELLOW → fading
-                mix = (seg_frac - 0.15) / 0.30
+            elif seg_frac < 0.40:
+                # Body zone: YELLOW → SILVER (gradual)
+                mix = (seg_frac - 0.10) / 0.30
                 r = int(fire_mid[0] * (1 - mix) + fire_tail[0] * mix)
                 g = int(fire_mid[1] * (1 - mix) + fire_tail[1] * mix)
                 b_c = int(fire_mid[2] * (1 - mix) + fire_tail[2] * mix)
             else:
-                # Tail zone: frame silver (api habis, menyatu dengan pigura)
+                # Tail zone: SILVER (menyatu dengan garis frame)
+                tail_fade = (seg_frac - 0.40) / 0.60  # 0→1 within tail
                 r, g, b_c = fire_tail[0], fire_tail[1], fire_tail[2]
+                alpha = int(alpha * max(0, 1.0 - tail_fade * 0.8))  # extra fade
 
             pt = (int(sx), int(sy))
             if prev_pt:
