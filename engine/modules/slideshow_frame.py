@@ -298,7 +298,7 @@ def render_frame(img_arr, t, category='home', pattern='chase',
         px1, py1, px2, py2 = product_bounds
         inner_fw = 8  # THICK frame wrapping product
         draw.rectangle([(px1, py1), (px2, py2)],
-                        outline=(*ic, 240), width=inner_fw)
+                        outline=(*fc, 240), width=inner_fw)
 
         # Bold corner accents (L-shapes at 4 corners)
         corner_size = 30
