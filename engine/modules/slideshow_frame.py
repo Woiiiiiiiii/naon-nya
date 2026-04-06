@@ -203,14 +203,7 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     fx1, fy1 = outer_margin, outer_margin
     fx2, fy2 = w - 1 - outer_margin, h - 1 - outer_margin
 
-    # Soft glow behind frame
-    glow_layer = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-    glow_draw = ImageDraw.Draw(glow_layer)
-    glow_draw.rectangle([(fx1 - 4, fy1 - 4), (fx2 + 4, fy2 + 4)],
-                         outline=gc, width=10)
-    glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=5))
-    overlay = Image.alpha_composite(overlay, glow_layer)
-    draw = ImageDraw.Draw(overlay)
+    # (No separate glow layer — only 2 fire beams, nothing else)
 
     # Solid continuous line (base frame — always visible, thin)
     draw.rectangle([(fx1, fy1), (fx2, fy2)],
@@ -221,7 +214,7 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     frame_h = fy2 - fy1
     perimeter = 2 * frame_w + 2 * frame_h
 
-    speed = 0.18  # loops per second (slow, like burning fuse)
+    speed = 0.25  # loops per second (moderate pace)
     beam_length = perimeter * 0.33  # 1/3 of perimeter lit (panjang)
     num_segments = 120  # smooth resolution
 
@@ -257,8 +250,8 @@ def render_frame(img_arr, t, category='home', pattern='chase',
             seg_dist = (head_dist - seg_frac * beam_length) % perimeter
             sx, sy = _dist_to_xy(seg_dist)
 
-            # Brightness fades: head=1.0, tail→0.0 (gradual)
-            brightness = 1.0 - (seg_frac ** 0.6)
+            # Brightness fades: head=1.0, tail→0.0 (faster fade so tail disappears)
+            brightness = 1.0 - (seg_frac ** 0.45)
             if brightness < 0.02:
                 prev_pt = None
                 continue
