@@ -536,9 +536,15 @@ def _save_used_music(used_set):
 
 def generate_all_music(queue_dir, output_dir):
     """Generate music for every video in the queue.
-    TIER SYSTEM: Library first → Restock on-demand (Freesound → YT → Synth).
-    Each track used ONCE per run — no duplicates across channels.
-    Global dedup via used_music.json — tracks not reused across runs."""
+
+    FLOW:
+      Phase 1: PRE-RESTOCK — ensure each category has MIN_STOCK tracks
+               via tier system (Freesound → YouTube → Synth)
+      Phase 2: ASSIGN — pick unique track per video per channel
+               with 3-layer dedup (per-channel, cross-channel, cross-run)
+
+    This ensures API-downloaded music (Freesound/YouTube) is ALWAYS preferred
+    over synth. Synth only happens when APIs completely fail."""
     _reset_used_tracks()
 
     globally_used = _load_used_music()
@@ -556,8 +562,9 @@ def generate_all_music(queue_dir, output_dir):
         'fb': os.path.join(queue_dir, 'fb_queue.jsonl'),
     }
 
-    # Show library status
+    # ── Phase 1: Discover needed categories from queue ──
     categories_seen = set()
+    total_jobs_per_cat = {}
     for platform, queue_file in platforms.items():
         if not os.path.exists(queue_file):
             continue
@@ -569,13 +576,68 @@ def generate_all_music(queue_dir, output_dir):
                     cat = get_category(acct_id)
                     mapped = CATEGORY_MUSIC_MAP.get(cat, cat)
                     categories_seen.add(mapped)
+                    total_jobs_per_cat[mapped] = total_jobs_per_cat.get(mapped, 0) + 1
 
+    # ── Phase 1b: PRE-RESTOCK each category BEFORE assigning ──
+    # This ensures API tracks (Freesound/YouTube) are downloaded FIRST
+    # so they're available during selection. Synth = last resort only.
+    print("  --- Phase 1: Pre-restock library ---")
+    if HAS_DOWNLOADER:
+        for cat in sorted(categories_seen):
+            files = _list_music_files(cat)
+            api_files = [f for f in files if '_synth_' not in os.path.basename(f)]
+            synth_files = [f for f in files if '_synth_' in os.path.basename(f)]
+            jobs_need = total_jobs_per_cat.get(cat, 0)
+            print(f"  [{cat}] {len(api_files)} API + {len(synth_files)} synth | need {jobs_need} unique tracks")
+
+            # If we don't have enough API tracks, try to download more
+            if len(api_files) < jobs_need:
+                need = jobs_need - len(api_files)
+                print(f"    Need {need} more API tracks, trying tiers...")
+
+                # Tier 1: Freesound
+                try:
+                    from music_downloader import fetch_freesound
+                    got = fetch_freesound(cat, count=need)
+                    if got > 0:
+                        print(f"    [TIER 1] Freesound: +{got} tracks")
+                        need -= got
+                except Exception as e:
+                    print(f"    [TIER 1] Freesound failed: {e}")
+
+                # Tier 2: YouTube Audio (only if still need more)
+                if need > 0:
+                    try:
+                        from music_downloader import fetch_youtube_audio_library
+                        got = fetch_youtube_audio_library(cat, count=need)
+                        if got > 0:
+                            print(f"    [TIER 2] YouTube: +{got} tracks")
+                            need -= got
+                    except Exception as e:
+                        print(f"    [TIER 2] YouTube failed: {e}")
+
+                # Tier 3: Synth (only if APIs completely failed)
+                if need > 0:
+                    print(f"    [TIER 3] Generating {need} synth tracks (API tiers failed)...")
+                    _ensure_category_has_music(cat, force=True)
+            else:
+                print(f"    Stock OK — {len(api_files)} API tracks available")
+    else:
+        for cat in sorted(categories_seen):
+            files = _list_music_files(cat)
+            print(f"  [{cat}] {len(files)} files (no downloader)")
+
+    # Show final library after restock
+    print("\n  --- Library after restock ---")
     for cat in sorted(categories_seen):
         files = _list_music_files(cat)
-        status = f"{len(files)} files" if files else "EMPTY (will restock via tiers)"
-        print(f"  [{cat}] {status}")
+        api_count = sum(1 for f in files if '_synth_' not in os.path.basename(f))
+        synth_count = sum(1 for f in files if '_synth_' in os.path.basename(f))
+        print(f"  [{cat}] {api_count} API + {synth_count} synth = {len(files)} total")
     print()
 
+    # ── Phase 2: Assign music to each video ──
+    print("  --- Phase 2: Assign unique tracks ---")
     total_lib = 0
     total_proc = 0
 
