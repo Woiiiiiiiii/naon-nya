@@ -289,36 +289,56 @@ def render_frame(img_arr, t, category='home', pattern='chase',
             prev_pt = pt
 
     # ════════════════════════════════════════════════════════════
-    #  PIGURA DALAM — wraps ON product image edges
+    #  PIGURA DALAM — inside the outer frame, with mirror gap
     # ════════════════════════════════════════════════════════════
 
     if product_bounds:
-        px1, py1, px2, py2 = product_bounds
+        # Inner frame sits INSIDE outer frame with visible gap
+        inner_margin = 50  # inner frame position from screen edge
+        ix1, iy1 = inner_margin, inner_margin
+        ix2, iy2 = w - 1 - inner_margin, h - 1 - inner_margin
+
+        # ── MIRROR REFLECTION: semi-transparent overlay in gap area ──
+        # Area between outer frame (12px) and inner frame (50px)
+        # Dark frosted overlay — product shows through but tinted
+        mirror_alpha = 35  # very transparent (product visible through)
+        # Top strip
+        draw.rectangle([(fx1, fy1), (fx2, iy1)],
+                        fill=(10, 10, 15, mirror_alpha))
+        # Bottom strip
+        draw.rectangle([(fx1, iy2), (fx2, fy2)],
+                        fill=(10, 10, 15, mirror_alpha))
+        # Left strip
+        draw.rectangle([(fx1, iy1), (ix1, iy2)],
+                        fill=(10, 10, 15, mirror_alpha))
+        # Right strip
+        draw.rectangle([(ix2, iy1), (fx2, iy2)],
+                        fill=(10, 10, 15, mirror_alpha))
 
         # WIDER inner frame line, MORE TRANSPARENT
-        inner_fw = 5  # wider line (was 2)
-        white_alpha = 60  # more transparent (was 100)
-        draw.rectangle([(px1, py1), (px2, py2)],
+        inner_fw = 5
+        white_alpha = 60
+        draw.rectangle([(ix1, iy1), (ix2, iy2)],
                         outline=(255, 255, 255, white_alpha), width=inner_fw)
 
         # Corner accents: proportional to line width (flexible)
-        corner_len = inner_fw * 18   # panjang sudut = 18x line width (90px)
-        corner_thick = inner_fw + 3  # tebal sudut = line + 3px (8px)
-        corner_alpha = 140  # transparent (was 220)
+        corner_len = inner_fw * 18   # 90px
+        corner_thick = inner_fw + 3  # 8px
+        corner_alpha = 140
         corner_color = (255, 255, 255, corner_alpha)
 
         # Top-left corner
-        draw.line([(px1, py1), (px1 + corner_len, py1)], fill=corner_color, width=corner_thick)
-        draw.line([(px1, py1), (px1, py1 + corner_len)], fill=corner_color, width=corner_thick)
+        draw.line([(ix1, iy1), (ix1 + corner_len, iy1)], fill=corner_color, width=corner_thick)
+        draw.line([(ix1, iy1), (ix1, iy1 + corner_len)], fill=corner_color, width=corner_thick)
         # Top-right corner
-        draw.line([(px2, py1), (px2 - corner_len, py1)], fill=corner_color, width=corner_thick)
-        draw.line([(px2, py1), (px2, py1 + corner_len)], fill=corner_color, width=corner_thick)
+        draw.line([(ix2, iy1), (ix2 - corner_len, iy1)], fill=corner_color, width=corner_thick)
+        draw.line([(ix2, iy1), (ix2, iy1 + corner_len)], fill=corner_color, width=corner_thick)
         # Bottom-left corner
-        draw.line([(px1, py2), (px1 + corner_len, py2)], fill=corner_color, width=corner_thick)
-        draw.line([(px1, py2), (px1, py2 - corner_len)], fill=corner_color, width=corner_thick)
+        draw.line([(ix1, iy2), (ix1 + corner_len, iy2)], fill=corner_color, width=corner_thick)
+        draw.line([(ix1, iy2), (ix1, iy2 - corner_len)], fill=corner_color, width=corner_thick)
         # Bottom-right corner
-        draw.line([(px2, py2), (px2 - corner_len, py2)], fill=corner_color, width=corner_thick)
-        draw.line([(px2, py2), (px2, py2 - corner_len)], fill=corner_color, width=corner_thick)
+        draw.line([(ix2, iy2), (ix2 - corner_len, iy2)], fill=corner_color, width=corner_thick)
+        draw.line([(ix2, iy2), (ix2, iy2 - corner_len)], fill=corner_color, width=corner_thick)
 
     # Composite
     result = Image.alpha_composite(img_pil, overlay)
