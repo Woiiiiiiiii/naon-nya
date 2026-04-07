@@ -160,27 +160,41 @@ def _select_music_from_library(category, produk_id, account_id, platform='tt'):
     available_api = [f for f in api_files if _is_available(f)]
     available_synth = [f for f in synth_files if _is_available(f)]
 
-    # If ALL tracks exhausted, try relaxing global dedup (allow reuse from old runs)
+    # If ALL tracks exhausted by cross-run dedup, generate a FRESH track
+    # This guarantees each run uses DIFFERENT music (no reuse across runs)
     if not available_api and not available_synth:
-        print(f"      [DEDUP] All tracks used globally, relaxing cross-run dedup...")
+        print(f"      [DEDUP] All {len(files)} tracks used in previous runs, generating FRESH track...")
+        folder = _get_music_folder(category)
+        existing = len(_list_music_files(category))
+        import datetime as _dt
+        fresh_id = int(_dt.datetime.now().timestamp() * 1000) % 100000
+        synth_path = os.path.join(folder, f"{category}_synth_{existing+1:02d}_{fresh_id}.wav")
+        try:
+            from music_downloader import generate_procedural_track as _fast_synth
+            _fast_synth(synth_path, category, seed_val=fresh_id, duration=random.randint(25, 45))
+        except ImportError:
+            _generate_procedural_track(
+                synth_path, f"fresh_{fresh_id}", f"lib_{category}",
+                category=category, duration=random.randint(25, 45)
+            )
+        if os.path.exists(synth_path):
+            available_synth = [synth_path]
+            print(f"      [DEDUP] Fresh track: {os.path.basename(synth_path)}")
+
+    # If STILL exhausted (fresh gen failed), try relaxing cross-run dedup
+    if not available_api and not available_synth:
+        print(f"      [DEDUP] Fresh gen failed, relaxing cross-run dedup...")
         available_api = [f for f in api_files if os.path.abspath(f) not in all_session_used]
         available_synth = [f for f in synth_files if os.path.abspath(f) not in all_session_used]
 
-    # If STILL exhausted, restock 1 new track
+    # If STILL exhausted, last resort: reset session dedup
     if not available_api and not available_synth:
-        print(f"      [WARN] All {len(files)} tracks used in session, restocking 1 new...")
-        _ensure_category_has_music(category, force=True)
-        files = _list_music_files(category)
-        available_api = [f for f in files if '_synth_' not in os.path.basename(f) and _is_available(f)]
-        available_synth = [f for f in files if '_synth_' in os.path.basename(f) and _is_available(f)]
-        if not available_api and not available_synth:
-            # Last resort: reset session dedup and reuse
-            print(f"      [WARN] Restock failed, resetting session dedup pool")
-            _used_tracks.clear()
-            _used_tracks[platform] = set()
-            all_session_used = set()
-            available_api = [f for f in files if '_synth_' not in os.path.basename(f)]
-            available_synth = [f for f in files if '_synth_' in os.path.basename(f)]
+        print(f"      [WARN] All exhausted, resetting session dedup pool")
+        _used_tracks.clear()
+        _used_tracks[platform] = set()
+        all_session_used = set()
+        available_api = [f for f in api_files]
+        available_synth = [f for f in synth_files]
 
     if available_api:
         rng.shuffle(available_api)
