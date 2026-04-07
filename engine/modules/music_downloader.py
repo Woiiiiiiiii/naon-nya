@@ -300,6 +300,7 @@ def fetch_youtube_audio_library(category, count=3):
                 '--audio-quality', '5',
                 '--match-filter', 'duration >= 20 & duration <= 600',
                 '--max-downloads', '1',
+                '--js-runtimes', 'nodejs',  # Required since yt-dlp 2025+
                 '-o', filepath.replace('.mp3', '.%(ext)s'),
                 '--no-overwrites',
                 search_query,
