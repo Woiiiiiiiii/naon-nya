@@ -295,16 +295,17 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     if product_bounds:
         px1, py1, px2, py2 = product_bounds
 
-        # Thin WHITE TRANSPARENT frame line (subtle, elegant)
-        inner_fw = 2  # thin line
-        white_alpha = 100  # semi-transparent white
+        # WIDER inner frame line, MORE TRANSPARENT
+        inner_fw = 5  # wider line (was 2)
+        white_alpha = 60  # more transparent (was 100)
         draw.rectangle([(px1, py1), (px2, py2)],
                         outline=(255, 255, 255, white_alpha), width=inner_fw)
 
-        # THICK WHITE SOLID corner accents (L-shapes, longer than frame line)
-        corner_len = 60   # panjang sudut (lebih panjang dari sebelumnya)
-        corner_thick = 4  # tebal sudut (lebih tebal dari garis frame)
-        corner_color = (255, 255, 255, 220)  # white, nearly opaque
+        # Corner accents: proportional to line width (flexible)
+        corner_len = inner_fw * 18   # panjang sudut = 18x line width (90px)
+        corner_thick = inner_fw + 3  # tebal sudut = line + 3px (8px)
+        corner_alpha = 140  # transparent (was 220)
+        corner_color = (255, 255, 255, corner_alpha)
 
         # Top-left corner
         draw.line([(px1, py1), (px1 + corner_len, py1)], fill=corner_color, width=corner_thick)
