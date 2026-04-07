@@ -411,59 +411,31 @@ def _auto_trim_whitespace(img_rgb):
 
 
 def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
-    """Place product image — auto-trim + STRETCH to fill rectangle EXACTLY.
+    """Place product image — STRETCH to fill ENTIRE frame. ZERO gaps.
 
-    DEFINITIVE approach (ZERO gaps guaranteed):
-      1. Auto-trim white padding from Shopee images (threshold 252, max 20%)
-      2. Frosted mirror background
-      3. Define product rectangle (10% x-margin, 12% y-margin)
-      4. STRETCH product to EXACT rectangle size — fills 100%
-      5. Frame draws ON TOP as overlay (never creates gaps)
-         → Product fills every pixel of the rectangle
-         → Frame overlaps product edges by a few pixels (like real picture frame)
-         → IMPOSSIBLE to have gaps between product and frame
+    Simple approach:
+      1. Auto-trim white padding from Shopee images
+      2. STRETCH product to fill 100% of target area
+      3. Frame draws ON TOP as overlay (overlaps product edges)
+      → Product fills every single pixel
+      → ZERO space, ZERO gaps, ZERO cropping
     """
-    from PIL import ImageEnhance
-    w, h = img_pil.size
     img_rgb = img_pil.convert('RGB')
 
     # ── Step 1: Auto-trim ONLY pure white padding (very safe) ──
     img_trimmed = _safe_trim_white(img_rgb)
 
-    # ── Step 2: Full-screen frosted mirror background ──
-    tw, th = img_trimmed.size
-    bg_scale = max(target_w / tw, target_h / th) * 1.3
-    bg_w = int(tw * bg_scale)
-    bg_h = int(th * bg_scale)
-    bg_img = img_trimmed.resize((bg_w, bg_h), Image.LANCZOS)
-    crop_x = (bg_w - target_w) // 2
-    crop_y = (bg_h - target_h) // 2
-    bg_cropped = bg_img.crop((crop_x, crop_y, crop_x + target_w, crop_y + target_h))
-    frosted = bg_cropped.filter(ImageFilter.GaussianBlur(radius=18))
-    frosted = ImageEnhance.Brightness(frosted).enhance(0.80)
-    frosted = ImageEnhance.Color(frosted).enhance(0.75)
-
-    # ── Step 3: Define product rectangle ──
-    margin_x_pct = 0.10   # 10% each side left/right
-    margin_y_pct = 0.12   # 12% each side top/bottom
-    rect_x = int(target_w * margin_x_pct)
-    rect_y = int(target_h * margin_y_pct)
-    rect_w = target_w - 2 * rect_x
-    rect_h = target_h - 2 * rect_y
-
-    # ── Step 4: STRETCH to EXACT rectangle — NO inset, ZERO gaps ──
-    # Product fills every single pixel of the rectangle
-    product = img_trimmed.resize((rect_w, rect_h), Image.LANCZOS)
+    # ── Step 2: STRETCH to fill ENTIRE target — 100%, no margin ──
+    product = img_trimmed.resize((target_w, target_h), Image.LANCZOS)
 
     # Sharpen after resize
     product = product.filter(ImageFilter.UnsharpMask(radius=1.5, percent=80, threshold=2))
 
-    # ── Step 5: Paste product at EXACT rect position ──
-    canvas = frosted.copy()
-    canvas.paste(product, (rect_x, rect_y))
+    # Canvas = product itself (fills everything)
+    canvas = product.copy()
 
-    # Product bounds = exact rectangle (frame draws ON TOP as overlay)
-    product_bounds = (rect_x, rect_y, rect_x + rect_w, rect_y + rect_h)
+    # Product bounds = the FULL canvas (frame draws ON TOP as overlay)
+    product_bounds = (0, 0, target_w, target_h)
     return canvas, product_bounds
 
 
