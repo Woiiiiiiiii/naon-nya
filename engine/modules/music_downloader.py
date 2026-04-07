@@ -111,7 +111,8 @@ def fetch_freesound(category, count=3):
     """Fetch music from Freesound API (Tier 1 -- best for automated download)."""
     api_key = os.environ.get('FREESOUND_API_KEY', '')
     if not api_key:
-        print(f"    [SKIP] FREESOUND_API_KEY not set")
+        print(f"    [SKIP] FREESOUND_API_KEY not set in environment")
+        print(f"    [HINT] Set FREESOUND_API_KEY env var or GitHub secret")
         return 0
 
     d = get_music_dir(category)
@@ -241,19 +242,19 @@ YT_AUDIO_QUERIES = {
 
 
 def fetch_youtube_audio_library(category, count=3):
-    """Fetch royalty-free music from YouTube via yt-dlp (Tier 3).
+    """Fetch royalty-free music from YouTube via yt-dlp (Tier 2).
     Downloads audio-only from YouTube search results matching royalty-free queries.
     Requires: pip install yt-dlp"""
     try:
         import subprocess
-        # Check if yt-dlp is available
-        check = subprocess.run(['yt-dlp', '--version'], capture_output=True, text=True, timeout=10)
-        if check.returncode != 0:
-            print(f"    [SKIP] yt-dlp not installed")
+        # Quick availability check — use python import, NOT subprocess
+        # (yt-dlp --version hangs on Windows and some CI environments)
+        try:
+            import yt_dlp
+            print(f"    [YT] yt-dlp available (python module)")
+        except ImportError:
+            print(f"    [SKIP] yt-dlp not installed (pip install yt-dlp)")
             return 0
-    except FileNotFoundError:
-        print(f"    [SKIP] yt-dlp not found in PATH")
-        return 0
     except Exception:
         print(f"    [SKIP] yt-dlp check failed")
         return 0
@@ -295,12 +296,12 @@ def fetch_youtube_audio_library(category, count=3):
             cmd = [
                 'yt-dlp',
                 '--no-playlist',
+                '--no-update',
                 '--extract-audio',
                 '--audio-format', 'mp3',
                 '--audio-quality', '5',
                 '--match-filter', 'duration >= 20 & duration <= 600',
                 '--max-downloads', '1',
-                '--js-runtimes', 'nodejs',  # Required since yt-dlp 2025+
                 '-o', filepath.replace('.mp3', '.%(ext)s'),
                 '--no-overwrites',
                 search_query,
