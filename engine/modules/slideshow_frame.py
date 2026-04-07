@@ -225,7 +225,7 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     fire_tail = fc                  # frame silver (ekor menyatu)
 
     # Size: head 20px → tail 2px (LINEAR gradient, smooth)
-    head_width = 20       # kepala besar/prominent (sesuai referensi)
+    head_width = 28       # kepala besar (body gradasi dari sini ke tail)
     tail_width = 2        # ekor = garis frame
 
     def _dist_to_xy(d):
@@ -240,48 +240,56 @@ def render_frame(img_arr, t, category='home', pattern='chase',
         else:
             return fx1, fy2 - (d - 2 * frame_w - frame_h)
 
-    # Two beams: 180° apart (half perimeter offset)
+    # Two beams: 180 degrees apart (half perimeter offset)
     for beam_offset in [0.0, 0.5]:
         laser_pos = ((t * speed) + beam_offset) % 1.0
         head_dist = laser_pos * perimeter
 
-        # Draw beam: connected segments from head (seg_frac=0) to tail (seg_frac=1)
+        # ── DRAW HEAD: large bright RED circle ──
+        hx, hy = _dist_to_xy(head_dist)
+        head_r = 12  # radius of head circle (24px diameter)
+        draw.ellipse([(int(hx) - head_r, int(hy) - head_r),
+                       (int(hx) + head_r, int(hy) + head_r)],
+                      fill=(255, 30, 10, 255))  # bright red, full opacity
+        # Glow around head
+        glow_r = head_r + 6
+        draw.ellipse([(int(hx) - glow_r, int(hy) - glow_r),
+                       (int(hx) + glow_r, int(hy) + glow_r)],
+                      fill=(255, 60, 20, 80))  # soft red glow
+
+        # ── DRAW BODY + TAIL: gradient line segments ──
         prev_pt = None
         for seg in range(num_segments):
             seg_frac = seg / num_segments  # 0.0=head, 1.0=tail
             seg_dist = (head_dist - seg_frac * beam_length) % perimeter
             sx, sy = _dist_to_xy(seg_dist)
 
-            # ── Brightness: gentle fade head→tail (power 0.7 = visible body) ──
+            # Brightness: gentle fade head->tail
             brightness = max(0.0, 1.0 - seg_frac ** 0.7)
             if brightness < 0.02:
                 prev_pt = None
                 continue
 
-            # ── Size: LINEAR gradient head→tail ──
-            # 20px at head → 2px at tail, smooth proportional shrink
+            # Size: LINEAR gradient head->tail (28px -> 2px)
             line_w = max(tail_width, int(head_width - (head_width - tail_width) * seg_frac))
 
-            alpha = int(255 * min(1.0, brightness * 1.2))  # slightly boosted alpha
+            alpha = int(255 * min(1.0, brightness * 1.2))
 
-            # ── Color: RED (0-10%) → YELLOW (10-40%) → SILVER (40-100%) ──
+            # Color: RED (0-10%) -> YELLOW (10-40%) -> SILVER (40-100%)
             if seg_frac < 0.10:
-                # Head zone: bright RED → YELLOW
                 mix = seg_frac / 0.10
                 r = int(fire_head[0] * (1 - mix) + fire_mid[0] * mix)
                 g = int(fire_head[1] * (1 - mix) + fire_mid[1] * mix)
                 b_c = int(fire_head[2] * (1 - mix) + fire_mid[2] * mix)
             elif seg_frac < 0.40:
-                # Body zone: YELLOW → SILVER (gradual)
                 mix = (seg_frac - 0.10) / 0.30
                 r = int(fire_mid[0] * (1 - mix) + fire_tail[0] * mix)
                 g = int(fire_mid[1] * (1 - mix) + fire_tail[1] * mix)
                 b_c = int(fire_mid[2] * (1 - mix) + fire_tail[2] * mix)
             else:
-                # Tail zone: SILVER (menyatu dengan garis frame)
-                tail_fade = (seg_frac - 0.40) / 0.60  # 0→1 within tail
+                tail_fade = (seg_frac - 0.40) / 0.60
                 r, g, b_c = fire_tail[0], fire_tail[1], fire_tail[2]
-                alpha = int(alpha * max(0, 1.0 - tail_fade * 0.8))  # extra fade
+                alpha = int(alpha * max(0, 1.0 - tail_fade * 0.8))
 
             pt = (int(sx), int(sy))
             if prev_pt:
