@@ -183,52 +183,36 @@ def get_ffmpeg_audio_params():
     }
 
 
+# Session-level dedup: track ALL music picks within this pipeline run
+# Prevents same music being used by different videos in same run
+_session_music_picks = set()
+
+
 def find_music_file(platform_dir, produk_id, acct_id, category='home'):
-    """Find music file with multi-tier fallback.
-    
+    """Find music file with multi-tier fallback + SESSION DEDUP.
+
     Tiers:
-      1. Exact match: MUSIC_{produk_id}_{acct_id}.mp3
-      2. Same product: any MUSIC_{produk_id}_*.mp3
-      3. Same platform: any MUSIC_*.mp3 in platform dir
-      4. Category library: random track from assets/music/{category}/
-    
+      1. Exact match: MUSIC_{produk_id}_{acct_id}.mp3 (pre-assigned)
+      2. Same product: any MUSIC_{produk_id}_*.mp3 (session deduped)
+      3. Same platform: any MUSIC_*.mp3 in platform dir (session + cross-run deduped)
+      4. Category library: track from assets/music/{category}/ (prefer API over synth)
+
+    SESSION DEDUP: Every pick is tracked per-run. No music reuse within a single run.
+    CROSS-RUN DEDUP: used_music.json tracks historical usage.
+
     Returns: (path, tier) or (None, 0) if nothing found.
     """
     import glob
     import random
+    global _session_music_picks
 
-    # Tier 1: Exact match
+    # Tier 1: Exact match (pre-assigned by generate_music.py Phase 2)
     exact = os.path.join(platform_dir, f"MUSIC_{produk_id}_{acct_id}.mp3")
     if os.path.exists(exact):
+        _session_music_picks.add(os.path.abspath(exact))
         return exact, 1
 
-    # Tier 2: Same product, different account
-    pattern2 = os.path.join(platform_dir, f"MUSIC_{produk_id}_*.mp3")
-    matches2 = glob.glob(pattern2)
-    if matches2:
-        pick = random.choice(matches2)
-        print(f"    [MUSIC T2] {acct_id}: using {os.path.basename(pick)} (same product)")
-        return pick, 2
-
-    # Tier 3: Any music in this platform dir
-    pattern3 = os.path.join(platform_dir, "MUSIC_*.mp3")
-    matches3 = glob.glob(pattern3)
-    if matches3:
-        pick = random.choice(matches3)
-        print(f"    [MUSIC T3] {acct_id}: using {os.path.basename(pick)} (same platform)")
-        return pick, 3
-
-    # Tier 4: Category music library (raw source files)
-    music_lib = os.path.join(os.path.dirname(__file__), '..', 'assets', 'music')
-    # Map category to ACTUAL music library folder names
-    cat_map = {
-        'fashion': 'fashion', 'gadget': 'gadget', 'beauty': 'beauty',
-        'home': 'home', 'wellness': 'wellness', 'food': 'home',
-        'elektronik': 'gadget', 'kosmetik': 'beauty',
-        'alat_rumah_tangga': 'home', 'kesehatan': 'wellness',
-    }
-
-    # Load global used music to avoid reuse
+    # Load global used music to avoid cross-run reuse
     used_music_file = os.path.join(os.path.dirname(__file__), '..', 'state', 'used_music.json')
     used_set = set()
     if os.path.exists(used_music_file):
@@ -239,30 +223,79 @@ def find_music_file(platform_dir, produk_id, acct_id, category='home'):
         except Exception:
             pass
 
+    # Tier 2: Same product, different account (session deduped)
+    pattern2 = os.path.join(platform_dir, f"MUSIC_{produk_id}_*.mp3")
+    matches2 = glob.glob(pattern2)
+    available2 = [m for m in matches2 if os.path.abspath(m) not in _session_music_picks]
+    if available2:
+        pick = random.choice(available2)
+        _session_music_picks.add(os.path.abspath(pick))
+        print(f"    [MUSIC T2] {acct_id}: using {os.path.basename(pick)} (same product)")
+        return pick, 2
+
+    # Tier 3: Any music in platform dir (session + cross-run deduped)
+    pattern3 = os.path.join(platform_dir, "MUSIC_*.mp3")
+    matches3 = glob.glob(pattern3)
+    available3 = [m for m in matches3
+                  if os.path.abspath(m) not in _session_music_picks
+                  and os.path.basename(m) not in used_set]
+    if not available3:
+        available3 = [m for m in matches3 if os.path.abspath(m) not in _session_music_picks]
+    if available3:
+        pick = random.choice(available3)
+        _session_music_picks.add(os.path.abspath(pick))
+        print(f"    [MUSIC T3] {acct_id}: using {os.path.basename(pick)} (same platform, deduped)")
+        return pick, 3
+
+    # Tier 4: Category music library (prefer API over synth)
+    music_lib = os.path.join(os.path.dirname(__file__), '..', 'assets', 'music')
+    cat_map = {
+        'fashion': 'fashion', 'gadget': 'gadget', 'beauty': 'beauty',
+        'home': 'home', 'wellness': 'wellness', 'food': 'home',
+        'elektronik': 'gadget', 'kosmetik': 'beauty',
+        'alat_rumah_tangga': 'home', 'kesehatan': 'wellness',
+    }
+
     mapped = cat_map.get(category, category)
+
+    def _pick_from_dir(d, label):
+        """Pick track from dir: prefer API, dedup session + cross-run."""
+        if not os.path.isdir(d):
+            return None
+        all_tracks = [f for f in os.listdir(d)
+                      if f.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a'))]
+        if not all_tracks:
+            return None
+
+        # Split API vs synth (PREFER API-downloaded tracks)
+        api_tracks = [f for f in all_tracks if '_synth_' not in f]
+        synth_tracks = [f for f in all_tracks if '_synth_' in f]
+
+        for pool, pool_name in [(api_tracks, 'API'), (synth_tracks, 'Synth')]:
+            available = [f for f in pool
+                         if os.path.abspath(os.path.join(d, f)) not in _session_music_picks
+                         and f not in used_set]
+            if not available:
+                available = [f for f in pool
+                             if os.path.abspath(os.path.join(d, f)) not in _session_music_picks]
+            if available:
+                pick_name = random.choice(available)
+                pick_path = os.path.join(d, pick_name)
+                _session_music_picks.add(os.path.abspath(pick_path))
+                print(f"    [MUSIC T4-{label}] {acct_id}: {pool_name} {pick_name}")
+                return pick_path
+        return None
+
     lib_dir = os.path.join(music_lib, mapped)
-    if os.path.isdir(lib_dir):
-        tracks = [f for f in os.listdir(lib_dir)
-                   if f.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a'))]
-        # Prefer unused tracks
-        unused = [f for f in tracks if f not in used_set]
-        pick_pool = unused if unused else tracks
-        if pick_pool:
-            pick = os.path.join(lib_dir, random.choice(pick_pool))
-            print(f"    [MUSIC T4] {acct_id}: using library {os.path.basename(pick)}")
-            return pick, 4
+    result = _pick_from_dir(lib_dir, mapped)
+    if result:
+        return result, 4
 
-    # Also check general music folder
     gen_dir = os.path.join(music_lib, 'general')
-    if os.path.isdir(gen_dir):
-        tracks = [f for f in os.listdir(gen_dir)
-                   if f.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a'))]
-        unused = [f for f in tracks if f not in used_set]
-        pick_pool = unused if unused else tracks
-        if pick_pool:
-            pick = os.path.join(gen_dir, random.choice(pick_pool))
-            print(f"    [MUSIC T4-gen] {acct_id}: using general {os.path.basename(pick)}")
-            return pick, 4
+    result = _pick_from_dir(gen_dir, 'general')
+    if result:
+        return result, 4
 
-    print(f"    [MUSIC WARNING] No music found for {produk_id}/{acct_id} — video will have no BGM!")
+    print(f"    [MUSIC WARNING] No music found for {produk_id}/{acct_id} -- video will have no BGM!")
     return None, 0
+
