@@ -94,12 +94,15 @@ jobs:
               f.write(f"slot={slot}\n")
 
       # Cache musik agar tidak download ulang tiap run
+      # Key includes date so cache updates daily with fresh downloads
       - name: Restore music cache
         uses: actions/cache@v4
         with:
           path: engine/assets/music
-          key: music-library-v2
-          restore-keys: music-library-
+          key: music-library-v3-${{ github.run_number }}
+          restore-keys: |
+            music-library-v3-
+            music-library-
 
       # Product bank comes from git checkout — NO cache needed
       # Collector commits bank to repo, engine just reads it
@@ -126,7 +129,7 @@ jobs:
           restore-keys: cf-backgrounds-
 
       # Remove corrupt music files (images/HTML saved as .mp3/.ogg)
-      - name: Clean corrupt & synth music files
+      - name: Clean corrupt music files
         run: |
           echo "=== Cleaning corrupt music files ==="
           CORRUPT=0
@@ -139,25 +142,18 @@ jobs:
             fi
           done
           echo "Deleted $CORRUPT corrupt files"
+          # Also remove tiny files (<5KB = likely corrupt wav)
+          for f in $(find engine/assets/music/ -name "*.wav" -size -5k 2>/dev/null); do
+            echo "  [TINY] $f → DELETED"
+            rm -f "$f"
+          done
+          # Show library status
           for cat in fashion gadget beauty home wellness; do
-            API_COUNT=$(find "engine/assets/music/$cat" -name "*.mp3" -o -name "*.ogg" 2>/dev/null | grep -v "_synth_" | wc -l)
-            if [ "$API_COUNT" -gt 0 ]; then
-              echo "  $cat: has $API_COUNT API tracks, removing old synth..."
-              find "engine/assets/music/$cat" -name "*_synth_*" -delete 2>/dev/null || true
-            else
-              echo "  $cat: no API tracks, KEEPING synth as fallback"
-            fi
+            API=$(find "engine/assets/music/$cat" -name "*.mp3" -o -name "*.ogg" 2>/dev/null | grep -v "_synth_" | wc -l)
+            SYNTH=$(find "engine/assets/music/$cat" -name "*_synth_*" 2>/dev/null | wc -l)
+            echo "  $cat: ${API} API + ${SYNTH} synth"
           done
           echo "Music cleanup done."
-
-      # Cache music library so API downloads persist between runs
-      - name: Cache music library
-        uses: actions/cache@v4
-        with:
-          path: engine/assets/music
-          key: music-library-v2
-          restore-keys: |
-            music-library-
 
       # ── Auto Cookie Refresh (PRIMARY METHOD) ─────────────────────
       - name: Auto-refresh Affiliate Cookies
