@@ -160,39 +160,77 @@ def _select_music_from_library(category, produk_id, account_id, platform='tt'):
     available_api = [f for f in api_files if _is_available(f)]
     available_synth = [f for f in synth_files if _is_available(f)]
 
-    # If ALL tracks exhausted by cross-run dedup, generate a FRESH track
-    # This guarantees each run uses DIFFERENT music (no reuse across runs)
+    # If ALL tracks exhausted by cross-run dedup, download FRESH via tier system
+    # Tier 1 (Freesound) → Tier 2 (YouTube) → Tier 3 (Synth)
     if not available_api and not available_synth:
-        print(f"      [DEDUP] All {len(files)} tracks used in previous runs, generating FRESH track...")
+        print(f"      [DEDUP] All {len(files)} tracks used in previous runs, fetching FRESH...")
         folder = _get_music_folder(category)
-        existing = len(_list_music_files(category))
+        fresh_got = False
         import datetime as _dt
         fresh_id = int(_dt.datetime.now().timestamp() * 1000) % 100000
-        synth_path = os.path.join(folder, f"{category}_synth_{existing+1:02d}_{fresh_id}.wav")
-        try:
-            from music_downloader import generate_procedural_track as _fast_synth
-            _fast_synth(synth_path, category, seed_val=fresh_id, duration=random.randint(25, 45))
-        except ImportError:
-            _generate_procedural_track(
-                synth_path, f"fresh_{fresh_id}", f"lib_{category}",
-                category=category, duration=random.randint(25, 45)
-            )
-        if os.path.exists(synth_path):
-            available_synth = [synth_path]
-            print(f"      [DEDUP] Fresh track: {os.path.basename(synth_path)}")
 
-    # If STILL exhausted (fresh gen failed), try relaxing cross-run dedup
+        # ── TIER 1: Freesound API ──
+        if not fresh_got:
+            try:
+                from music_downloader import fetch_freesound
+                got = fetch_freesound(category, count=1)
+                if got > 0:
+                    # Re-scan: new API file should now be available
+                    new_files = _list_music_files(category)
+                    new_api = [f for f in new_files if '_synth_' not in os.path.basename(f)
+                               and os.path.abspath(f) not in all_session_used
+                               and os.path.basename(f) not in _globally_used]
+                    if new_api:
+                        available_api = new_api
+                        fresh_got = True
+                        print(f"      [DEDUP] Fresh from Freesound: {os.path.basename(new_api[0])}")
+            except Exception as e:
+                print(f"      [DEDUP] Freesound failed: {e}")
+
+        # ── TIER 2: YouTube Audio ──
+        if not fresh_got:
+            try:
+                from music_downloader import fetch_youtube_audio_library
+                got = fetch_youtube_audio_library(category, count=1)
+                if got > 0:
+                    new_files = _list_music_files(category)
+                    new_api = [f for f in new_files if '_synth_' not in os.path.basename(f)
+                               and os.path.abspath(f) not in all_session_used
+                               and os.path.basename(f) not in _globally_used]
+                    if new_api:
+                        available_api = new_api
+                        fresh_got = True
+                        print(f"      [DEDUP] Fresh from YouTube: {os.path.basename(new_api[0])}")
+            except Exception as e:
+                print(f"      [DEDUP] YouTube failed: {e}")
+
+        # ── TIER 3: Synth (last resort) ──
+        if not fresh_got:
+            existing = len(_list_music_files(category))
+            synth_path = os.path.join(folder, f"{category}_synth_{existing+1:02d}_{fresh_id}.wav")
+            try:
+                from music_downloader import generate_procedural_track as _fast_synth
+                _fast_synth(synth_path, category, seed_val=fresh_id, duration=random.randint(25, 45))
+            except ImportError:
+                _generate_procedural_track(
+                    synth_path, f"fresh_{fresh_id}", f"lib_{category}",
+                    category=category, duration=random.randint(25, 45)
+                )
+            if os.path.exists(synth_path):
+                available_synth = [synth_path]
+                print(f"      [DEDUP] Fresh synth: {os.path.basename(synth_path)}")
+
+    # If STILL exhausted (all tiers failed), relax cross-run dedup
     if not available_api and not available_synth:
-        print(f"      [DEDUP] Fresh gen failed, relaxing cross-run dedup...")
+        print(f"      [DEDUP] All tiers failed, relaxing cross-run dedup...")
         available_api = [f for f in api_files if os.path.abspath(f) not in all_session_used]
         available_synth = [f for f in synth_files if os.path.abspath(f) not in all_session_used]
 
-    # If STILL exhausted, last resort: reset session dedup
+    # Last resort: reset session dedup
     if not available_api and not available_synth:
         print(f"      [WARN] All exhausted, resetting session dedup pool")
         _used_tracks.clear()
         _used_tracks[platform] = set()
-        all_session_used = set()
         available_api = [f for f in api_files]
         available_synth = [f for f in synth_files]
 
