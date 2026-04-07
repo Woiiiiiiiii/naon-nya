@@ -787,6 +787,8 @@ def generate_all_music(queue_dir, output_dir):
                 info = _generate_procedural_track(
                     music_file, produk_id, acct_id, category, duration=target_dur
                 )
+                # MARK as used so it won't be reused in future runs
+                globally_used.add(os.path.basename(music_file))
                 print(f"    [SYNTH-NEW] {os.path.basename(music_file)} | {info} ({target_dur}s)")
                 total_proc += 1
 
