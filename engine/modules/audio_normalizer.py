@@ -259,7 +259,7 @@ def find_music_file(platform_dir, produk_id, acct_id, category='home'):
     mapped = cat_map.get(category, category)
 
     def _pick_from_dir(d, label):
-        """Pick track from dir: prefer API, dedup session + cross-run."""
+        """Pick track from dir: STRICT tier priority Freesound > YouTube > Synth."""
         if not os.path.isdir(d):
             return None
         all_tracks = [f for f in os.listdir(d)
@@ -267,11 +267,15 @@ def find_music_file(platform_dir, produk_id, acct_id, category='home'):
         if not all_tracks:
             return None
 
-        # Split API vs synth (PREFER API-downloaded tracks)
-        api_tracks = [f for f in all_tracks if '_synth_' not in f]
+        # STRICT TIER: Freesound (_fs_) > YouTube (_yt_) > other API > Synth
+        fs_tracks = [f for f in all_tracks if '_fs_' in f]
+        yt_tracks = [f for f in all_tracks if '_yt_' in f]
+        other_api = [f for f in all_tracks if '_synth_' not in f
+                     and '_fs_' not in f and '_yt_' not in f]
         synth_tracks = [f for f in all_tracks if '_synth_' in f]
 
-        for pool, pool_name in [(api_tracks, 'API'), (synth_tracks, 'Synth')]:
+        for pool, pool_name in [(fs_tracks, 'Freesound'), (yt_tracks, 'YouTube'),
+                                (other_api, 'API'), (synth_tracks, 'Synth')]:
             available = [f for f in pool
                          if os.path.abspath(os.path.join(d, f)) not in _session_music_picks
                          and f not in used_set]
@@ -282,7 +286,7 @@ def find_music_file(platform_dir, produk_id, acct_id, category='home'):
                 pick_name = random.choice(available)
                 pick_path = os.path.join(d, pick_name)
                 _session_music_picks.add(os.path.abspath(pick_path))
-                print(f"    [MUSIC T4-{label}] {acct_id}: {pool_name} {pick_name}")
+                print(f"    [MUSIC T4-{label}] {acct_id}: [T{pool_name}] {pick_name}")
                 return pick_path
         return None
 

@@ -136,9 +136,15 @@ def _select_music_from_library(category, produk_id, account_id, platform='tt'):
     if not files:
         return None
 
-    # PREFER API-downloaded tracks over synth
-    api_files = [f for f in files if '_synth_' not in os.path.basename(f)]
-    synth_files = [f for f in files if '_synth_' in os.path.basename(f)]
+    # STRICT TIER PRIORITY: Freesound (_fs_) > YouTube (_yt_) > other API > Synth
+    fs_files = [f for f in files if '_fs_' in os.path.basename(f)]      # Tier 1: Freesound
+    yt_files = [f for f in files if '_yt_' in os.path.basename(f)]      # Tier 2: YouTube
+    other_api = [f for f in files if '_synth_' not in os.path.basename(f)
+                 and '_fs_' not in os.path.basename(f)
+                 and '_yt_' not in os.path.basename(f)]                  # Other API
+    synth_files = [f for f in files if '_synth_' in os.path.basename(f)] # Tier 3: Synth
+    # Combined API for dedup exhaustion checks
+    api_files = fs_files + yt_files + other_api
 
     # Use product+account+timestamp seed for deterministic variety
     import datetime
@@ -157,7 +163,10 @@ def _select_music_from_library(category, produk_id, account_id, platform='tt'):
             return False
         return True
 
-    available_api = [f for f in api_files if _is_available(f)]
+    avail_fs = [f for f in fs_files if _is_available(f)]
+    avail_yt = [f for f in yt_files if _is_available(f)]
+    avail_other = [f for f in other_api if _is_available(f)]
+    available_api = avail_fs + avail_yt + avail_other  # For dedup exhaustion check
     available_synth = [f for f in synth_files if _is_available(f)]
 
     # If ALL tracks exhausted by cross-run dedup, download FRESH via tier system
@@ -177,13 +186,13 @@ def _select_music_from_library(category, produk_id, account_id, platform='tt'):
                 if got > 0:
                     # Re-scan: new API file should now be available
                     new_files = _list_music_files(category)
-                    new_api = [f for f in new_files if '_synth_' not in os.path.basename(f)
-                               and os.path.abspath(f) not in all_session_used
-                               and os.path.basename(f) not in _globally_used]
-                    if new_api:
-                        available_api = new_api
+                    new_fs = [f for f in new_files if '_fs_' in os.path.basename(f)
+                              and os.path.abspath(f) not in all_session_used
+                              and os.path.basename(f) not in _globally_used]
+                    if new_fs:
+                        avail_fs = new_fs
                         fresh_got = True
-                        print(f"      [DEDUP] Fresh from Freesound: {os.path.basename(new_api[0])}")
+                        print(f"      [DEDUP] Fresh from Freesound: {os.path.basename(new_fs[0])}")
             except Exception as e:
                 print(f"      [DEDUP] Freesound failed: {e}")
 
@@ -194,13 +203,13 @@ def _select_music_from_library(category, produk_id, account_id, platform='tt'):
                 got = fetch_youtube_audio_library(category, count=1)
                 if got > 0:
                     new_files = _list_music_files(category)
-                    new_api = [f for f in new_files if '_synth_' not in os.path.basename(f)
-                               and os.path.abspath(f) not in all_session_used
-                               and os.path.basename(f) not in _globally_used]
-                    if new_api:
-                        available_api = new_api
+                    new_yt = [f for f in new_files if '_yt_' in os.path.basename(f)
+                              and os.path.abspath(f) not in all_session_used
+                              and os.path.basename(f) not in _globally_used]
+                    if new_yt:
+                        avail_yt = new_yt
                         fresh_got = True
-                        print(f"      [DEDUP] Fresh from YouTube: {os.path.basename(new_api[0])}")
+                        print(f"      [DEDUP] Fresh from YouTube: {os.path.basename(new_yt[0])}")
             except Exception as e:
                 print(f"      [DEDUP] YouTube failed: {e}")
 
@@ -221,34 +230,34 @@ def _select_music_from_library(category, produk_id, account_id, platform='tt'):
                 print(f"      [DEDUP] Fresh synth: {os.path.basename(synth_path)}")
 
     # If STILL exhausted (all tiers failed), relax cross-run dedup
-    if not available_api and not available_synth:
+    if not avail_fs and not avail_yt and not avail_other and not available_synth:
         print(f"      [DEDUP] All tiers failed, relaxing cross-run dedup...")
-        available_api = [f for f in api_files if os.path.abspath(f) not in all_session_used]
+        avail_fs = [f for f in fs_files if os.path.abspath(f) not in all_session_used]
+        avail_yt = [f for f in yt_files if os.path.abspath(f) not in all_session_used]
+        avail_other = [f for f in other_api if os.path.abspath(f) not in all_session_used]
         available_synth = [f for f in synth_files if os.path.abspath(f) not in all_session_used]
 
     # Last resort: reset session dedup
-    if not available_api and not available_synth:
+    if not avail_fs and not avail_yt and not avail_other and not available_synth:
         print(f"      [WARN] All exhausted, resetting session dedup pool")
         _used_tracks.clear()
         _used_tracks[platform] = set()
-        available_api = [f for f in api_files]
-        available_synth = [f for f in synth_files]
+        avail_fs = list(fs_files)
+        avail_yt = list(yt_files)
+        avail_other = list(other_api)
+        available_synth = list(synth_files)
 
-    if available_api:
-        rng.shuffle(available_api)
-        pick = available_api[0]
-        abs_pick = os.path.abspath(pick)
-        _used_tracks[platform].add(abs_pick)
-        remaining = len(available_api) - 1
-        print(f"      [MUSIC] {platform}: {os.path.basename(pick)} ({remaining} remaining in {category})")
-        return pick
-    elif available_synth:
-        rng.shuffle(available_synth)
-        pick = available_synth[0]
-        abs_pick = os.path.abspath(pick)
-        _used_tracks[platform].add(abs_pick)
-        print(f"      [MUSIC] {platform}: Synth: {os.path.basename(pick)}")
-        return pick
+    # STRICT TIER PICK: Freesound FIRST → YouTube → Other API → Synth
+    for pool, tier_name in [(avail_fs, 'Freesound'), (avail_yt, 'YouTube'),
+                            (avail_other, 'API'), (available_synth, 'Synth')]:
+        if pool:
+            rng.shuffle(pool)
+            pick = pool[0]
+            abs_pick = os.path.abspath(pick)
+            _used_tracks[platform].add(abs_pick)
+            remaining = len(pool) - 1
+            print(f"      [MUSIC] {platform}: {os.path.basename(pick)} [T{tier_name}] ({remaining} remaining in {category})")
+            return pick
 
     # Absolute fallback
     rng.shuffle(files)
