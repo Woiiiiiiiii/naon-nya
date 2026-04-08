@@ -155,6 +155,13 @@ jobs:
           done
           echo "Music cleanup done."
 
+      # ── Freesound API diagnostic (Tier 1 verification) ──
+      - name: Test Freesound API (Tier 1)
+        continue-on-error: true
+        env:
+          FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
+        run: python _test_freesound.py
+
       # ── Auto Cookie Refresh (PRIMARY METHOD) ─────────────────────
       - name: Auto-refresh Affiliate Cookies
         env:
