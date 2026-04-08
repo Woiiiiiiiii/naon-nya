@@ -87,23 +87,27 @@ def analyze_image(img_path):
             return {'status': 'hard_reject', 'reason': f'Text-dominated image ({text_ratio:.0%})',
                     'scores': scores}
 
-    # â”€â”€ CHECK 3: Uniformity (truly blank image detection) â”€â”€
+    # ── CHECK 3: Uniformity (truly blank image detection) ──
     # Only reject if image is TRULY single-color (blank/placeholder)
-    # Shopee products on white backgrounds are normal and pass
+    # Shopee products on white backgrounds are NORMAL — do NOT reject them
+    # Use finer quantization (32-step = 8 levels) to distinguish near-whites
     small = img.resize((50, 50))
     small_arr = np.array(small).reshape(-1, 3)
     from collections import Counter
-    # Quantize to coarse 64-step to catch only truly uniform images
-    quantized = (small_arr // 64) * 64
+    # Finer quantization: 32-step (8 levels per channel) to avoid merging 
+    # different near-white shades into one bucket
+    quantized = (small_arr // 32) * 32
     color_counts = Counter(map(tuple, quantized))
     dominant_count = color_counts.most_common(1)[0][1]
     uniformity = dominant_count / len(small_arr)
     scores['uniformity'] = float(uniformity)
-    if uniformity > UNIFORMITY_MAX:
+    # Only reject at 98%+ uniform (truly blank/solid color images)
+    # Products on white bg typically have 80-95% white = should PASS
+    if uniformity > 0.98:
         return {'status': 'hard_reject', 'reason': f'Blank image ({uniformity:.0%} uniform)',
                 'scores': scores}
 
-    # â”€â”€ CHECK 4: Blur detection â”€â”€
+    # ── CHECK 4: Blur detection ──
     laplacian = gray.filter(ImageFilter.Kernel(
         size=(3, 3), kernel=[-1, -1, -1, -1, 8, -1, -1, -1, -1],
         scale=1, offset=128
