@@ -129,38 +129,23 @@ def _generate_fallback(produk_id, category, count=4):
     cy = (cover_h - H) // 2
     img_cover = img_cover.crop((cx, cy, cx + W, cy + H))
 
-    # Blurred version for background (bokeh effect outside frame)
-    img_blur = img_cover.filter(ImageFilter.GaussianBlur(radius=25))
-    # Slightly dim the blur for depth
-    blur_arr = np.array(img_blur).astype(np.float32) * 0.7
-    img_blur = Image.fromarray(np.clip(blur_arr, 0, 255).astype(np.uint8))
-
-    # Frame margin (area where blur shows through)
-    frame_margin = 22  # Match draw_frame_border margin
-
+    # Product fills ENTIRE canvas — pigura border drawn on TOP in make_frame()
     vy_shifts = [0.0, -0.01, 0.01, -0.02]
     for i in range(count):
         vy = vy_shifts[i % len(vy_shifts)]
-        # Start with blurred bg
-        canvas = img_blur.copy()
-        
-        # Paste sharp product image inside the frame area
-        inner_x = frame_margin + 4
-        inner_y = frame_margin + 4 + int(H * vy)
-        inner_w = W - (frame_margin + 4) * 2
-        inner_h = H - (frame_margin + 4) * 2
-        
-        # Scale product to FILL the inner frame area (cover mode)
-        inner_scale = max(inner_w / pw, inner_h / ph)
-        fill_w, fill_h = int(pw * inner_scale), int(ph * inner_scale)
-        img_fill = product_img.resize((fill_w, fill_h), Image.LANCZOS)
-        # Center-crop to inner frame size
-        fx = (fill_w - inner_w) // 2
-        fy = (fill_h - inner_h) // 2
-        img_fill = img_fill.crop((fx, fy, fx + inner_w, fy + inner_h))
-        
-        canvas.paste(img_fill, (inner_x, max(0, inner_y)))
-        composites.append(np.array(canvas))
+        shift_y = int(H * vy)
+        if shift_y == 0:
+            composites.append(np.array(img_cover))
+        else:
+            re_cy = max(0, cy + shift_y)
+            shifted = product_img.resize((cover_w, cover_h), Image.LANCZOS)
+            shifted = shifted.crop((cx, re_cy, cx + W, re_cy + H))
+            if shifted.size != (W, H):
+                canvas = Image.new('RGB', (W, H), (0, 0, 0))
+                canvas.paste(shifted, (0, 0))
+                composites.append(np.array(canvas))
+            else:
+                composites.append(np.array(shifted))
 
     return composites
 
@@ -176,31 +161,27 @@ def _make_gradient(index):
     return Image.fromarray(grad)
 
 
-def _ken_burns(composite_arr, t, duration, direction='zoom_in'):
-    """Ken Burns effect for TikTok — more aggressive pacing."""
-    h, w = composite_arr.shape[:2]
-    progress = min(1.0, max(0.0, t / max(duration, 0.01)))
-
-    dirs = {
-        'zoom_in':   (1.0, 1.20, 0.5, 0.5, 0.48, 0.44),
-        'zoom_out':  (1.20, 1.0, 0.48, 0.44, 0.5, 0.5),
-        'pan_left':  (1.12, 1.12, 0.58, 0.48, 0.42, 0.48),
-        'pan_right': (1.12, 1.12, 0.42, 0.48, 0.58, 0.48),
-    }
-    ss, es, scx, scy, ecx, ecy = dirs.get(direction, dirs['zoom_in'])
-    ease_p = 0.5 * (1 - math.cos(progress * math.pi))
-
-    scale = ss + (es - ss) * ease_p
-    cx = scx + (ecx - scx) * ease_p
-    cy = scy + (ecy - scy) * ease_p
-
-    crop_w = max(1, int(w / scale))
-    crop_h = max(1, int(h / scale))
-    x1 = max(0, min(int(cx * w - crop_w / 2), w - crop_w))
-    y1 = max(0, min(int(cy * h - crop_h / 2), h - crop_h))
-
-    cropped = composite_arr[y1:y1 + crop_h, x1:x1 + crop_w]
-    return np.array(Image.fromarray(cropped).resize((W, H), Image.LANCZOS))
+def _get_composite_frame(composites, t, cycle=8, dissolve_dur=0.5):
+    """Static composite display with smooth cross-dissolve transitions.
+    
+    Product image stays FIXED in the frame (no zoom/pan that shifts alignment).
+    Transitions between composites use smooth cross-dissolve.
+    """
+    idx = int(t / cycle) % len(composites)
+    next_idx = (idx + 1) % len(composites)
+    
+    # Time within current cycle
+    cycle_t = t % cycle
+    
+    # Cross-dissolve at end of each cycle
+    if cycle_t > cycle - dissolve_dur:
+        progress = (cycle_t - (cycle - dissolve_dur)) / dissolve_dur
+        ease = progress * progress * (3 - 2 * progress)  # smoothstep
+        blended = (composites[idx].astype(float) * (1 - ease) + 
+                   composites[next_idx].astype(float) * ease)
+        return np.clip(blended, 0, 255).astype(np.uint8)
+    
+    return composites[idx]
 
 
 def _flash_cut(img1, img2, t, duration=0.25):
@@ -418,9 +399,7 @@ def generate_video_tt(queue_file, output_dir):
                         frame = frame2
                 
                 elif t < S4_END:
-                    bg_idx = int(t / 8) % len(composites)
-                    bg = composites[bg_idx]
-                    frame = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                    frame = _get_composite_frame(composites, t, cycle=8)
                     frame = draw_frame_border(frame, accent_color=border_color, thickness=3, margin=22)
                     
                     # Persistent top bar + bottom bar (instant, no fade)
@@ -433,9 +412,7 @@ def generate_video_tt(queue_file, output_dir):
                     frame = _render_bottom_bar(frame)
                 
                 elif t < S6_END:
-                    bg_idx = int(t / 8) % len(composites)
-                    bg = composites[bg_idx]
-                    frame = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                    frame = _get_composite_frame(composites, t, cycle=8)
                     frame = draw_frame_border(frame, accent_color=border_color, thickness=3, margin=22)
                     stage_t = t - S4_END
                     
@@ -467,7 +444,7 @@ def generate_video_tt(queue_file, output_dir):
                     if t > S5_END:
                         exit_t = t - S5_END
                         x_out = slide_element_x(exit_t, S6_END - S5_END, 'out_right')
-                        frame2 = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                        frame2 = _get_composite_frame(composites, t, cycle=8)
                         frame2 = draw_frame_border(frame2, accent_color=border_color, thickness=3, margin=22)
                         frame2 = paste_overlay_on_frame(frame2, top_nama_img,
                             (center_x - top_nama_img.width // 2, top_y))
@@ -486,7 +463,7 @@ def generate_video_tt(queue_file, output_dir):
                 else:
                     bg_idx = int(t / 8) % len(composites)
                     bg = composites[bg_idx]
-                    frame = _ken_burns(bg, t % 8, 8, 'zoom_in')
+                    frame = _get_composite_frame(composites, t, cycle=8)
                     frame = draw_frame_border(frame, accent_color=border_color, thickness=3, margin=22)
 
                     # Persistent top bar (nama + harga)
