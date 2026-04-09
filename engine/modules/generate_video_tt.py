@@ -72,7 +72,13 @@ def _load_composites(produk_id, category='home', count=4):
 
 
 def _generate_fallback(produk_id, category, count=4):
-    """Product on PREMIUM TikTok gradient (bold vibrant + glow + shadow)."""
+    """Product image FILLS entire frame (cover mode) — sesuai acuan video.
+    
+    Layout stack:
+      Layer 0: Blurred product image (full screen — bokeh effect)
+      Layer 1: Sharp product image (cover — fills frame area)
+      Layer 2: Frame border + text added later in make_frame()
+    """
     from engine.modules.premium_background import create_premium_background, add_product_shadow
     composites = []
 
@@ -109,25 +115,51 @@ def _generate_fallback(produk_id, category, count=4):
     # Auto-trim white borders from Shopee images
     from engine.modules.image_utils import auto_trim_whitespace
     product_img = auto_trim_whitespace(product_img, is_transparent)
+    if product_img.mode == 'RGBA':
+        product_img = product_img.convert('RGB')
 
     pw, ph = product_img.size
-    scale = min(W / pw, H / ph) * 0.92  # Fill 92% of frame (penuh dalam pigura)
-    new_w, new_h = int(pw * scale), int(ph * scale)
-    img_scaled = product_img.resize((new_w, new_h), Image.LANCZOS)
 
-    vy_shifts = [0.0, -0.02, 0.02, -0.03]
-    variant_offset = random.randint(0, 100)
+    # COVER MODE: fill entire canvas (may crop top/bottom or sides)
+    cover_scale = max(W / pw, H / ph)
+    cover_w, cover_h = int(pw * cover_scale), int(ph * cover_scale)
+    img_cover = product_img.resize((cover_w, cover_h), Image.LANCZOS)
+    # Center-crop to canvas size
+    cx = (cover_w - W) // 2
+    cy = (cover_h - H) // 2
+    img_cover = img_cover.crop((cx, cy, cx + W, cy + H))
+
+    # Blurred version for background (bokeh effect outside frame)
+    img_blur = img_cover.filter(ImageFilter.GaussianBlur(radius=25))
+    # Slightly dim the blur for depth
+    blur_arr = np.array(img_blur).astype(np.float32) * 0.7
+    img_blur = Image.fromarray(np.clip(blur_arr, 0, 255).astype(np.uint8))
+
+    # Frame margin (area where blur shows through)
+    frame_margin = 22  # Match draw_frame_border margin
+
+    vy_shifts = [0.0, -0.01, 0.01, -0.02]
     for i in range(count):
         vy = vy_shifts[i % len(vy_shifts)]
-        canvas = create_premium_background(W, H, category=category, variant=i + variant_offset, platform='tiktok')
-        paste_x = (W - new_w) // 2
-        paste_y = (H - new_h) // 2 + int(H * vy)
-        paste_y = max(0, min(paste_y, H - new_h))
-        add_product_shadow(canvas, img_scaled, paste_x, paste_y)
-        if is_transparent:
-            canvas.paste(img_scaled, (paste_x, paste_y), img_scaled.split()[3])
-        else:
-            canvas.paste(img_scaled, (paste_x, paste_y))
+        # Start with blurred bg
+        canvas = img_blur.copy()
+        
+        # Paste sharp product image inside the frame area
+        inner_x = frame_margin + 4
+        inner_y = frame_margin + 4 + int(H * vy)
+        inner_w = W - (frame_margin + 4) * 2
+        inner_h = H - (frame_margin + 4) * 2
+        
+        # Scale product to FILL the inner frame area (cover mode)
+        inner_scale = max(inner_w / pw, inner_h / ph)
+        fill_w, fill_h = int(pw * inner_scale), int(ph * inner_scale)
+        img_fill = product_img.resize((fill_w, fill_h), Image.LANCZOS)
+        # Center-crop to inner frame size
+        fx = (fill_w - inner_w) // 2
+        fy = (fill_h - inner_h) // 2
+        img_fill = img_fill.crop((fx, fy, fx + inner_w, fy + inner_h))
+        
+        canvas.paste(img_fill, (inner_x, max(0, inner_y)))
         composites.append(np.array(canvas))
 
     return composites

@@ -79,13 +79,19 @@ def _load_composites(produk_id, category='home', count=5):
 
 
 def _generate_fallback_composites(produk_id, category, count=5):
-    """Product on PREMIUM gradient background (glow + vignette + shadow)."""
+    """Product image FILLS entire frame (cover mode) — sesuai acuan video.
+    
+    Layout stack:
+      Layer 0: Blurred product image (full screen — bokeh effect)
+      Layer 1: Sharp product image (cover — fills frame area)
+      Layer 2: Frame border + text added later in make_frame()
+    """
     from engine.modules.premium_background import create_premium_background, add_product_shadow
 
     composites = []
 
     img_path = None
-    for ext in ['png', 'jpg', 'webp']:  # PNG first (transparent product from rembg)
+    for ext in ['png', 'jpg', 'webp']:
         p = os.path.join(os.path.dirname(__file__), '..', 'data', 'images', f"{produk_id}.{ext}")
         if os.path.exists(p):
             img_path = p
@@ -116,29 +122,44 @@ def _generate_fallback_composites(produk_id, category, count=5):
     # Auto-trim white borders from Shopee images
     from engine.modules.image_utils import auto_trim_whitespace
     product_img = auto_trim_whitespace(product_img, is_transparent)
+    if product_img.mode == 'RGBA':
+        product_img = product_img.convert('RGB')
 
     pw, ph = product_img.size
-    # CONTAIN mode: fit ENTIRE product in frame (never crop)
-    scale = min(W / pw, H / ph) * 0.92  # Fill 92% of frame (penuh dalam pigura)
-    new_w, new_h = int(pw * scale), int(ph * scale)
-    img_scaled = product_img.resize((new_w, new_h), Image.LANCZOS)
 
-    vy_shifts = [0.0, -0.02, 0.02, -0.03, 0.03]
-    variant_offset = random.randint(0, 100)  # Different gradient each run
+    # COVER MODE: fill entire canvas (may crop top/bottom or sides)
+    cover_scale = max(W / pw, H / ph)
+    cover_w, cover_h = int(pw * cover_scale), int(ph * cover_scale)
+    img_cover = product_img.resize((cover_w, cover_h), Image.LANCZOS)
+    cx = (cover_w - W) // 2
+    cy = (cover_h - H) // 2
+    img_cover = img_cover.crop((cx, cy, cx + W, cy + H))
+
+    # Blurred version for background (bokeh effect outside frame)
+    img_blur = img_cover.filter(ImageFilter.GaussianBlur(radius=25))
+    blur_arr = np.array(img_blur).astype(np.float32) * 0.7
+    img_blur = Image.fromarray(np.clip(blur_arr, 0, 255).astype(np.uint8))
+
+    frame_margin = 22
+
+    vy_shifts = [0.0, -0.01, 0.01, -0.02, 0.02]
     for i in range(count):
         vy = vy_shifts[i % len(vy_shifts)]
-        # Premium gradient background with glow + vignette (varied each run)
-        canvas = create_premium_background(W, H, category=category, variant=i + variant_offset)
-        paste_x = (W - new_w) // 2
-        paste_y = (H - new_h) // 2 + int(H * vy)
-        paste_y = max(0, min(paste_y, H - new_h))
-        # Add shadow below product
-        add_product_shadow(canvas, img_scaled, paste_x, paste_y)
-        # Paste product (alpha-aware)
-        if is_transparent:
-            canvas.paste(img_scaled, (paste_x, paste_y), img_scaled.split()[3])
-        else:
-            canvas.paste(img_scaled, (paste_x, paste_y))
+        canvas = img_blur.copy()
+        
+        inner_x = frame_margin + 4
+        inner_y = frame_margin + 4 + int(H * vy)
+        inner_w = W - (frame_margin + 4) * 2
+        inner_h = H - (frame_margin + 4) * 2
+        
+        inner_scale = max(inner_w / pw, inner_h / ph)
+        fill_w, fill_h = int(pw * inner_scale), int(ph * inner_scale)
+        img_fill = product_img.resize((fill_w, fill_h), Image.LANCZOS)
+        fx = (fill_w - inner_w) // 2
+        fy = (fill_h - inner_h) // 2
+        img_fill = img_fill.crop((fx, fy, fx + inner_w, fy + inner_h))
+        
+        canvas.paste(img_fill, (inner_x, max(0, inner_y)))
         composites.append(np.array(canvas))
 
     return composites
