@@ -761,11 +761,13 @@ def generate_all_music(queue_dir, output_dir):
 
             music_file = os.path.join(platform_dir, f"MUSIC_{produk_id}_{acct_id}.mp3")
 
-            # Skip if already generated this run
-            if os.path.exists(music_file) and os.path.getsize(music_file) > 1000:
-                print(f"    [SKIP] Already exists: {os.path.basename(music_file)}")
-                total_lib += 1
-                continue
+            # ALWAYS assign fresh music — delete old file to prevent reuse
+            if os.path.exists(music_file):
+                try:
+                    os.remove(music_file)
+                    print(f"    [FRESH] Deleted old: {os.path.basename(music_file)}")
+                except Exception:
+                    pass
 
             # Determine target duration
             if platform == 'yt' and video_type == 'long':
