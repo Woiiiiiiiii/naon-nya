@@ -76,11 +76,12 @@ def create_vignette_overlay(size=(W, H), strength=0.7):
 # ═══════════════════════════════════════════════════════════════════════
 #  PIGURA (PICTURE FRAME BORDER)
 # ═══════════════════════════════════════════════════════════════════════
-def draw_frame_border(frame_arr, accent_color=(200, 180, 130), thickness=4, margin=28, corner_radius=18, opacity=0.85):
-    """Draw a decorative picture frame border around the video.
+def draw_frame_border(frame_arr, accent_color=(200, 180, 130), thickness=4, margin=28, corner_radius=18, opacity=0.85, t=None):
+    """Draw a decorative picture frame border with animated running lights.
     
     Simple elegant lines with rounded corners — always visible throughout video.
-    Color adapts to category accent.
+    Two glowing light beams travel clockwise around the frame.
+    Color adapts to category accent. Pass t (time in seconds) for animation.
     """
     canvas = Image.fromarray(frame_arr).convert('RGBA')
     overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
@@ -116,9 +117,99 @@ def draw_frame_border(frame_arr, accent_color=(200, 180, 130), thickness=4, marg
     for cx, cy in corners:
         d.rectangle([cx, cy, cx + corner_size, cy + corner_size], fill=color)
     
+    # ═══ RUNNING LIGHTS ═══
+    # 2 cahaya berjalan mengelilingi pigura (sesuai acuan video)
+    if t is not None:
+        _draw_running_lights(overlay, margin, thickness, corner_radius, t)
+    
     # Composite
     canvas = Image.alpha_composite(canvas, overlay)
     return np.array(canvas.convert('RGB'))
+
+
+def _draw_running_lights(overlay, margin, thickness, corner_radius, t):
+    """Draw 2 animated glowing light beams traveling clockwise around the frame.
+    
+    Each beam is ~1/4 of the frame perimeter, with red gradient that fades
+    along its length (bright head, fading tail).
+    """
+    import math
+    
+    # Frame perimeter path (clockwise from top-left)
+    x1, y1 = margin, margin
+    x2, y2 = W - margin, H - margin
+    
+    # Perimeter segments: top → right → bottom → left
+    top_len = x2 - x1
+    right_len = y2 - y1
+    bot_len = x2 - x1
+    left_len = y2 - y1
+    total_perimeter = top_len + right_len + bot_len + left_len
+    
+    # Beam properties
+    beam_length = total_perimeter * 0.25  # 1/4 of perimeter
+    speed = total_perimeter / 4.0  # Full loop every 4 seconds
+    num_beams = 2
+    
+    d = ImageDraw.Draw(overlay)
+    
+    for beam_idx in range(num_beams):
+        # Each beam offset by half the perimeter
+        beam_head = (t * speed + beam_idx * total_perimeter / 2) % total_perimeter
+        
+        # Draw beam as series of dots from head (bright) to tail (fading)
+        num_dots = 80
+        for di in range(num_dots):
+            # Position along beam: 0 = head (brightest), 1 = tail (faded)
+            frac = di / num_dots
+            pos = (beam_head - frac * beam_length) % total_perimeter
+            
+            # Convert perimeter position to x, y coordinates
+            px, py = _perimeter_to_xy(pos, x1, y1, x2, y2, top_len, right_len, bot_len, left_len, total_perimeter)
+            
+            # Color: red gradient, fading along beam length
+            intensity = 1.0 - frac  # 1.0 at head, 0.0 at tail
+            intensity = intensity * intensity  # quadratic falloff for natural look
+            
+            # Red-warm glow color
+            cr = int(255 * intensity)
+            cg = int(80 * intensity)
+            cb = int(40 * intensity)
+            ca = int(200 * intensity)
+            
+            if ca < 5:
+                continue
+            
+            # Glow size: larger at head, smaller at tail
+            glow_size = max(1, int(thickness + 6 * intensity))
+            
+            d.ellipse(
+                [px - glow_size, py - glow_size, px + glow_size, py + glow_size],
+                fill=(cr, cg, cb, ca)
+            )
+
+
+def _perimeter_to_xy(pos, x1, y1, x2, y2, top_len, right_len, bot_len, left_len, total_perimeter):
+    """Convert a position along the frame perimeter to x,y coordinates."""
+    pos = pos % total_perimeter
+    
+    if pos < top_len:
+        # Top edge: left to right
+        return x1 + pos, y1
+    pos -= top_len
+    
+    if pos < right_len:
+        # Right edge: top to bottom
+        return x2, y1 + pos
+    pos -= right_len
+    
+    if pos < bot_len:
+        # Bottom edge: right to left
+        return x2 - pos, y2
+    pos -= bot_len
+    
+    # Left edge: bottom to top
+    return x1, y2 - pos
 
 
 # ═══════════════════════════════════════════════════════════════════════

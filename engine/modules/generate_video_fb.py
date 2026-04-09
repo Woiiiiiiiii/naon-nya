@@ -364,7 +364,7 @@ def generate_video_fb(queue_file, output_dir):
                 
                 if t < S1_END:
                     frame = plain_bg.copy()
-                    frame = draw_frame_border(frame, accent_color=border_color)
+                    frame = draw_frame_border(frame, accent_color=border_color, t=t)
                     
                     nama_y = center_y - nama_img.height // 2 - 60
                     frame = paste_overlay_on_frame(frame, nama_img,
@@ -383,7 +383,7 @@ def generate_video_fb(queue_file, output_dir):
                         exit_t = t - exit_start
                         fade_out = max(0.0, 1.0 - exit_t / 1.5)
                         frame2 = plain_bg.copy()
-                        frame2 = draw_frame_border(frame2, accent_color=border_color)
+                        frame2 = draw_frame_border(frame2, accent_color=border_color, t=t)
                         frame2 = paste_overlay_on_frame(frame2, nama_img,
                             (center_x - nama_img.width // 2, nama_y), opacity=fade_out)
                         if t > 2.5:
@@ -393,7 +393,7 @@ def generate_video_fb(queue_file, output_dir):
                 
                 elif t < S4_END:
                     frame = _get_composite_frame(composites, t, cycle=12)
-                    frame = draw_frame_border(frame, accent_color=border_color)
+                    frame = draw_frame_border(frame, accent_color=border_color, t=t)
                     
                     # Persistent top bar + bottom bar (instant, no fade)
                     top_y = 25
@@ -406,7 +406,7 @@ def generate_video_fb(queue_file, output_dir):
                 
                 elif t < S6_END:
                     frame = _get_composite_frame(composites, t, cycle=12)
-                    frame = draw_frame_border(frame, accent_color=border_color)
+                    frame = draw_frame_border(frame, accent_color=border_color, t=t)
                     stage_t = t - S4_END
                     
                     # Persistent nama + harga at top
@@ -449,7 +449,7 @@ def generate_video_fb(queue_file, output_dir):
                         exit_t = t - S5_END
                         x_out = slide_element_x(exit_t, S6_END - S5_END, 'out_right')
                         frame2 = _get_composite_frame(composites, t, cycle=12)
-                        frame2 = draw_frame_border(frame2, accent_color=border_color)
+                        frame2 = draw_frame_border(frame2, accent_color=border_color, t=t)
                         frame2 = paste_overlay_on_frame(frame2, top_nama_img,
                             (center_x - top_nama_img.width // 2, top_y))
                         if top_harga_img:
@@ -472,7 +472,7 @@ def generate_video_fb(queue_file, output_dir):
                 
                 else:
                     frame = _get_composite_frame(composites, t, cycle=12)
-                    frame = draw_frame_border(frame, accent_color=border_color)
+                    frame = draw_frame_border(frame, accent_color=border_color, t=t)
 
                     # Persistent top bar (nama + harga)
                     top_y = 25
