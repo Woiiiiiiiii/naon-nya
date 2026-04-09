@@ -181,6 +181,42 @@ jobs:
           SHOPEE_AFFILIATE_COOKIES: ${{ env.SHOPEE_AFFILIATE_COOKIES || secrets.SHOPEE_AFFILIATE_COOKIES }}
         run: python engine/modules/test_shopee_proxy.py
 
+      # DIAGNOSTIC: test Freesound API key
+      - name: Test Freesound API
+        continue-on-error: true
+        env:
+          FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
+        run: |
+          python -c "
+          import os, requests
+          key = os.environ.get('FREESOUND_API_KEY', '')
+          print(f'FREESOUND_API_KEY length: {len(key)}')
+          if not key:
+              print('ERROR: FREESOUND_API_KEY is EMPTY!')
+              exit(1)
+          masked = key[:4] + '***' + key[-4:] if len(key) > 8 else '***'
+          print(f'Key: {masked}')
+          # Test API call
+          resp = requests.get('https://freesound.org/apiv2/search/text/', params={
+              'query': 'background music',
+              'filter': 'duration:[30 TO 300] tag:music',
+              'fields': 'id,name,previews,duration',
+              'page_size': 3,
+              'sort': 'rating_desc',
+              'token': key,
+          }, timeout=30)
+          print(f'API Status: {resp.status_code}')
+          if resp.status_code == 200:
+              data = resp.json()
+              print(f'Results: {data.get(\"count\", 0)} total')
+              for s in data.get('results', [])[:3]:
+                  print(f'  - {s.get(\"name\", \"?\")} ({s.get(\"duration\", 0):.0f}s)')
+              print('Freesound API OK!')
+          else:
+              print(f'ERROR: {resp.text[:200]}')
+              exit(1)
+          "
+
       - name: Run full pipeline
         env:
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
