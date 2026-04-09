@@ -124,28 +124,36 @@ def _generate_fallback(produk_id, category, count=4):
     cover_scale = max(W / pw, H / ph)
     cover_w, cover_h = int(pw * cover_scale), int(ph * cover_scale)
     img_cover = product_img.resize((cover_w, cover_h), Image.LANCZOS)
-    # Center-crop to canvas size
     cx = (cover_w - W) // 2
     cy = (cover_h - H) // 2
     img_cover = img_cover.crop((cx, cy, cx + W, cy + H))
 
-    # Product fills ENTIRE canvas — pigura border drawn on TOP in make_frame()
-    vy_shifts = [0.0, -0.01, 0.01, -0.02]
+    # Blurred version for edges outside pigura (bokeh effect sesuai acuan)
+    img_blur = img_cover.filter(ImageFilter.GaussianBlur(radius=25))
+    blur_arr = np.array(img_blur).astype(np.float32) * 0.7
+    img_blur = Image.fromarray(np.clip(blur_arr, 0, 255).astype(np.uint8))
+
+    # Sharp product fills inner frame area, blur fills outer edges
+    # Aman karena Ken Burns sudah dihapus — boundary selalu sejajar pigura
+    frame_margin = 22  # Match draw_frame_border margin
+
     for i in range(count):
-        vy = vy_shifts[i % len(vy_shifts)]
-        shift_y = int(H * vy)
-        if shift_y == 0:
-            composites.append(np.array(img_cover))
-        else:
-            re_cy = max(0, cy + shift_y)
-            shifted = product_img.resize((cover_w, cover_h), Image.LANCZOS)
-            shifted = shifted.crop((cx, re_cy, cx + W, re_cy + H))
-            if shifted.size != (W, H):
-                canvas = Image.new('RGB', (W, H), (0, 0, 0))
-                canvas.paste(shifted, (0, 0))
-                composites.append(np.array(canvas))
-            else:
-                composites.append(np.array(shifted))
+        # Start with blurred bg (full canvas)
+        canvas = img_blur.copy()
+        # Paste sharp product inside pigura area
+        inner_m = frame_margin + 4  # sedikit di dalam garis pigura
+        inner_w = W - inner_m * 2
+        inner_h = H - inner_m * 2
+        # Cover mode for inner area
+        inner_scale = max(inner_w / pw, inner_h / ph)
+        fill_w = int(pw * inner_scale)
+        fill_h = int(ph * inner_scale)
+        img_fill = product_img.resize((fill_w, fill_h), Image.LANCZOS)
+        fx = (fill_w - inner_w) // 2
+        fy = (fill_h - inner_h) // 2
+        img_fill = img_fill.crop((fx, fy, fx + inner_w, fy + inner_h))
+        canvas.paste(img_fill, (inner_m, inner_m))
+        composites.append(np.array(canvas))
 
     return composites
 
