@@ -87,27 +87,23 @@ def analyze_image(img_path):
             return {'status': 'hard_reject', 'reason': f'Text-dominated image ({text_ratio:.0%})',
                     'scores': scores}
 
-    # ── CHECK 3: Uniformity (truly blank image detection) ──
+    # â”€â”€ CHECK 3: Uniformity (truly blank image detection) â”€â”€
     # Only reject if image is TRULY single-color (blank/placeholder)
-    # Shopee products on white backgrounds are NORMAL — do NOT reject them
-    # Use finer quantization (32-step = 8 levels) to distinguish near-whites
+    # Shopee products on white backgrounds are normal and pass
     small = img.resize((50, 50))
     small_arr = np.array(small).reshape(-1, 3)
     from collections import Counter
-    # Finer quantization: 32-step (8 levels per channel) to avoid merging 
-    # different near-white shades into one bucket
-    quantized = (small_arr // 32) * 32
+    # Quantize to coarse 64-step to catch only truly uniform images
+    quantized = (small_arr // 64) * 64
     color_counts = Counter(map(tuple, quantized))
     dominant_count = color_counts.most_common(1)[0][1]
     uniformity = dominant_count / len(small_arr)
     scores['uniformity'] = float(uniformity)
-    # Only reject at 98%+ uniform (truly blank/solid color images)
-    # Products on white bg typically have 80-95% white = should PASS
-    if uniformity > 0.98:
+    if uniformity > UNIFORMITY_MAX:
         return {'status': 'hard_reject', 'reason': f'Blank image ({uniformity:.0%} uniform)',
                 'scores': scores}
 
-    # ── CHECK 4: Blur detection ──
+    # â”€â”€ CHECK 4: Blur detection â”€â”€
     laplacian = gray.filter(ImageFilter.Kernel(
         size=(3, 3), kernel=[-1, -1, -1, -1, 8, -1, -1, -1, -1],
         scale=1, offset=128
@@ -171,7 +167,25 @@ def analyze_image(img_path):
     except Exception:
         pass
 
-    # â”€â”€ ALL CHECKS PASSED â”€â”€
+    # ── CHECK 8: Product Fill (gambar harus penuh space) ──
+    # Reject images where product is too small / doesn't fill frame adequately.
+    # Uses foreground detection: count non-background pixels as "product area".
+    # Background = very bright (white/near-white) OR very dark (black) pixels.
+    try:
+        brightness = np.mean(arr, axis=2)
+        # Foreground = pixels that are NOT white bg AND NOT black bg
+        fg_mask = (brightness > 30) & (brightness < 235)
+        fg_ratio = np.mean(fg_mask)
+        scores['product_fill'] = float(fg_ratio)
+        # If product fills less than 10% of image → too small, try alternative
+        if fg_ratio < 0.10:
+            return {'status': 'soft_reject',
+                    'reason': f'Product too small ({fg_ratio:.0%} fill)',
+                    'scores': scores}
+    except Exception:
+        pass
+
+    # ── ALL CHECKS PASSED ──
     return {'status': 'pass', 'reason': 'Image OK', 'scores': scores}
 
 

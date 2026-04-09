@@ -148,7 +148,7 @@ def _generate_fallback_composites(produk_id, category, count=7):
 
     pw, ph = product_img.size
     # Scale product to fill 85% of frame (centered, no white gaps)
-    scale = min(W / pw, H / ph) * 0.75
+    scale = min(W / pw, H / ph) * 0.92  # Fill 92% of frame (penuh dalam pigura)
     new_w, new_h = int(pw * scale), int(ph * scale)
     img_scaled = product_img.resize((new_w, new_h), Image.LANCZOS)
 
