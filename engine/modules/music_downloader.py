@@ -127,8 +127,9 @@ def fetch_freesound(category, count=3):
             'query': query,
             'filter': 'duration:[30 TO 300] tag:music',
             'fields': 'id,name,previews,duration,tags',
-            'page_size': min(count + 5, 15),
-            'sort': 'rating_desc',
+            'page_size': min(count + 10, 15),
+            'sort': random.choice(['rating_desc', 'downloads_desc', 'created_desc']),
+            'page': random.randint(1, 5),  # Random page for variety
             'token': api_key,
         }
 
@@ -290,8 +291,18 @@ def fetch_youtube_audio_library(category, count=3):
             if os.path.exists(filepath):
                 continue
 
-            # Search with offset to get different results each time
-            search_query = f"ytsearch{i + 1}:{query}"
+            # Use random offset + unique search variations for truly different results
+            search_variations = [
+                query,
+                f'{query} 2024',
+                f'{query} instrumental',
+                f'{query} loop',
+                f'{query} creative commons',
+            ]
+            search_q = random.choice(search_variations)
+            # ytsearchN returns Nth result — use larger offsets for variety
+            offset = random.randint(1, 20)
+            search_query = f"ytsearch{offset}:{search_q}"
 
             cmd = [
                 'yt-dlp',
@@ -330,8 +341,24 @@ def fetch_youtube_audio_library(category, count=3):
                         os.rename(actual_file, filepath)
 
                     size_kb = os.path.getsize(filepath) // 1024
-                    print(f"    [OK] {filename} ({size_kb}KB)")
-                    downloaded += 1
+                    # Hash-check: reject if identical to existing file
+                    import hashlib as _hl
+                    with open(filepath, 'rb') as _fh:
+                        new_hash = _hl.md5(_fh.read()).hexdigest()
+                    is_dup = False
+                    for existing_f in os.listdir(d):
+                        ef = os.path.join(d, existing_f)
+                        if ef == filepath or not os.path.isfile(ef):
+                            continue
+                        with open(ef, 'rb') as _fh2:
+                            if _hl.md5(_fh2.read()).hexdigest() == new_hash:
+                                print(f"    [DUP] {filename} identical to {existing_f}, deleting")
+                                os.remove(filepath)
+                                is_dup = True
+                                break
+                    if not is_dup:
+                        print(f"    [OK] {filename} ({size_kb}KB)")
+                        downloaded += 1
                     time.sleep(1)  # Rate limit courtesy
                 else:
                     # Clean up any partial downloads
