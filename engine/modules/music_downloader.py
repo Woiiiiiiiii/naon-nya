@@ -134,9 +134,9 @@ def fetch_freesound(category, count=3):
             'query': query,
             'filter': 'duration:[30 TO 300] tag:music',
             'fields': 'id,name,previews,duration,tags',
-            'page_size': min(count + 10, 15),
+            'page_size': min(count + 10, 30),  # Up to 30 candidates for 7 channels
             'sort': random.choice(['rating_desc', 'downloads_desc', 'created_desc']),
-            'page': random.randint(1, 5),  # Random page for variety
+            'page': random.randint(1, 8),  # Wider page range for more variety
             'token': api_key,
         }
 

@@ -655,13 +655,13 @@ def generate_all_music(queue_dir, output_dir):
             available_api = [f for f in api_files if os.path.basename(f) not in globally_used]
             print(f"  [{cat}] {len(api_files)} API ({len(available_api)} fresh) + {len(synth_files)} synth = {total_files} | need {jobs_need} unique tracks")
 
-            # Need enough FRESH tracks + buffer for variety across runs
-            # Buffer ensures we always download new tracks even if current stock seems OK
-            VARIETY_BUFFER = 3
-            api_need = max(0, jobs_need + VARIETY_BUFFER - len(available_api))
+            # 7 channels = minimal 7 musik unik per kategori per run
+            # Buffer agar library terus bertambah untuk variasi antar run
+            MIN_FRESH_PER_RUN = max(jobs_need, 7)  # Minimal 7 (1 per channel)
+            api_need = max(0, MIN_FRESH_PER_RUN - len(available_api))
 
             if api_need > 0:
-                print(f"    Need {api_need} API tracks (have {len(available_api)} fresh, need {jobs_need}+{VARIETY_BUFFER} buffer)...")
+                print(f"    Need {api_need} API tracks (have {len(available_api)} fresh, need {MIN_FRESH_PER_RUN} for {max(jobs_need, 7)} channels)...")
 
                 # ── TIER 1: Freesound API (highest quality) ──
                 got_api = 0
