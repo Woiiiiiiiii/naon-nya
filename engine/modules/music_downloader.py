@@ -113,7 +113,14 @@ def fetch_freesound(category, count=3):
     if not api_key:
         print(f"    [SKIP] FREESOUND_API_KEY not set in environment")
         print(f"    [HINT] Set FREESOUND_API_KEY env var or GitHub secret")
+        # Show ALL env vars that contain 'FREESOUND' for diagnosis
+        fs_vars = [k for k in os.environ if 'FREESOUND' in k.upper()]
+        print(f"    [DIAG] Env vars with FREESOUND: {fs_vars}")
         return 0
+    
+    # Diagnostic: show key is present (masked)
+    masked = api_key[:4] + '***' + api_key[-4:] if len(api_key) > 8 else '***'
+    print(f"    [DIAG] FREESOUND_API_KEY present: {masked} (len={len(api_key)})")
 
     d = get_music_dir(category)
     mood = CATEGORY_MOODS.get(category, CATEGORY_MOODS['fashion'])
@@ -200,11 +207,13 @@ def fetch_freesound(category, count=3):
                     print(f"    [WARN] Download failed: {e}")
 
         elif resp.status_code == 401:
-            print(f"    [WARN] Freesound: invalid API key")
+            print(f"    [WARN] Freesound: invalid API key (401)")
+            print(f"    [DIAG] Response: {resp.text[:200]}")
         elif resp.status_code == 429:
-            print(f"    [WARN] Freesound: rate limited")
+            print(f"    [WARN] Freesound: rate limited (429)")
         else:
             print(f"    [WARN] Freesound API error: {resp.status_code}")
+            print(f"    [DIAG] Response: {resp.text[:200]}")
 
     except Exception as e:
         print(f"    [WARN] Freesound fetch error: {e}")
