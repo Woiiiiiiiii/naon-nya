@@ -417,7 +417,12 @@ def upload_youtube(video_dir, metadata_path):
                     product_name = product_name.strip()
                     for line in desc.split('\n'):
                         if 'shopee.co.id' in line:
-                            shopee_url = line.replace('', '').strip()
+                            # Extract URL: find https:// onwards
+                            url_start = line.find('https://')
+                            if url_start >= 0:
+                                shopee_url = line[url_start:].strip()
+                            else:
+                                shopee_url = line.strip()
                             break
                     if shopee_url:
                         pin_affiliate_comment(youtube, video_id, product_name, shopee_url)
