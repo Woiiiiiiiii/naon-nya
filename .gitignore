@@ -39,10 +39,12 @@ desktop.ini
 venv/
 env/
 
-# YouTube API credentials (client secrets are sensitive, tokens needed for auto-upload)
+# YouTube API credentials (SENSITIVE — NEVER commit to public repo!)
 engine/config/client_secret.json
 engine/config/yt_token.pickle
 engine/config/tokens/*_client_secret.json
+engine/config/tokens/*.pickle
+engine/config/tokens/*_refresh_token.txt
 
 # Facebook API credentials
 engine/config/fb_config.json

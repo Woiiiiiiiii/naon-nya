@@ -184,10 +184,10 @@ def run_auth_flow(account_id):
         # Print for user to copy to GitHub Secrets
         acct_num = account_id.replace('yt_', '')
         print(f"\n{'='*60}")
-        print(f"✅ AUTH SUKSES untuk {account_id}!")
+        print(f"[OK] AUTH SUKSES untuk {account_id}!")
         print(f"{'='*60}")
         print(f"\nRefresh token tersimpan di: {token_file}")
-        print(f"\n📋 COPY refresh token di bawah ini ke GitHub Secret:")
+        print(f"\nCOPY refresh token di bawah ini ke GitHub Secret:")
         print(f"   Secret name: YT_REFRESH_TOKEN_{acct_num}")
         print(f"   Secret value:")
         print(f"\n   {refresh_token}\n")
