@@ -1,20 +1,17 @@
 """
 notion_link_updater.py
-Auto-update Notion pages with today's product affiliate links.
+Auto-update Notion database with today's product affiliate links.
 
 Structure on Notion:
-  - 7 pages: YT_1, YT_2, YT_3, YT_4, YT_5, TT, FB
-  - Each page has a linked product database
-  - Products are added daily with affiliate links, then archived after 7 days
+  - 1 database "Products" shared by ALL accounts (YT_1-5, TT, FB)
+  - "Account" column filters which account each row belongs to
+  - Products are added daily, old ones (>7 days) get status unchecked
 
 Environment variables:
-  NOTION_API_KEY  — Internal Integration Token (secret_xxx)
-  
-Per-account database IDs (set in engine_config.yaml or env):
-  NOTION_DB_YT_1, NOTION_DB_YT_2, ..., NOTION_DB_YT_5
-  NOTION_DB_TT, NOTION_DB_FB
+  NOTION_API_KEY  — Internal Integration Token (ntn_xxx)
+  NOTION_DB_ID    — Single database ID for all accounts
 
-If ANY env var is missing, module skips gracefully.
+If env vars missing, module skips gracefully (no error).
 """
 import json
 import os
@@ -27,17 +24,6 @@ from category_router import get_category, get_label
 
 NOTION_API = "https://api.notion.com/v1"
 NOTION_VERSION = "2022-06-28"
-
-# Mapping account_id → env var name for DB ID
-ACCOUNT_DB_MAP = {
-    'yt_1': 'NOTION_DB_YT_1',
-    'yt_2': 'NOTION_DB_YT_2',
-    'yt_3': 'NOTION_DB_YT_3',
-    'yt_4': 'NOTION_DB_YT_4',
-    'yt_5': 'NOTION_DB_YT_5',
-    'tt_1': 'NOTION_DB_TT',
-    'fb_1': 'NOTION_DB_FB',
-}
 
 
 def get_headers():
@@ -52,12 +38,9 @@ def get_headers():
     }
 
 
-def get_db_id(account_id):
-    """Get Notion database ID for a specific account."""
-    env_key = ACCOUNT_DB_MAP.get(account_id)
-    if not env_key:
-        return None
-    return os.environ.get(env_key, '')
+def get_db_id():
+    """Get the single Notion database ID."""
+    return os.environ.get('NOTION_DB_ID', '')
 
 
 def archive_old_links(db_id, headers, days_old=7):
@@ -67,8 +50,8 @@ def archive_old_links(db_id, headers, days_old=7):
     query = {
         "filter": {
             "and": [
-                {"property": "status", "checkbox": {"equals": True}},
-                {"property": "post date", "date": {"before": cutoff}},
+                {"property": "Status", "checkbox": {"equals": True}},
+                {"property": "Post Date", "date": {"before": cutoff}},
             ]
         }
     }
@@ -79,6 +62,7 @@ def archive_old_links(db_id, headers, days_old=7):
             headers=headers, json=query, timeout=30
         )
         if resp.status_code != 200:
+            print(f"    [NOTION] Archive query failed: {resp.status_code}")
             return 0
 
         pages = resp.json().get('results', [])
@@ -88,44 +72,79 @@ def archive_old_links(db_id, headers, days_old=7):
             r = requests.patch(
                 f"{NOTION_API}/pages/{page_id}",
                 headers=headers,
-                json={"properties": {"status": {"checkbox": False}}},
+                json={"properties": {"Status": {"checkbox": False}}},
                 timeout=15
             )
             if r.status_code == 200:
                 archived += 1
         return archived
-    except Exception:
+    except Exception as e:
+        print(f"    [NOTION] Archive error: {e}")
         return 0
+
+
+def _check_duplicate(db_id, headers, product_name, account_id, date_str):
+    """Check if product already exists in DB for this account + date."""
+    query = {
+        "filter": {
+            "and": [
+                {"property": "Account", "select": {"equals": account_id}},
+                {"property": "Post Date", "date": {"equals": date_str}},
+            ]
+        },
+        "page_size": 50,
+    }
+    try:
+        resp = requests.post(
+            f"{NOTION_API}/databases/{db_id}/query",
+            headers=headers, json=query, timeout=15
+        )
+        if resp.status_code == 200:
+            for page in resp.json().get('results', []):
+                title_prop = page.get('properties', {}).get('Name', {})
+                titles = title_prop.get('title', [])
+                if titles:
+                    existing = titles[0].get('text', {}).get('content', '')
+                    if existing == product_name[:100]:
+                        return True
+    except Exception:
+        pass
+    return False
 
 
 def add_product_to_db(db_id, headers, product_name, shopee_url, price,
                        account_id, category_label, date_str, video_type='long'):
-    """Add a product link to a specific account's Notion database."""
+    """Add a product link to the single Notion database."""
+    # Skip duplicates
+    if _check_duplicate(db_id, headers, product_name, account_id, date_str):
+        print(f"    [SKIP] Already exists: {product_name[:30]} ({account_id})")
+        return False
+
     page_data = {
         "parent": {"database_id": db_id},
         "properties": {
-            "name": {
+            "Name": {
                 "title": [{"text": {"content": product_name[:100]}}]
             },
-            "price": {
-                "rich_text": [{"text": {"content": str(price)}}]
+            "Price": {
+                "number": _parse_price(price)
             },
-            "account": {
+            "Account": {
                 "select": {"name": account_id}
             },
-            "category": {
+            "Category": {
                 "select": {"name": category_label}
             },
-            "link affiliate": {
+            "Link Affiliate": {
                 "url": shopee_url if shopee_url else None
             },
-            "status": {
+            "Status": {
                 "checkbox": True
             },
-            "post date": {
+            "Post Date": {
                 "date": {"start": date_str}
             },
-            "video type": {
+            "Video Type": {
                 "select": {"name": video_type}
             },
         }
@@ -136,14 +155,31 @@ def add_product_to_db(db_id, headers, product_name, shopee_url, price,
             f"{NOTION_API}/pages",
             headers=headers, json=page_data, timeout=15
         )
-        return resp.status_code == 200
-    except Exception:
+        if resp.status_code == 200:
+            return True
+        else:
+            print(f"    [NOTION] Add failed ({resp.status_code}): {resp.text[:100]}")
+            return False
+    except Exception as e:
+        print(f"    [NOTION] Add error: {e}")
         return False
 
 
+def _parse_price(price_str):
+    """Parse price string to number. Returns 0 if unparseable."""
+    if not price_str:
+        return 0
+    try:
+        cleaned = str(price_str).replace('Rp', '').replace('Rp.', '')
+        cleaned = cleaned.replace('.', '').replace(',', '').strip()
+        return int(cleaned)
+    except (ValueError, TypeError):
+        return 0
+
+
 def update_all_notion_pages(yt_metadata_path, tt_metadata_path=None, fb_metadata_path=None):
-    """Update Notion pages for all accounts (YT_1-5, TT, FB)."""
-    print("=== Notion Link Updater (Per-Account) ===")
+    """Update single Notion database for all accounts (YT_1-5, TT, FB)."""
+    print("=== Notion Link Updater (Single Database) ===")
 
     headers = get_headers()
     if not headers:
@@ -151,119 +187,90 @@ def update_all_notion_pages(yt_metadata_path, tt_metadata_path=None, fb_metadata
         print("  To enable: add NOTION_API_KEY to GitHub Secrets")
         return
 
+    db_id = get_db_id()
+    if not db_id:
+        print("  [SKIP] NOTION_DB_ID not set. Skipping Notion update.")
+        print("  To enable: add NOTION_DB_ID to GitHub Secrets")
+        return
+
     today = datetime.datetime.now().strftime("%Y-%m-%d")
     total_added = 0
-    total_archived = 0
+
+    # Archive old entries (>7 days)
+    archived = archive_old_links(db_id, headers)
+    if archived:
+        print(f"  Archived {archived} old links (>7 days)")
 
     # ── YouTube Metadata → YT_1 through YT_5 ──
     if os.path.exists(yt_metadata_path):
         with open(yt_metadata_path, 'r', encoding='utf-8') as f:
             yt_meta = json.load(f)
 
-        # Group by account
-        by_account = {}
         for entry in yt_meta:
-            acct = entry.get('account_id', 'unknown')
-            if acct not in by_account:
-                by_account[acct] = []
-            by_account[acct].append(entry)
+            vtype = entry.get('video_type', 'short')
+            if vtype != 'long':
+                continue  # Only long-form gets Notion entry
 
-        for acct_id, entries in by_account.items():
-            db_id = get_db_id(acct_id)
-            if not db_id:
-                print(f"  [{acct_id}] No NOTION_DB configured, skipping")
-                continue
-
+            acct_id = entry.get('account_id', 'unknown')
             cat_label = get_label(acct_id)
-            print(f"  [{acct_id}] → {cat_label} (DB: {db_id[:8]}...)")
+            product_name = _extract_product_name(entry.get('title', ''))
+            shopee_url = _extract_shopee_url(entry.get('description', ''))
+            price = _extract_price(entry.get('description', ''))
 
-            # Archive old
-            archived = archive_old_links(db_id, headers)
-            if archived:
-                print(f"    Archived {archived} old links")
-            total_archived += archived
+            if add_product_to_db(db_id, headers, product_name, shopee_url,
+                                  price, acct_id, cat_label, today, vtype):
+                print(f"    [OK] {acct_id}: {product_name[:40]}")
+                total_added += 1
 
-            # Add today's products (Long only, avoid duplication)
-            seen = set()
-            for entry in entries:
-                vtype = entry.get('video_type', 'short')
-                if vtype != 'long':
-                    continue
-
-                product_name = _extract_product_name(entry.get('title', ''))
-                if product_name in seen:
-                    continue
-                seen.add(product_name)
-
-                shopee_url = _extract_shopee_url(entry.get('description', ''))
-                price = _extract_price(entry.get('description', ''))
-
-                if add_product_to_db(db_id, headers, product_name, shopee_url,
-                                     price, acct_id, cat_label, today, vtype):
-                    print(f"    [OK] {product_name[:40]}")
-                    total_added += 1
-                else:
-                    print(f"    [FAIL] {product_name[:40]}")
-
-    # ── TikTok Metadata → TT ──
+    # ── TikTok Metadata → tt_1 ──
     tt_path = tt_metadata_path or "engine/state/tt_metadata.json"
     if os.path.exists(tt_path):
-        db_id = get_db_id('tt_1')
-        if db_id:
-            with open(tt_path, 'r', encoding='utf-8') as f:
-                tt_meta = json.load(f)
+        with open(tt_path, 'r', encoding='utf-8') as f:
+            tt_meta = json.load(f)
 
-            print(f"\n  [tt_1] → TikTok (DB: {db_id[:8]}...)")
-            archived = archive_old_links(db_id, headers)
-            total_archived += archived
+        seen = set()
+        for entry in tt_meta:
+            if entry.get('video_type') == 'short':
+                continue
+            nama = entry.get('produk', '')
+            if nama in seen:
+                continue
+            seen.add(nama)
 
-            seen = set()
-            for entry in tt_meta:
-                if entry.get('video_type') == 'short':
-                    continue
-                nama = entry.get('produk', '')
-                if nama in seen:
-                    continue
-                seen.add(nama)
+            acct_id = entry.get('account_id', 'tt_1')
+            shopee = entry.get('shopee_url', '')
+            harga = entry.get('harga', '')
 
-                shopee = entry.get('shopee_url', '')
-                harga = entry.get('harga', '')
+            if add_product_to_db(db_id, headers, nama, shopee, harga,
+                                  acct_id, 'TikTok', today, 'long'):
+                print(f"    [OK] {acct_id}: {nama[:40]}")
+                total_added += 1
 
-                if add_product_to_db(db_id, headers, nama, shopee, harga,
-                                     'tt_1', 'TikTok', today, 'long'):
-                    print(f"    [OK] {nama[:40]}")
-                    total_added += 1
-
-    # ── Facebook Metadata → FB ──
+    # ── Facebook Metadata → fb_1 ──
     fb_path = fb_metadata_path or "engine/state/fb_metadata.json"
     if os.path.exists(fb_path):
-        db_id = get_db_id('fb_1')
-        if db_id:
-            with open(fb_path, 'r', encoding='utf-8') as f:
-                fb_meta = json.load(f)
+        with open(fb_path, 'r', encoding='utf-8') as f:
+            fb_meta = json.load(f)
 
-            print(f"\n  [fb_1] → Facebook (DB: {db_id[:8]}...)")
-            archived = archive_old_links(db_id, headers)
-            total_archived += archived
+        seen = set()
+        for entry in fb_meta:
+            if entry.get('video_type') == 'short':
+                continue
+            nama = entry.get('produk', '')
+            if nama in seen:
+                continue
+            seen.add(nama)
 
-            seen = set()
-            for entry in fb_meta:
-                if entry.get('video_type') == 'short':
-                    continue
-                nama = entry.get('produk', '')
-                if nama in seen:
-                    continue
-                seen.add(nama)
+            acct_id = entry.get('account_id', 'fb_1')
+            shopee = entry.get('shopee_url', '')
+            harga = entry.get('harga', '')
 
-                shopee = entry.get('shopee_url', '')
-                harga = entry.get('harga', '')
+            if add_product_to_db(db_id, headers, nama, shopee, harga,
+                                  acct_id, 'Facebook', today, 'long'):
+                print(f"    [OK] {acct_id}: {nama[:40]}")
+                total_added += 1
 
-                if add_product_to_db(db_id, headers, nama, shopee, harga,
-                                     'fb_1', 'Facebook', today, 'long'):
-                    print(f"    [OK] {nama[:40]}")
-                    total_added += 1
-
-    print(f"\n=== Notion Complete: {total_added} added, {total_archived} archived ===")
+    print(f"\n=== Notion Complete: {total_added} added, {archived} archived ===")
 
 
 def _extract_product_name(title):

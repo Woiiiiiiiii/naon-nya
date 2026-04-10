@@ -220,13 +220,7 @@ jobs:
       - name: Run full pipeline
         env:
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
-          NOTION_DB_YT_1: ${{ secrets.NOTION_DB_YT_1 }}
-          NOTION_DB_YT_2: ${{ secrets.NOTION_DB_YT_2 }}
-          NOTION_DB_YT_3: ${{ secrets.NOTION_DB_YT_3 }}
-          NOTION_DB_YT_4: ${{ secrets.NOTION_DB_YT_4 }}
-          NOTION_DB_YT_5: ${{ secrets.NOTION_DB_YT_5 }}
-          NOTION_DB_TT: ${{ secrets.NOTION_DB_TT }}
-          NOTION_DB_FB: ${{ secrets.NOTION_DB_FB }}
+          NOTION_DB_ID: ${{ secrets.NOTION_DB_ID }}
           FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}  # For music only (not images)
           # Gemini API keys (dedicated per channel)
