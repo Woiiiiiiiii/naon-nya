@@ -270,8 +270,13 @@ jobs:
           SMTP_USER: ${{ secrets.EMAIL_USERNAME }}
           SMTP_PASS: ${{ secrets.EMAIL_PASSWORD }}
           NOTIFY_EMAIL: ic31122025@gmail.com
-          # SEMENTARA: skip YT upload utk QC dulu
-          SKIP_YT_UPLOAD: 'true'
+          # YouTube OAuth (refresh token per account)
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN_1: ${{ secrets.YT_REFRESH_TOKEN_1 }}
+          YT_REFRESH_TOKEN_2: ${{ secrets.YT_REFRESH_TOKEN_2 }}
+          YT_REFRESH_TOKEN_3: ${{ secrets.YT_REFRESH_TOKEN_3 }}
+          YT_REFRESH_TOKEN_4: ${{ secrets.YT_REFRESH_TOKEN_4 }}
+          YT_REFRESH_TOKEN_5: ${{ secrets.YT_REFRESH_TOKEN_5 }}
         run: python run_pipeline.py full ${{ steps.slot.outputs.slot }}
 
       # Diagnostic: list all generated output files

@@ -3,31 +3,29 @@ youtube_upload.py
 Upload video ke YouTube via Data API v3.
 Mendukung 5 akun YouTube dengan credentials terpisah.
 
-Struktur credentials:
-  engine/config/
-    tokens/
-      yt_1_client_secret.json   <- OAuth credentials akun 1
-      yt_2_client_secret.json   <- OAuth credentials akun 2
-      yt_3_client_secret.json   <- OAuth credentials akun 3
-      yt_4_client_secret.json   <- OAuth credentials akun 4
-      yt_5_client_secret.json   <- OAuth credentials akun 5
-      yt_1.pickle               <- token (auto-generated after auth)
-      yt_2.pickle               <- dst...
+Authentication: Refresh Token (long-lived, stored in GitHub Secrets)
+  - No pickle files needed
+  - Refresh tokens don't expire unless revoked
+  - Clean secret management
+
+GitHub Secrets needed:
+  YT_CLIENT_SECRET     — OAuth client_secret.json content (shared)
+  YT_REFRESH_TOKEN_1   — Refresh token akun yt_1
+  YT_REFRESH_TOKEN_2   — Refresh token akun yt_2
+  ... sampai YT_REFRESH_TOKEN_5
 
 Setup per akun (1x saja, jalankan di lokal):
   python engine/modules/youtube_upload.py --auth yt_1
-  python engine/modules/youtube_upload.py --auth yt_2
-  ... dst sampai yt_5
+  → login → copy refresh token → paste ke GitHub Secret
 """
 import os
 import sys
 import json
-import pickle
 import datetime
+import tempfile
 
 # Paths
 CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', 'config')
-CLIENT_SECRET = os.path.join(CONFIG_DIR, 'client_secret.json')
 TOKENS_DIR = os.path.join(CONFIG_DIR, 'tokens')
 
 SCOPES = ['https://www.googleapis.com/auth/youtube.upload',
@@ -35,18 +33,40 @@ SCOPES = ['https://www.googleapis.com/auth/youtube.upload',
            'https://www.googleapis.com/auth/youtube.force-ssl']
 
 
-def get_token_path(account_id):
-    """Get token file path for specific account."""
-    return os.path.join(TOKENS_DIR, f'{account_id}.pickle')
+def _get_client_config():
+    """Get OAuth client config from env var or local file."""
+    # Priority 1: GitHub Secret (env var)
+    secret_json = os.environ.get('YT_CLIENT_SECRET', '')
+    if secret_json:
+        try:
+            return json.loads(secret_json)
+        except json.JSONDecodeError:
+            print("[WARN] YT_CLIENT_SECRET is not valid JSON")
+
+    # Priority 2: Per-account client_secret files (legacy)
+    shared_secret = os.path.join(CONFIG_DIR, 'client_secret.json')
+    if os.path.exists(shared_secret):
+        with open(shared_secret, 'r') as f:
+            return json.load(f)
+
+    return None
 
 
-def get_client_secret_path(account_id):
-    """Get client_secret path: per-account first, then shared fallback."""
-    acct_secret = os.path.join(TOKENS_DIR, f'{account_id}_client_secret.json')
-    if os.path.exists(acct_secret):
-        return acct_secret
-    if os.path.exists(CLIENT_SECRET):
-        return CLIENT_SECRET
+def _get_refresh_token(account_id):
+    """Get refresh token from env var or local file."""
+    acct_num = account_id.replace('yt_', '')
+
+    # Priority 1: GitHub Secret (env var)
+    token = os.environ.get(f'YT_REFRESH_TOKEN_{acct_num}', '')
+    if token:
+        return token
+
+    # Priority 2: Local token file
+    token_file = os.path.join(TOKENS_DIR, f'{account_id}_refresh_token.txt')
+    if os.path.exists(token_file):
+        with open(token_file, 'r') as f:
+            return f.read().strip()
+
     return None
 
 
@@ -54,7 +74,6 @@ def get_authenticated_service(account_id):
     """Authenticate and return YouTube API service for a specific account."""
     try:
         from google.oauth2.credentials import Credentials
-        from google_auth_oauthlib.flow import InstalledAppFlow
         from google.auth.transport.requests import Request
         from googleapiclient.discovery import build
     except ImportError:
@@ -62,42 +81,121 @@ def get_authenticated_service(account_id):
         print("  Run: pip install google-api-python-client google-auth-oauthlib")
         return None
 
-    token_path = get_token_path(account_id)
-    creds = None
+    client_config = _get_client_config()
+    if not client_config:
+        print(f"[WARN] No client_secret found for {account_id}")
+        return None
 
-    # Load token jika ada
-    if os.path.exists(token_path):
-        with open(token_path, 'rb') as token:
-            creds = pickle.load(token)
+    refresh_token = _get_refresh_token(account_id)
+    if not refresh_token:
+        print(f"[WARN] No refresh token for {account_id}")
+        print(f"  Run locally: python engine/modules/youtube_upload.py --auth {account_id}")
+        return None
 
-    # Refresh jika expired
-    if creds and creds.expired and creds.refresh_token:
-        try:
-            creds.refresh(Request())
-            with open(token_path, 'wb') as token:
-                pickle.dump(creds, token)
-        except Exception:
-            creds = None
+    # Extract client_id and client_secret from config
+    installed = client_config.get('installed', client_config.get('web', {}))
+    client_id = installed.get('client_id', '')
+    client_secret = installed.get('client_secret', '')
+    token_uri = installed.get('token_uri', 'https://oauth2.googleapis.com/token')
 
-    # Buat token baru jika belum ada
-    if not creds or not creds.valid:
-        secret_file = get_client_secret_path(account_id)
-        if not secret_file:
-            print(f"[WARN] No client_secret found for {account_id}")
-            print(f"  Expected: {TOKENS_DIR}/{account_id}_client_secret.json")
-            return None
+    # Create credentials from refresh token
+    creds = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri=token_uri,
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=SCOPES,
+    )
 
-        print(f"\n  [AUTH] Login untuk akun {account_id}...")
-        print(f"  Using: {os.path.basename(secret_file)}")
-        flow = InstalledAppFlow.from_client_secrets_file(secret_file, SCOPES)
-        creds = flow.run_local_server(port=0)
-
-        os.makedirs(TOKENS_DIR, exist_ok=True)
-        with open(token_path, 'wb') as token:
-            pickle.dump(creds, token)
-        print(f"  [OK] Token {account_id} saved!")
+    # Refresh to get fresh access token
+    try:
+        creds.refresh(Request())
+        print(f"  [{account_id}] Auth OK (refresh token)")
+    except Exception as e:
+        print(f"  [{account_id}] Auth FAILED: {e}")
+        print(f"  Token mungkin sudah di-revoke. Re-run: --auth {account_id}")
+        return None
 
     return build('youtube', 'v3', credentials=creds)
+
+
+def run_auth_flow(account_id):
+    """Run OAuth flow locally to get refresh token. 1x only per account."""
+    try:
+        from google_auth_oauthlib.flow import InstalledAppFlow
+    except ImportError:
+        print("Install: pip install google-auth-oauthlib")
+        return
+
+    client_config = _get_client_config()
+    if not client_config:
+        # Check per-account secret from env
+        acct_num = account_id.replace('yt_', '')
+        secret_json = os.environ.get(f'YT_CLIENT_SECRET_{acct_num}', '')
+        if secret_json:
+            try:
+                client_config = json.loads(secret_json)
+            except json.JSONDecodeError:
+                pass
+
+    if not client_config:
+        print("[ERROR] client_secret.json tidak ditemukan!")
+        print("  Taruh di: engine/config/client_secret.json")
+        print("  Atau set env: YT_CLIENT_SECRET='{...json...}'")
+        return
+
+    # Write temp file for InstalledAppFlow
+    tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+    json.dump(client_config, tmp)
+    tmp.close()
+
+    try:
+        print(f"\n=== YouTube Auth: {account_id} ===")
+        print(f"Browser akan terbuka — login ke akun YouTube untuk channel ini.")
+        print(f"Setelah login, klik 'Allow' untuk memberikan izin upload.\n")
+
+        flow = InstalledAppFlow.from_client_secrets_file(tmp.name, SCOPES)
+        creds = flow.run_local_server(port=0)
+
+        refresh_token = creds.refresh_token
+        if not refresh_token:
+            print("[ERROR] Tidak mendapat refresh token!")
+            print("  Coba revoke access di https://myaccount.google.com/permissions")
+            print("  Lalu jalankan --auth lagi.")
+            return
+
+        # Save locally
+        os.makedirs(TOKENS_DIR, exist_ok=True)
+        token_file = os.path.join(TOKENS_DIR, f'{account_id}_refresh_token.txt')
+        with open(token_file, 'w') as f:
+            f.write(refresh_token)
+
+        # Print for user to copy to GitHub Secrets
+        acct_num = account_id.replace('yt_', '')
+        print(f"\n{'='*60}")
+        print(f"✅ AUTH SUKSES untuk {account_id}!")
+        print(f"{'='*60}")
+        print(f"\nRefresh token tersimpan di: {token_file}")
+        print(f"\n📋 COPY refresh token di bawah ini ke GitHub Secret:")
+        print(f"   Secret name: YT_REFRESH_TOKEN_{acct_num}")
+        print(f"   Secret value:")
+        print(f"\n   {refresh_token}\n")
+        print(f"{'='*60}")
+
+        # Verify
+        try:
+            from googleapiclient.discovery import build
+            youtube = build('youtube', 'v3', credentials=creds)
+            ch = youtube.channels().list(part='snippet', mine=True).execute()
+            if ch.get('items'):
+                name = ch['items'][0]['snippet']['title']
+                print(f"🎬 Channel: {name}")
+        except Exception:
+            pass
+
+    finally:
+        os.unlink(tmp.name)
 
 
 def upload_video(youtube, filepath, title, description, tags, scheduled_time=None):
@@ -171,18 +269,16 @@ def pin_affiliate_comment(youtube, video_id, product_name, shopee_url, harga='')
         comment_id = comment_resp['id']
         print(f"   [OK] Comment posted: {comment_id}")
 
-        # Pin the comment (requires youtube.force_ssl scope which we have via youtube scope)
+        # Pin the comment
         try:
             youtube.comments().setModerationStatus(
                 id=comment_resp['snippet']['topLevelComment']['id'],
                 moderationStatus='heldForReview',
                 banAuthor=False
             )
-            # Note: YouTube API doesn't have a direct "pin" endpoint
-            # But posting as channel owner + first comment effectively makes it top comment
             print(f"   [OK] Comment is top comment (channel owner)")
         except Exception:
-            pass  # Pin not critical — first comment by owner is already prominent
+            pass  # Pin not critical
 
         return comment_id
 
@@ -192,28 +288,25 @@ def pin_affiliate_comment(youtube, video_id, product_name, shopee_url, harga='')
 
 
 def check_all_tokens():
-    """Check which accounts have valid tokens and client_secrets."""
+    """Check which accounts have valid refresh tokens."""
     accounts = [f'yt_{i}' for i in range(1, 6)]
     status = {}
     for acct in accounts:
-        token_path = get_token_path(acct)
-        secret_path = get_client_secret_path(acct)
-        has_token = os.path.exists(token_path)
-        has_secret = secret_path is not None
-
-        if has_token:
-            # Token exists — ready to upload (client_secret only needed for auth flow)
-            status[acct] = "ready (token found)"
-        elif has_secret and not has_token:
-            status[acct] = "need auth (secret found, run --auth)"
+        token = _get_refresh_token(acct)
+        if token:
+            status[acct] = "ready (refresh token found)"
         else:
-            status[acct] = "no credentials"
+            config = _get_client_config()
+            if config:
+                status[acct] = "need auth (client_secret found, run --auth)"
+            else:
+                status[acct] = "no credentials"
     return status
 
 
 def upload_youtube(video_dir, metadata_path):
     """Upload YouTube videos -- each video to its own account."""
-    print("=== YouTube Upload (Multi-Account) ===")
+    print("=== YouTube Upload (Multi-Account, Refresh Token) ===")
 
     yt_dir = os.path.join(video_dir, "yt")
     if not os.path.exists(yt_dir):
@@ -276,11 +369,11 @@ def upload_youtube(video_dir, metadata_path):
                     uploaded.append(path)
 
                     # Post pinned comment with affiliate link
-                    # Extract shopee_url from description (line starting with 🛒)
                     shopee_url = ''
                     product_name = meta.get('title', v).split('|')[0].strip()
-                    # Remove emoji from product name
-                    product_name = ''.join(c for c in product_name if ord(c) < 0x10000 and not (0x2600 <= ord(c) <= 0x27BF or 0x1F300 <= ord(c) <= 0x1F9FF))
+                    product_name = ''.join(c for c in product_name if ord(c) < 0x10000
+                                          and not (0x2600 <= ord(c) <= 0x27BF
+                                                   or 0x1F300 <= ord(c) <= 0x1F9FF))
                     product_name = product_name.strip()
                     for line in desc.split('\n'):
                         if 'shopee.co.id' in line:
@@ -294,20 +387,19 @@ def upload_youtube(video_dir, metadata_path):
             else:
                 print(f"   [FAIL] Auth failed for {acct}")
         else:
-            print(f"   [OK] Upload SUCCESS (simulated - {token_status.get(acct, 'unknown')})")
-            uploaded.append(path)
+            print(f"   [SKIP] No token for {acct} — run --auth {acct} locally")
 
     # Write uploaded list for cleanup
     uploaded_list_path = os.path.join(yt_dir, "_uploaded.json")
     with open(uploaded_list_path, 'w') as f:
         json.dump(uploaded, f, indent=2)
 
-    print(f"\n=== Upload complete: {len(uploaded)} videos ===")
+    print(f"\n=== Upload complete: {len(uploaded)}/{len(videos)} videos ===")
 
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="YouTube Multi-Account Uploader")
+    parser = argparse.ArgumentParser(description="YouTube Multi-Account Uploader (Refresh Token)")
     parser.add_argument('--auth', metavar='ACCOUNT_ID',
                        help='Setup auth for account (e.g. yt_1, yt_2, ...)')
     parser.add_argument('--status', action='store_true',
@@ -333,20 +425,7 @@ if __name__ == "__main__":
         if not acct.startswith('yt_'):
             print(f"[ERROR] Format: yt_1 sampai yt_5, got: {acct}")
             sys.exit(1)
-
-        print(f"=== YouTube Authentication: {acct} ===")
-        youtube = get_authenticated_service(acct)
-        if youtube:
-            print(f"\n[OK] Authentication {acct} successful!")
-            try:
-                ch = youtube.channels().list(part='snippet', mine=True).execute()
-                if ch.get('items'):
-                    name = ch['items'][0]['snippet']['title']
-                    print(f"[OK] Channel: {name}")
-            except Exception:
-                pass
-        else:
-            print(f"[FAIL] Authentication {acct} failed.")
+        run_auth_flow(acct)
         sys.exit(0)
 
     upload_youtube(
