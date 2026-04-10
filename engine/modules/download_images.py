@@ -134,8 +134,8 @@ def _isolate_product(img, img_path):
 def _save_image(img, img_path, min_target=1620):
     """Save image with AI background removal. Returns True if saved ok."""
     w, h = img.size
-    if w < 200 or h < 200:
-        return False  # Too small, reject
+    if w < 600 or h < 600:
+        return False  # Too small, will look pixelated at 1080x1920
     
     # AI background removal: isolate product, remove text/branding
     isolated = _isolate_product(img, img_path)
@@ -253,8 +253,12 @@ def _download_single_image(cdn_url):
             resp = proxy_get(cdn_url, headers=headers)
         else:
             resp = requests.get(cdn_url, timeout=10, headers=headers)
-        if resp.status_code == 200 and len(resp.content) > 5000:
-            return Image.open(BytesIO(resp.content)).convert('RGB')
+        if resp.status_code == 200 and len(resp.content) > 15000:
+            img = Image.open(BytesIO(resp.content)).convert('RGB')
+            # Reject tiny images that will look pixelated at 1080x1920
+            if img.size[0] >= 600 and img.size[1] >= 600:
+                return img
+            return None
     except Exception:
         pass
     return None
@@ -705,8 +709,8 @@ def _save_image_raw(img, img_path, min_target=1080):
     """Save image WITHOUT background removal (for slideshow).
     Keeps original seller image as-is."""
     w, h = img.size
-    if w < 200 or h < 200:
-        return False
+    if w < 600 or h < 600:
+        return False  # Too small, will look pixelated at 1080x1920
     img = img.convert('RGB')
     if w < min_target or h < min_target:
         scale = max(min_target / w, min_target / h)

@@ -442,15 +442,13 @@ def _auto_trim_whitespace(img_rgb):
 def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     """Place product image — STRETCH to fill ENTIRE frame. ZERO gaps.
 
-    Full quality enhancement pipeline:
+    Quality enhancement pipeline (tuned for 800px+ source images):
       1. Auto-trim white padding from Shopee images
       2. Detect image quality (blur, noise, low contrast)
-      3. Denoise low-quality source images
+      3. Denoise ONLY truly degraded source images
       4. Multi-step upscale (prevents blur on large scale ratios)
-      5. Adaptive sharpening (stronger for lower quality sources)
-      6. Auto-contrast + color normalization
-      → ALL images get standardized to HIGH quality
-      → Regardless of original source quality
+      5. Light adaptive sharpening (preserve natural look)
+      6. Gentle color normalization (no over-processing)
       → ZERO space, ZERO gaps, ZERO cropping
     """
     from PIL import ImageEnhance, ImageStat
@@ -466,19 +464,18 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     # Blur detection: low variance = blurry image
     gray = np.mean(arr, axis=2)
     laplacian_var = np.var(gray[1:, :] - gray[:-1, :])  # edge variance
-    is_blurry = laplacian_var < 300  # low edge contrast = blurry
+    is_blurry = laplacian_var < 150  # only truly blurry images
     # Contrast detection: narrow histogram = low contrast
     img_std = np.std(arr)
-    is_low_contrast = img_std < 45
-    # Resolution detection
-    is_small = src_w < 600 or src_h < 600
-    needs_heavy_enhance = is_blurry or is_low_contrast or is_small
+    is_low_contrast = img_std < 30  # only truly flat images
+    # Resolution detection — with min 800px gate, this rarely triggers
+    is_small = src_w < 400 or src_h < 400
+    needs_heavy_enhance = is_blurry and is_small  # BOTH must be true
 
-    # ── Step 3: Denoise low-quality source BEFORE upscaling ──
+    # ── Step 3: Denoise ONLY truly degraded source images ──
     work = img_trimmed
     if needs_heavy_enhance:
-        # Light denoise: smooth noise while keeping edges
-        # MedianFilter preserves edges better than GaussianBlur
+        # Only denoise if image is both small AND blurry
         work = work.filter(ImageFilter.MedianFilter(size=3))
 
     # ── Step 4: Multi-step upscale for quality ──
@@ -486,42 +483,40 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     scale_y = target_h / src_h
     max_scale = max(scale_x, scale_y)
 
-    if max_scale > 2.0:
-        # Step 1: intermediate size (2x original)
+    if max_scale > 2.5:
+        # Very large upscale: intermediate step to reduce artifacts
         mid_w = min(target_w, src_w * 2)
         mid_h = min(target_h, src_h * 2)
         product = work.resize((mid_w, mid_h), Image.LANCZOS)
         # Light sharpen at intermediate step
-        product = product.filter(ImageFilter.UnsharpMask(radius=1.0, percent=60, threshold=2))
-        # Step 2: final size
+        product = product.filter(ImageFilter.UnsharpMask(radius=1.0, percent=40, threshold=3))
+        # Final size
         product = product.resize((target_w, target_h), Image.LANCZOS)
     else:
         product = work.resize((target_w, target_h), Image.LANCZOS)
 
-    # ── Step 5: Adaptive sharpening ──
-    if needs_heavy_enhance or max_scale > 1.8:
-        # Low quality source or heavy upscale: strong sharpening
-        product = product.filter(ImageFilter.UnsharpMask(radius=2.0, percent=130, threshold=2))
-    elif max_scale > 1.3:
-        # Medium upscale: moderate sharpening
-        product = product.filter(ImageFilter.UnsharpMask(radius=1.5, percent=100, threshold=2))
-    else:
-        # Good quality, small upscale: light sharpening
-        product = product.filter(ImageFilter.UnsharpMask(radius=1.0, percent=60, threshold=2))
+    # ── Step 5: Light adaptive sharpening (preserve natural look) ──
+    if needs_heavy_enhance:
+        # Truly degraded source: moderate sharpening
+        product = product.filter(ImageFilter.UnsharpMask(radius=1.5, percent=80, threshold=3))
+    elif max_scale > 1.5:
+        # Noticeable upscale: light sharpening to restore detail
+        product = product.filter(ImageFilter.UnsharpMask(radius=1.0, percent=50, threshold=3))
+    # else: good quality source with small upscale — LANCZOS is enough, no extra sharpen
 
-    # ── Step 6: Auto-contrast + color standardization ──
-    # Bring ALL images to consistent brightness/contrast level
+    # ── Step 6: Gentle color normalization ──
     from PIL import ImageOps
-    product = ImageOps.autocontrast(product, cutoff=0.5)
+    # Very gentle autocontrast (just clip extremes, don't remap entire range)
+    product = ImageOps.autocontrast(product, cutoff=0.3)
 
-    # Boost contrast slightly (makes image "pop")
-    product = ImageEnhance.Contrast(product).enhance(1.10)
+    # Subtle contrast boost (makes image "pop" without washing out)
+    product = ImageEnhance.Contrast(product).enhance(1.05)
 
-    # Boost color saturation slightly (more vivid)
-    product = ImageEnhance.Color(product).enhance(1.08)
+    # Subtle color saturation boost (more vivid, not oversaturated)
+    product = ImageEnhance.Color(product).enhance(1.05)
 
-    # Final sharpness boost (perceived clarity)
-    product = ImageEnhance.Sharpness(product).enhance(1.20)
+    # NO extra Sharpness boost — already handled in step 5
+    # Double-sharpening was causing halo artifacts + unnatural look
 
     # Canvas = product itself (fills everything)
     canvas = product.copy()

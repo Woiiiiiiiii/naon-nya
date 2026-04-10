@@ -118,7 +118,7 @@ SEARCH_KEYWORDS = {
 }
 
 TARGET_PER_CATEGORY = 50  # 50 × 5 categories = 250 products max per run
-MIN_IMAGE_SIZE = 300      # Minimum image dimension
+MIN_IMAGE_SIZE = 800      # Minimum image dimension (prevent pixelated upscale to 1080x1920)
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36",
