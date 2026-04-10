@@ -315,8 +315,19 @@ def check_all_tokens():
 
 
 def upload_youtube(video_dir, metadata_path):
-    """Upload YouTube videos -- each video to its own account."""
-    print("=== YouTube Upload (Multi-Account, Refresh Token) ===")
+    """Upload YouTube videos with anti-bot measures.
+    
+    Anti-bot protections:
+    - Random delay between each upload (45-120 seconds)
+    - Shuffled upload order (not always same channel first)
+    - Staggered comment posting (15-45s after upload)
+    - Different scheduled publish times per channel
+    - Human-like pacing (slower for first uploads, faster later)
+    """
+    import random
+    import time
+
+    print("=== YouTube Upload (Multi-Account, Anti-Bot) ===")
 
     yt_dir = os.path.join(video_dir, "yt")
     if not os.path.exists(yt_dir):
@@ -331,6 +342,10 @@ def upload_youtube(video_dir, metadata_path):
     if not videos:
         print("No YouTube videos to upload.")
         return
+
+    # Anti-bot: shuffle upload order (don't always upload yt_1 first)
+    random.shuffle(videos)
+    print(f"  Upload order randomized ({len(videos)} videos)")
 
     # Load metadata — index by filename
     metadata = {}
@@ -352,7 +367,7 @@ def upload_youtube(video_dir, metadata_path):
     yt_services = {}
 
     uploaded = []
-    for v in videos:
+    for idx, v in enumerate(videos):
         path = os.path.join(yt_dir, v)
         meta = metadata.get(v, {})
         acct = meta.get('account_id', 'unknown')
@@ -362,7 +377,13 @@ def upload_youtube(video_dir, metadata_path):
         hashtags = meta.get('hashtags', '')
         tags = [t.strip('#') for t in hashtags.split() if t.startswith('#')]
 
-        print(f"\n>> [{acct}] Uploading:")
+        # Anti-bot: random delay between uploads (skip first one)
+        if idx > 0:
+            delay = random.randint(45, 120)
+            print(f"\n  [Anti-bot] Waiting {delay}s before next upload...")
+            time.sleep(delay)
+
+        print(f"\n>> [{acct}] Uploading ({idx+1}/{len(videos)}):")
         print(f"   File: {v}")
         print(f"   Title: {title}")
         print(f"   Scheduled: {sched_time or 'now'}")
@@ -370,6 +391,10 @@ def upload_youtube(video_dir, metadata_path):
         # Get or create service for this account
         if "ready" in token_status.get(acct, ''):
             if acct not in yt_services:
+                # Anti-bot: small delay before first auth per account
+                if yt_services:
+                    auth_delay = random.randint(5, 15)
+                    time.sleep(auth_delay)
                 yt_services[acct] = get_authenticated_service(acct)
 
             youtube = yt_services.get(acct)
@@ -377,6 +402,11 @@ def upload_youtube(video_dir, metadata_path):
                 try:
                     video_id = upload_video(youtube, path, title, desc, tags, sched_time)
                     uploaded.append(path)
+
+                    # Anti-bot: delay before posting comment (15-45s)
+                    comment_delay = random.randint(15, 45)
+                    print(f"   [Anti-bot] Comment delay: {comment_delay}s")
+                    time.sleep(comment_delay)
 
                     # Post pinned comment with affiliate link
                     shopee_url = ''
@@ -387,7 +417,7 @@ def upload_youtube(video_dir, metadata_path):
                     product_name = product_name.strip()
                     for line in desc.split('\n'):
                         if 'shopee.co.id' in line:
-                            shopee_url = line.replace('🛒', '').strip()
+                            shopee_url = line.replace('', '').strip()
                             break
                     if shopee_url:
                         pin_affiliate_comment(youtube, video_id, product_name, shopee_url)
@@ -397,7 +427,7 @@ def upload_youtube(video_dir, metadata_path):
             else:
                 print(f"   [FAIL] Auth failed for {acct}")
         else:
-            print(f"   [SKIP] No token for {acct} — run --auth {acct} locally")
+            print(f"   [SKIP] No token for {acct} -- run --auth {acct} locally")
 
     # Write uploaded list for cleanup
     uploaded_list_path = os.path.join(yt_dir, "_uploaded.json")

@@ -2,14 +2,14 @@ name: Affiliate Video Engine
 
 on:
   schedule:
-    # Pagi: 06:30 WIB = 23:30 UTC (prev day)
-    - cron: '30 23 * * *'
-    # Siang: 11:30 WIB = 04:30 UTC
-    - cron: '30 4 * * *'
-    # Sore: 15:30 WIB = 08:30 UTC
-    - cron: '30 8 * * *'
-    # Malam: 19:30 WIB = 12:30 UTC
-    - cron: '30 12 * * *'
+    # Pagi: random 06:00-07:00 WIB = 23:00-00:00 UTC
+    - cron: '0 23 * * *'
+    # Siang: random 11:00-12:00 WIB = 04:00-05:00 UTC
+    - cron: '0 4 * * *'
+    # Sore: random 15:00-16:00 WIB = 08:00-09:00 UTC
+    - cron: '0 8 * * *'
+    # Malam: random 19:00-20:00 WIB = 12:00-13:00 UTC
+    - cron: '0 12 * * *'
   workflow_dispatch:
     inputs:
       slot:
@@ -44,6 +44,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_PAT }}
+
+      # Anti-bot: random delay 0-15 minutes so uploads are never at exact same time
+      - name: Random startup delay (anti-bot)
+        if: github.event_name == 'schedule'
+        run: |
+          DELAY=$((RANDOM % 900))
+          echo "Anti-bot delay: ${DELAY}s ($((DELAY/60))m $((DELAY%60))s)"
+          sleep $DELAY
 
       - name: Setup Python 3.10
         uses: actions/setup-python@v5
