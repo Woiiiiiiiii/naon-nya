@@ -270,8 +270,12 @@ jobs:
           SMTP_USER: ${{ secrets.EMAIL_USERNAME }}
           SMTP_PASS: ${{ secrets.EMAIL_PASSWORD }}
           NOTIFY_EMAIL: ic31122025@gmail.com
-          # YouTube OAuth (refresh token per account)
-          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          # YouTube OAuth (per-account client_secret + refresh token)
+          YT_CLIENT_SECRET_1: ${{ secrets.YT_CLIENT_SECRET_1 }}
+          YT_CLIENT_SECRET_2: ${{ secrets.YT_CLIENT_SECRET_2 }}
+          YT_CLIENT_SECRET_3: ${{ secrets.YT_CLIENT_SECRET_3 }}
+          YT_CLIENT_SECRET_4: ${{ secrets.YT_CLIENT_SECRET_4 }}
+          YT_CLIENT_SECRET_5: ${{ secrets.YT_CLIENT_SECRET_5 }}
           YT_REFRESH_TOKEN_1: ${{ secrets.YT_REFRESH_TOKEN_1 }}
           YT_REFRESH_TOKEN_2: ${{ secrets.YT_REFRESH_TOKEN_2 }}
           YT_REFRESH_TOKEN_3: ${{ secrets.YT_REFRESH_TOKEN_3 }}

@@ -33,17 +33,36 @@ SCOPES = ['https://www.googleapis.com/auth/youtube.upload',
            'https://www.googleapis.com/auth/youtube.force-ssl']
 
 
-def _get_client_config():
-    """Get OAuth client config from env var or local file."""
-    # Priority 1: GitHub Secret (env var)
+def _get_client_config(account_id=None):
+    """Get OAuth client config from env var or local file.
+    Supports per-account secrets: YT_CLIENT_SECRET_1 through _5."""
+    acct_num = account_id.replace('yt_', '') if account_id else ''
+
+    # Priority 1: Per-account GitHub Secret (YT_CLIENT_SECRET_1, _2, etc.)
+    if acct_num:
+        secret_json = os.environ.get(f'YT_CLIENT_SECRET_{acct_num}', '')
+        if secret_json:
+            try:
+                return json.loads(secret_json)
+            except json.JSONDecodeError:
+                print(f"[WARN] YT_CLIENT_SECRET_{acct_num} is not valid JSON")
+
+    # Priority 2: Shared secret (YT_CLIENT_SECRET)
     secret_json = os.environ.get('YT_CLIENT_SECRET', '')
     if secret_json:
         try:
             return json.loads(secret_json)
         except json.JSONDecodeError:
-            print("[WARN] YT_CLIENT_SECRET is not valid JSON")
+            pass
 
-    # Priority 2: Per-account client_secret files (legacy)
+    # Priority 3: Per-account local file
+    if account_id:
+        acct_secret = os.path.join(TOKENS_DIR, f'{account_id}_client_secret.json')
+        if os.path.exists(acct_secret):
+            with open(acct_secret, 'r') as f:
+                return json.load(f)
+
+    # Priority 4: Shared local file
     shared_secret = os.path.join(CONFIG_DIR, 'client_secret.json')
     if os.path.exists(shared_secret):
         with open(shared_secret, 'r') as f:
@@ -81,7 +100,7 @@ def get_authenticated_service(account_id):
         print("  Run: pip install google-api-python-client google-auth-oauthlib")
         return None
 
-    client_config = _get_client_config()
+    client_config = _get_client_config(account_id)
     if not client_config:
         print(f"[WARN] No client_secret found for {account_id}")
         return None
@@ -128,16 +147,7 @@ def run_auth_flow(account_id):
         print("Install: pip install google-auth-oauthlib")
         return
 
-    client_config = _get_client_config()
-    if not client_config:
-        # Check per-account secret from env
-        acct_num = account_id.replace('yt_', '')
-        secret_json = os.environ.get(f'YT_CLIENT_SECRET_{acct_num}', '')
-        if secret_json:
-            try:
-                client_config = json.loads(secret_json)
-            except json.JSONDecodeError:
-                pass
+    client_config = _get_client_config(account_id)
 
     if not client_config:
         print("[ERROR] client_secret.json tidak ditemukan!")
