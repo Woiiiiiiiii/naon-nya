@@ -215,7 +215,7 @@ def render_frame(img_arr, t, category='home', pattern='chase',
     frame_h = fy2 - fy1
     perimeter = 2 * frame_w + 2 * frame_h
 
-    speed = 0.40          # loops per second (2.5s per full loop)
+    speed = 0.32          # loops per second (~3s per full loop)
     beam_length = perimeter * 0.45   # 45% of perimeter (panjang, sesuai referensi)
     num_segments = 150    # ultra-smooth rendering
 
