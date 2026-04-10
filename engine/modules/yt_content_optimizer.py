@@ -19,12 +19,52 @@ PATTERNS_FILE = os.path.join(STATE_DIR, 'success_patterns.json')
 
 
 def _get_yt_service(account_id):
-    """Build YouTube Data API service."""
-    token_path = os.path.join(TOKENS_DIR, f'{account_id}.pickle')
-    if not os.path.exists(token_path):
+    """Build YouTube Data API service using refresh token."""
+    try:
+        from google.oauth2.credentials import Credentials
+        from google.auth.transport.requests import Request
+        from googleapiclient.discovery import build
+    except ImportError:
         return None
-    with open(token_path, 'rb') as f:
-        creds = pickle.load(f)
+
+    acct_num = account_id.replace('yt_', '')
+    refresh_token = os.environ.get(f'YT_REFRESH_TOKEN_{acct_num}', '')
+    if not refresh_token:
+        token_file = os.path.join(TOKENS_DIR, f'{account_id}_refresh_token.txt')
+        if os.path.exists(token_file):
+            with open(token_file, 'r') as f:
+                refresh_token = f.read().strip()
+    if not refresh_token:
+        return None
+
+    client_config = None
+    secret_json = os.environ.get(f'YT_CLIENT_SECRET_{acct_num}', '')
+    if secret_json:
+        try:
+            client_config = json.loads(secret_json)
+        except json.JSONDecodeError:
+            pass
+    if not client_config:
+        local_secret = os.path.join(TOKENS_DIR, f'{account_id}_client_secret.json')
+        if os.path.exists(local_secret):
+            with open(local_secret, 'r') as f:
+                client_config = json.load(f)
+    if not client_config:
+        return None
+
+    installed = client_config.get('installed', client_config.get('web', {}))
+    creds = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri=installed.get('token_uri', 'https://oauth2.googleapis.com/token'),
+        client_id=installed.get('client_id', ''),
+        client_secret=installed.get('client_secret', ''),
+    )
+    try:
+        creds.refresh(Request())
+    except Exception:
+        return None
+
     return build('youtube', 'v3', credentials=creds)
 
 

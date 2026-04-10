@@ -123,8 +123,28 @@ def main():
             # Cleanup YT
             "python engine/modules/delete_after_upload.py"
         ])
+
+        # YT Maintenance: performance monitor + optimizer (sore slot only, bi-weekly)
+        import datetime
+        today = datetime.datetime.now()
+        is_monday = today.weekday() == 0
+        is_sore = slot_arg == 'sore'
+        week_num = today.isocalendar()[1]
+        is_biweekly = week_num % 2 == 0
+
+        if is_sore and is_monday and is_biweekly:
+            v5_steps.extend([
+                # Collect performance data from YouTube Analytics
+                "python engine/modules/yt_performance_monitor.py",
+                # Analyze and optimize underperforming videos
+                "python engine/modules/yt_performance_analyzer.py",
+                # Execute optimizations (title, tags, description refresh)
+                "python engine/modules/yt_content_optimizer.py",
+            ])
+            print("[MAINTENANCE] YT performance check + optimization scheduled")
+
     elif skip_upload:
-        print("[QC MODE] YT upload DILEWATI — video disimpan di artifacts untuk review")
+        print("[QC MODE] YT upload DILEWATI -- video disimpan di artifacts untuk review")
 
     pipeline = []
     checkpoints = {}  # step_index -> checkpoint config
