@@ -23,8 +23,9 @@ OPTIMIZE_COOLDOWN_DAYS = 14  # Don't re-optimize within 14 days
 
 def _load_json(path):
     if os.path.exists(path):
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        with open(path, 'r', encoding='utf-8-sig') as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
     return {}
 
 
@@ -62,7 +63,7 @@ def analyze_performance():
     new_tasks = []
 
     for account_id, videos in perf_data.items():
-        print(f"\n  📊 Analyzing: {account_id}")
+        print(f"\n  [ANALYZE] {account_id}")
 
         for video_id, vdata in videos.items():
             weeks = _get_latest_weeks(vdata)

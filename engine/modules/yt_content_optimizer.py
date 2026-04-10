@@ -6,9 +6,7 @@ Uses Gemini for generating improved titles/descriptions.
 """
 import os
 import json
-import pickle
 import datetime
-from googleapiclient.discovery import build
 
 STATE_DIR = os.path.join(os.path.dirname(__file__), '..', 'state')
 CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', 'config')
@@ -225,7 +223,7 @@ def execute_optimizations():
         metrics = task['metrics']
         title = task.get('title', '')
 
-        print(f"\n  🔧 {account}/{video_id}: {', '.join(actions)}")
+        print(f"\n  [OPT] {account}/{video_id}: {', '.join(actions)}")
 
         yt = _get_yt_service(account)
         if not yt:

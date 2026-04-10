@@ -7,9 +7,6 @@ Only analyzes videos older than 14 days.
 import os
 import json
 import datetime
-import pickle
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 
 STATE_DIR = os.path.join(os.path.dirname(__file__), '..', 'state')
 CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', 'config')
@@ -21,8 +18,9 @@ MIN_AGE_DAYS = 14  # Don't analyze videos younger than 14 days
 def _load_performance_data():
     """Load existing performance data."""
     if os.path.exists(PERF_FILE):
-        with open(PERF_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        with open(PERF_FILE, 'r', encoding='utf-8-sig') as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
     return {}
 
 
@@ -207,7 +205,7 @@ def collect_performance(accounts=None):
     cutoff = today - datetime.timedelta(days=MIN_AGE_DAYS)
 
     for acct in accounts:
-        print(f"\n  📊 Account: {acct}")
+        print(f"\n  [MONITOR] Account: {acct}")
         yt_data, yt_analytics = _get_yt_service(acct)
         if not yt_data:
             continue
