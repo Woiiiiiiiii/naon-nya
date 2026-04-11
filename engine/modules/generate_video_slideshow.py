@@ -42,7 +42,18 @@ from audio_normalizer import (
 )
 from sound_manager import init_sounds
 
+# Default: portrait (Shorts, TikTok, FB)
 W, H = 1080, 1920
+
+# Per-platform resolution:
+# YouTube Long = landscape 16:9 (agar TIDAK masuk Shorts)
+# Semua lainnya = portrait 9:16
+PLATFORM_RESOLUTION = {
+    'tt':       (1080, 1920),  # Portrait 9:16
+    'yt_short': (1080, 1920),  # Portrait 9:16 (Shorts)
+    'fb':       (1080, 1920),  # Portrait 9:16
+    'yt_long':  (1920, 1080),  # Landscape 16:9 (Long-form)
+}
 IMAGES_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'images')
 
 # Ken Burns directions to cycle through
@@ -303,7 +314,9 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
     platform = config['suffix'].strip('_')
     num_imgs = config['num_images']
 
-    print(f"  Rendering {platform} slideshow for {produk_id}...")
+    # Get platform-specific resolution
+    vid_w, vid_h = PLATFORM_RESOLUTION.get(platform, (W, H))
+    print(f"  Rendering {platform} slideshow for {produk_id} ({vid_w}x{vid_h})...")
 
     # Load images
     images_pil = _load_product_images(produk_id, num_imgs)
@@ -321,7 +334,7 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
     fitted = []
     bounds_list = []  # product_bounds per image
     for img in images_pil:
-        fitted_img, prod_bounds = fit_image_to_frame(img, W, H, bg_color=(15, 15, 20))
+        fitted_img, prod_bounds = fit_image_to_frame(img, vid_w, vid_h, bg_color=(15, 15, 20))
         fitted.append(np.array(fitted_img))
         bounds_list.append(prod_bounds)
 
@@ -348,7 +361,7 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
 
     def make_frame(t):
         # Find which segment we're in
-        frame = np.full((H, W, 3), 15, dtype=np.uint8)  # Dark fallback
+        frame = np.full((vid_h, vid_w, 3), 15, dtype=np.uint8)  # Dark fallback
 
         for seg in segments:
             if seg['start'] <= t < seg['end']:
