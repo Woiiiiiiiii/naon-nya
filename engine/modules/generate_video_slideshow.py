@@ -52,7 +52,7 @@ PLATFORM_RESOLUTION = {
     'tt':       (1080, 1920),  # Portrait 9:16
     'yt_short': (1080, 1920),  # Portrait 9:16 (Shorts)
     'fb':       (1080, 1920),  # Portrait 9:16
-    'yt_long':  (1080, 1920),  # Portrait 9:16 (same as shorts, but longer duration → regular video)
+    'yt_long':  (1920, 1080),  # Landscape 16:9 (YouTube Long standard)
 }
 IMAGES_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'images')
 
