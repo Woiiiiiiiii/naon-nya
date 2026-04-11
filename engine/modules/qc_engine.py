@@ -248,22 +248,13 @@ def run_qc(video_dir):
             height = int(v_stream['height'])
             duration = float(info['format']['duration'])
 
-            # Resolution Check — portrait 9:16 OR landscape 16:9 (yt_long)
-            is_long = '_yt_long' in filename
-            if is_long:
-                # Landscape 16:9
-                if width != 1920 or height != 1080:
-                    print(f"  [FAIL] Wrong resolution: {width}x{height} (expected 1920x1080 for yt_long)")
-                    failed.append(path)
-                    continue
-            else:
-                # Portrait 9:16
-                if width != 1080 or height != 1920:
-                    print(f"  [FAIL] Wrong resolution: {width}x{height} (expected 1080x1920)")
-                    failed.append(path)
-                    continue
+            # Resolution Check — all platforms use portrait 9:16
+            if width != 1080 or height != 1920:
+                print(f"  [FAIL] Wrong resolution: {width}x{height} (expected 1080x1920)")
+                failed.append(path)
+                continue
 
-            print(f"  [OK] Resolution: {width}x{height} ({'landscape' if is_long else 'portrait'})")
+            print(f"  [OK] Resolution: {width}x{height}")
 
             # Bitrate Quality Check
             # NOTE: Slideshow videos (static images) naturally have lower bitrate
