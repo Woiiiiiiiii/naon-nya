@@ -247,7 +247,12 @@ def upload_video(youtube, filepath, title, description, tags, scheduled_time=Non
 
     video_id = response.get('id', 'unknown')
     print(f"   [OK] Uploaded! Video ID: {video_id}")
-    print(f"   URL: https://youtube.com/shorts/{video_id}")
+    # Determine URL based on file path
+    is_long = '_yt_long' in os.path.basename(filepath)
+    if is_long:
+        print(f"   URL: https://youtube.com/watch?v={video_id}")
+    else:
+        print(f"   URL: https://youtube.com/shorts/{video_id}")
     return video_id
 
 

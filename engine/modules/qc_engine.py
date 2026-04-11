@@ -197,7 +197,7 @@ def run_qc(video_dir):
     # Per-platform duration rules (updated for slideshow format)
     # Slideshow = shorter than narrated video (no voiceover)
     DURATION_RULES = {
-        '_yt_long':  {'min': 45,  'max': 75,  'label': 'YT Long (50-70s)'},
+        '_yt_long':  {'min': 55,  'max': 85,  'label': 'YT Long (60-80s)'},
         '_yt':       {'min': 18,  'max': 35,  'label': 'YT Short (20-30s)'},
         '_tt_short': {'min': 10,  'max': 20,  'label': 'TT Short (15s)'},
         '_tt':       {'min': 18,  'max': 40,  'label': 'TT (20-35s)'},
@@ -248,13 +248,22 @@ def run_qc(video_dir):
             height = int(v_stream['height'])
             duration = float(info['format']['duration'])
 
-            # 9:16 Resolution Check
-            if width != 1080 or height != 1920:
-                print(f"  [FAIL] Wrong resolution: {width}x{height} (expected 1080x1920)")
-                failed.append(path)
-                continue
+            # Resolution Check — portrait 9:16 OR landscape 16:9 (yt_long)
+            is_long = '_yt_long' in filename
+            if is_long:
+                # Landscape 16:9
+                if width != 1920 or height != 1080:
+                    print(f"  [FAIL] Wrong resolution: {width}x{height} (expected 1920x1080 for yt_long)")
+                    failed.append(path)
+                    continue
+            else:
+                # Portrait 9:16
+                if width != 1080 or height != 1920:
+                    print(f"  [FAIL] Wrong resolution: {width}x{height} (expected 1080x1920)")
+                    failed.append(path)
+                    continue
 
-            print(f"  [OK] Resolution: {width}x{height}")
+            print(f"  [OK] Resolution: {width}x{height} ({'landscape' if is_long else 'portrait'})")
 
             # Bitrate Quality Check
             # NOTE: Slideshow videos (static images) naturally have lower bitrate
