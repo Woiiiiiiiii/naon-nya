@@ -440,10 +440,7 @@ def _auto_trim_whitespace(img_rgb):
 
 
 def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
-    """Place product image into frame.
-
-    Portrait (target_w < target_h): STRETCH to fill ENTIRE frame. ZERO gaps.
-    Landscape (target_w > target_h): FIT centered + blurred background on sides.
+    """Place product image — STRETCH to fill ENTIRE frame. ZERO gaps.
 
     Quality enhancement pipeline (tuned for 800px+ source images):
       1. Auto-trim white padding from Shopee images
@@ -452,6 +449,7 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
       4. Multi-step upscale (prevents blur on large scale ratios)
       5. Light adaptive sharpening (preserve natural look)
       6. Gentle color normalization (no over-processing)
+      → ZERO space, ZERO gaps, ZERO cropping
     """
     from PIL import ImageEnhance, ImageStat
 
@@ -479,61 +477,6 @@ def fit_image_to_frame(img_pil, target_w, target_h, bg_color=(15, 15, 20)):
     if needs_heavy_enhance:
         # Only denoise if image is both small AND blurry
         work = work.filter(ImageFilter.MedianFilter(size=3))
-
-    # ══════════════════════════════════════════════════════════════
-    #  LANDSCAPE MODE: FIT + BLUR BACKGROUND
-    #  Product centered at correct aspect ratio, no distortion
-    #  Sides filled with darkened blurred version of same image
-    # ══════════════════════════════════════════════════════════════
-    is_landscape = target_w > target_h
-
-    if is_landscape:
-        # ── Background: stretched + blurred + darkened ──
-        bg = work.resize((target_w, target_h), Image.LANCZOS)
-        bg = bg.filter(ImageFilter.GaussianBlur(radius=25))
-        bg = ImageEnhance.Brightness(bg).enhance(0.35)
-
-        # ── Product: FIT (maintain aspect ratio) ──
-        scale = min(target_w / src_w, target_h / src_h)
-        fit_w = int(src_w * scale)
-        fit_h = int(src_h * scale)
-
-        # Multi-step upscale if needed
-        max_scale = scale
-        if max_scale > 2.5:
-            mid_w = min(fit_w, src_w * 2)
-            mid_h = min(fit_h, src_h * 2)
-            product = work.resize((mid_w, mid_h), Image.LANCZOS)
-            product = product.filter(ImageFilter.UnsharpMask(radius=1.0, percent=40, threshold=3))
-            product = product.resize((fit_w, fit_h), Image.LANCZOS)
-        else:
-            product = work.resize((fit_w, fit_h), Image.LANCZOS)
-
-        # Sharpen
-        if needs_heavy_enhance:
-            product = product.filter(ImageFilter.UnsharpMask(radius=1.5, percent=80, threshold=3))
-        elif max_scale > 1.5:
-            product = product.filter(ImageFilter.UnsharpMask(radius=1.0, percent=50, threshold=3))
-
-        # Color normalize
-        from PIL import ImageOps
-        product = ImageOps.autocontrast(product, cutoff=0.3)
-        product = ImageEnhance.Contrast(product).enhance(1.05)
-        product = ImageEnhance.Color(product).enhance(1.05)
-
-        # Paste product centered on blur background
-        x_offset = (target_w - fit_w) // 2
-        y_offset = (target_h - fit_h) // 2
-        canvas = bg.copy()
-        canvas.paste(product, (x_offset, y_offset))
-
-        product_bounds = (x_offset, y_offset, x_offset + fit_w, y_offset + fit_h)
-        return canvas, product_bounds
-
-    # ══════════════════════════════════════════════════════════════
-    #  PORTRAIT MODE: STRETCH to fill ENTIRE frame (UNCHANGED)
-    #  → ZERO space, ZERO gaps, ZERO cropping
-    # ══════════════════════════════════════════════════════════════
 
     # ── Step 4: Multi-step upscale for quality ──
     scale_x = target_w / src_w

@@ -52,7 +52,7 @@ PLATFORM_RESOLUTION = {
     'tt':       (1080, 1920),  # Portrait 9:16
     'yt_short': (1080, 1920),  # Portrait 9:16 (Shorts)
     'fb':       (1080, 1920),  # Portrait 9:16
-    'yt_long':  (1920, 1080),  # Landscape 16:9 (YouTube Long standard)
+    'yt_long':  (1920, 1080),  # Landscape 16:9 (Long-form)
 }
 IMAGES_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'images')
 
@@ -89,7 +89,7 @@ PLATFORM_CONFIG = {
     },
     'yt_long': {
         'num_images': 4,
-        'slide_duration': 7.5,
+        'slide_duration': 6.5,
         'transition_duration': 1.0,
         'passes': 2,  # 2 full passes with different transitions
         'output_subdir': 'yt',
@@ -473,7 +473,7 @@ def _render_slideshow(produk_id, category, config, output_path, music_dir,
             os.remove(output_path)
             return False
         print(f"    [OK] {os.path.basename(output_path)} ({total_dur:.0f}s, {size_mb:.1f}MB)")
-        print(f"    [QC] Resolution: {vid_w}x{vid_h}, FPS: 30, Codec: H.264 High")
+        print(f"    [QC] Resolution: {W}x{H}, FPS: 30, Codec: H.264 High")
         return True
     else:
         print(f"    [QC-FAIL] Output file not created!")
