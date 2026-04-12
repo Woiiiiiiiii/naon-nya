@@ -239,6 +239,14 @@ jobs:
           GEMINI_API_KEY_5: ${{ secrets.GEMINI_API_KEY_5 }}
           GEMINI_API_KEY_6: ${{ secrets.GEMINI_API_KEY_6 }}
           GEMINI_API_KEY_7: ${{ secrets.GEMINI_API_KEY_7 }}
+          # TinyURL API keys (dedicated per channel for URL shortening)
+          TINYURL_API_KEY_1: ${{ secrets.TINYURL_API_KEY_1 }}
+          TINYURL_API_KEY_2: ${{ secrets.TINYURL_API_KEY_2 }}
+          TINYURL_API_KEY_3: ${{ secrets.TINYURL_API_KEY_3 }}
+          TINYURL_API_KEY_4: ${{ secrets.TINYURL_API_KEY_4 }}
+          TINYURL_API_KEY_5: ${{ secrets.TINYURL_API_KEY_5 }}
+          TINYURL_API_KEY_6: ${{ secrets.TINYURL_API_KEY_6 }}
+          TINYURL_API_KEY_7: ${{ secrets.TINYURL_API_KEY_7 }}
           # HuggingFace API keys (dual per channel: _1+_8, _2+_9, ..., _7+_14)
           HF_API_KEY_1: ${{ secrets.HF_API_KEY_1 }}
           HF_API_KEY_2: ${{ secrets.HF_API_KEY_2 }}
