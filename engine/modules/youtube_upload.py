@@ -414,23 +414,26 @@ def upload_youtube(video_dir, metadata_path):
                     time.sleep(comment_delay)
 
                     # Post pinned comment with affiliate link
-                    shopee_url = ''
-                    product_name = meta.get('title', v).split('|')[0].strip()
+                    shopee_url = meta.get('shopee_url', '')
+                    product_name = meta.get('produk', '') or meta.get('title', v).split('|')[0].strip()
                     product_name = ''.join(c for c in product_name if ord(c) < 0x10000
                                           and not (0x2600 <= ord(c) <= 0x27BF
                                                    or 0x1F300 <= ord(c) <= 0x1F9FF))
                     product_name = product_name.strip()
-                    for line in desc.split('\n'):
-                        if 'shopee.co.id' in line or 'tinyurl.com' in line:
-                            # Extract URL: find https:// onwards
-                            url_start = line.find('https://')
-                            if url_start >= 0:
-                                shopee_url = line[url_start:].strip()
-                            else:
-                                shopee_url = line.strip()
-                            break
+                    harga = meta.get('harga', '')
+
+                    # Fallback: extract URL from description if not in metadata
+                    if not shopee_url:
+                        for line in desc.split('\n'):
+                            if 'shopee.co.id' in line or 'tinyurl.com' in line:
+                                url_start = line.find('https://')
+                                if url_start >= 0:
+                                    shopee_url = line[url_start:].strip()
+                                else:
+                                    shopee_url = line.strip()
+                                break
                     if shopee_url:
-                        pin_affiliate_comment(youtube, video_id, product_name, shopee_url)
+                        pin_affiliate_comment(youtube, video_id, product_name, shopee_url, harga)
 
                 except Exception as e:
                     print(f"   [FAIL] Upload error: {e}")
