@@ -38,11 +38,53 @@ BANK_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'product_bank')
 TARGET_PER_CATEGORY = 25
 
 CATEGORIES = {
-    'fashion': ['tas', 'sepatu', 'jam tangan'],
-    'gadget': ['earphone', 'powerbank', 'smartwatch'],
-    'beauty': ['skincare', 'serum', 'sunscreen'],
-    'home': ['lampu', 'organizer', 'vacuum'],
-    'wellness': ['vitamin', 'botol minum', 'olahraga'],
+    'fashion': [
+        'tas selempang', 'sepatu sneakers', 'jam tangan pria', 'dompet kulit',
+        'topi bucket hat', 'kacamata hitam', 'gelang titanium', 'ikat pinggang',
+        'jaket hoodie', 'kaos polos premium', 'celana cargo', 'sandal slide',
+        'backpack ransel', 'sling bag wanita', 'tote bag kanvas',
+        'kemeja flannel', 'cardigan rajut', 'cincin couple', 'anting mutiara',
+        'scarf satin', 'dress casual', 'rok plisket', 'celana kulot',
+        'sepatu boots', 'tas pinggang',
+    ],
+    'gadget': [
+        'earphone bluetooth', 'powerbank fast charging', 'smartwatch murah',
+        'TWS wireless', 'mouse wireless', 'keyboard mechanical', 'USB hub',
+        'ring light selfie', 'phone holder', 'speaker bluetooth mini',
+        'charger fast charging', 'kabel data type C', 'tripod hp',
+        'webcam HD', 'flash drive 64GB', 'cooling pad laptop',
+        'headset gaming', 'smart plug wifi', 'card reader', 'gimbal hp',
+        'screen protector', 'tablet stand', 'LED strip', 'MiFi portable',
+        'action camera mini',
+    ],
+    'beauty': [
+        'skincare korea', 'serum vitamin C', 'sunscreen SPF 50', 'moisturizer',
+        'toner wajah', 'lip tint', 'mascara waterproof', 'foundation cushion',
+        'bedak tabur', 'micellar water', 'eye cream', 'sheet mask',
+        'body lotion', 'parfum wanita', 'sabun muka', 'blush on',
+        'concealer', 'setting spray', 'lip balm', 'hair serum',
+        'vitamin rambut', 'beauty blender', 'brush makeup set',
+        'nail art set', 'eyeliner pen',
+    ],
+    'home': [
+        'lampu tidur LED', 'organizer laci', 'vacuum cleaner mini',
+        'rak buku kayu', 'dispenser sabun', 'gantungan baju', 'kotak penyimpanan',
+        'jam dinding minimalis', 'bantal sofa', 'karpet bulu', 'teko listrik',
+        'tempat tissue', 'pot tanaman hias', 'cermin rias', 'selimut fleece',
+        'sarung bantal', 'tirai kamar', 'humidifier', 'air purifier',
+        'set alat makan', 'panci set', 'wajan anti lengket', 'talenan kayu',
+        'pisau dapur set', 'blender mini portable',
+    ],
+    'wellness': [
+        'vitamin C 1000mg', 'botol minum tumbler', 'alat olahraga rumah',
+        'matras yoga', 'resistance band', 'skipping rope adjustable',
+        'dumbbell set', 'hand grip', 'shaker protein', 'masker KN95',
+        'termometer digital', 'tensimeter digital', 'essential oil',
+        'diffuser aromaterapi', 'alat pijat elektrik', 'posture corrector',
+        'knee support', 'foam roller', 'sarung tangan gym', 'kaos olahraga',
+        'celana training', 'timbangan badan digital', 'suplemen fitness',
+        'koyo pereda nyeri', 'kacamata anti blue light',
+    ],
 }
 
 
