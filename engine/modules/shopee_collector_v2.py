@@ -596,19 +596,179 @@ def _gen_id(name, cat):
     return hashlib.md5(f"{cat}_{name}".lower().encode()).hexdigest()[:12]
 
 
+# ═══════════════════════════════════════════════════════════════════
+#  IMAGE QUALITY GATE — only high-quality seller images enter bank
+# ═══════════════════════════════════════════════════════════════════
+MIN_IMAGE_SIZE = 500       # Minimum 500×500 pixels
+MIN_ASPECT_RATIO = 0.3     # Reject extremely narrow images
+MAX_ASPECT_RATIO = 3.0     # Reject extremely tall images
+MIN_CLEAN_SCORE = 25       # Minimum cleanliness score (text/watermark penalty)
+MIN_BLUR_SCORE = 30        # Minimum sharpness (Laplacian variance)
+
+
+def _score_image_quality(img):
+    """Score image quality for product bank. Returns (score, reasons).
+
+    Checks:
+      - Resolution: min 500×500
+      - Aspect ratio: 0.3 - 3.0 (reject extremely elongated)
+      - Blur detection: Laplacian variance (reject blurry review photos)
+      - Cleanliness: penalize text overlays, busy graphics, promo bands
+
+    Returns: (total_score: float, reject_reasons: list[str])
+      Score > 25 = acceptable for product bank
+      Score < 25 = rejected (review photo, screenshot, or low quality)
+    """
+    import numpy as np
+    w, h = img.size
+    reasons = []
+    score = 50.0
+
+    # 1. Resolution check
+    if w < MIN_IMAGE_SIZE or h < MIN_IMAGE_SIZE:
+        reasons.append(f'too_small({w}x{h})')
+        return 0, reasons
+
+    # 2. Aspect ratio check
+    ratio = w / h
+    if ratio < MIN_ASPECT_RATIO or ratio > MAX_ASPECT_RATIO:
+        reasons.append(f'bad_ratio({ratio:.2f})')
+        return 0, reasons
+
+    # 3. Blur detection (Laplacian variance)
+    try:
+        gray = img.convert('L')
+        gray_arr = np.array(gray, dtype=np.float64)
+        # Laplacian kernel approximation
+        lap = (
+            gray_arr[2:, 1:-1] + gray_arr[:-2, 1:-1] +
+            gray_arr[1:-1, 2:] + gray_arr[1:-1, :-2] -
+            4 * gray_arr[1:-1, 1:-1]
+        )
+        blur_var = lap.var()
+        if blur_var < 5:
+            reasons.append(f'very_blurry({blur_var:.0f})')
+            return 0, reasons  # Immediate reject — completely blurry
+        elif blur_var < MIN_BLUR_SCORE:
+            reasons.append(f'blurry({blur_var:.0f})')
+            score -= 45  # Heavy penalty
+        elif blur_var > 200:
+            score += 10  # Very sharp = good
+    except Exception:
+        pass
+
+    # 4. Cleanliness score (adapted from download_images.py)
+    try:
+        data = np.array(img)
+
+        # 4a. Edge density — high = lots of text/graphics
+        brightness = data.mean(axis=2).astype(np.uint8)
+        edge_h = np.abs(brightness[1:, :].astype(int) - brightness[:-1, :].astype(int))
+        edge_v = np.abs(brightness[:, 1:].astype(int) - brightness[:, :-1].astype(int))
+        edge_ratio = ((edge_h > 40).sum() + (edge_v > 40).sum()) / (h * w)
+
+        if edge_ratio > 0.20:
+            score -= 40
+            reasons.append('text_heavy')
+        elif edge_ratio > 0.12:
+            score -= 25
+            reasons.append('text_likely')
+        elif edge_ratio < 0.04:
+            score += 15  # Very clean
+
+        # 4b. White/light background percentage
+        white_pct = (brightness > 230).sum() / (h * w)
+        score += white_pct * 30  # Clean white bg = good
+
+        # 4c. Promo band detection — top/bottom 20%
+        for band in [data[:h // 5, :, :], data[-h // 5:, :, :]]:
+            band_edge = np.abs(band[1:, :, :].astype(int) - band[:-1, :, :].astype(int))
+            if band_edge.mean() > 18:
+                score -= 15
+                reasons.append('promo_band')
+                break
+
+        # 4d. Border uniformity — uniform = clean product photo
+        border = min(15, h // 20, w // 20)
+        for strip in [data[:border], data[-border:], data[:, :border], data[:, -border:]]:
+            if strip.std() < 15:
+                score += 8  # Uniform border = clean bg
+    except Exception:
+        pass
+
+    return round(max(0, score), 1), reasons
+
+
 def _download_image(url, path):
+    """Download image and validate quality before saving."""
     try:
         resp = requests.get(url, timeout=15, headers={
             'User-Agent': 'Mozilla/5.0 Chrome/146.0.0.0',
             'Referer': 'https://shopee.co.id/',
         })
-        if resp.status_code == 200 and len(resp.content) >= 1000:
-            with open(path, 'wb') as f:
-                f.write(resp.content)
-            return True
+        if resp.status_code != 200 or len(resp.content) < 5000:
+            return False
+
+        from PIL import Image as PILImage
+        from io import BytesIO
+        img = PILImage.open(BytesIO(resp.content)).convert('RGB')
+
+        # Quality gate
+        score, reasons = _score_image_quality(img)
+        if score < MIN_CLEAN_SCORE:
+            return False
+
+        img.save(path, 'JPEG', quality=95)
+        return True
     except Exception:
         pass
     return False
+
+
+def _download_best_image(image_hashes, path):
+    """Try ALL image hashes from product listing, pick the BEST that passes QC.
+
+    Shopee products have 5-9 images. Image #1 is often the marketing image
+    (full of text, promo graphics). Later images are usually cleaner studio shots.
+    We score all, pick the highest-scoring one that passes the minimum threshold.
+
+    Returns: (success: bool, score: float)
+    """
+    if not image_hashes:
+        return False, 0
+
+    from PIL import Image as PILImage
+    from io import BytesIO
+
+    best_img = None
+    best_score = -1
+    best_idx = -1
+
+    for idx, img_hash in enumerate(image_hashes[:6]):  # Max 6 images
+        if not img_hash:
+            continue
+        cdn_url = f'https://cf.shopee.co.id/file/{img_hash}'
+        try:
+            resp = requests.get(cdn_url, timeout=10, headers={
+                'User-Agent': 'Mozilla/5.0 Chrome/146.0.0.0',
+                'Referer': 'https://shopee.co.id/',
+            })
+            if resp.status_code != 200 or len(resp.content) < 5000:
+                continue
+            img = PILImage.open(BytesIO(resp.content)).convert('RGB')
+            score, reasons = _score_image_quality(img)
+            if score >= MIN_CLEAN_SCORE and score > best_score:
+                best_score = score
+                best_img = img
+                best_idx = idx
+        except Exception:
+            continue
+
+    if best_img is not None:
+        best_img.save(path, 'JPEG', quality=95)
+        return True, best_score
+
+    return False, 0
 
 
 def _affiliate_url(url):
@@ -750,15 +910,30 @@ def collect(categories=None, target=None):
                 if os.path.exists(os.path.join(product_dir, 'image.jpg')):
                     continue
 
-                # Download image
+                # Download image — try ALL hashes, pick BEST quality
                 os.makedirs(product_dir, exist_ok=True)
                 img_path = os.path.join(product_dir, 'image.jpg')
 
-                if not _download_image(detail['image_url'], img_path):
+                # Try all image hashes (prefer clean studio shots over promo graphics)
+                all_hashes = detail.get('all_image_hashes', [])
+                img_ok = False
+                img_score = 0
+
+                if all_hashes:
+                    img_ok, img_score = _download_best_image(all_hashes, img_path)
+
+                # Fallback: try single image_url if no hashes available
+                if not img_ok:
+                    img_ok = _download_image(detail['image_url'], img_path)
+
+                if not img_ok:
                     try:
-                        os.rmdir(product_dir)
-                    except OSError:
+                        import shutil
+                        shutil.rmtree(product_dir, ignore_errors=True)
+                    except Exception:
                         pass
+                    if collected == 0 and i < 5:
+                        print(f"    [QC-REJECT] {detail['name'][:40]} — no quality image")
                     continue
 
                 # Build affiliate URL
