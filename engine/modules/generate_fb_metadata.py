@@ -165,6 +165,12 @@ def generate_fb_metadata(fb_queue, produk_csv, output_dir):
                 _q = {k: v[0] for k, v in parse_qs(_p.query, keep_blank_values=True).items()
                       if k != 'gads_t_sig'}
                 shopee_url = urlunparse(_p._replace(query=urlencode(_q)))
+            # Shorten URL for clickable links
+            try:
+                from url_shortener import shorten_url
+                shopee_url = shorten_url(str(shopee_url), account_id=acct_id)
+            except ImportError:
+                pass
 
             # Random template
             template = random.choice(FB_TEMPLATES)
