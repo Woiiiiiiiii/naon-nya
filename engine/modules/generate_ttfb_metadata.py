@@ -62,6 +62,13 @@ def generate_ttfb_metadata(tt_queue, fb_queue, produk_csv, output_dir):
                 desc = prod_data['deskripsi_singkat']
                 harga = prod_data.get('harga', '') if 'harga' in prod_data.index else ''
                 shopee_url = prod_data['shopee_url'] if 'shopee_url' in prod_data.index else ''
+                # Clean long gads_t_sig tracking param
+                if shopee_url and 'gads_t_sig' in str(shopee_url):
+                    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+                    _p = urlparse(str(shopee_url))
+                    _q = {k: v[0] for k, v in parse_qs(_p.query, keep_blank_values=True).items()
+                          if k != 'gads_t_sig'}
+                    shopee_url = urlunparse(_p._replace(query=urlencode(_q)))
 
                 # Combine trending + category hashtags (max 10)
                 all_hashtags = TT_TRENDING + [h for h in tt_cat_hashtags if h not in TT_TRENDING]
@@ -137,6 +144,13 @@ def generate_ttfb_metadata(tt_queue, fb_queue, produk_csv, output_dir):
                 desc = prod_data['deskripsi_singkat']
                 harga = prod_data.get('harga', '') if 'harga' in prod_data.index else ''
                 shopee_url = prod_data['shopee_url'] if 'shopee_url' in prod_data.index else ''
+                # Clean long gads_t_sig tracking param
+                if shopee_url and 'gads_t_sig' in str(shopee_url):
+                    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+                    _p = urlparse(str(shopee_url))
+                    _q = {k: v[0] for k, v in parse_qs(_p.query, keep_blank_values=True).items()
+                          if k != 'gads_t_sig'}
+                    shopee_url = urlunparse(_p._replace(query=urlencode(_q)))
 
                 post_text = f"""🎯 {nama}
 

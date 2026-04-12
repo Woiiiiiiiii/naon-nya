@@ -629,13 +629,34 @@ def _generate_product_id(name, category):
     return f"{prefix}{h}"
 
 
-def _to_affiliate_url(url):
-    """Convert any Shopee URL to affiliate link using AFFILIATE_ID_SHOPEE."""
-    aff_id = os.environ.get('AFFILIATE_ID_SHOPEE', '')
-    if not aff_id or not url:
-        return url  # keep original if no affiliate ID
+def _clean_shopee_url(url):
+    """Strip gads_t_sig from Shopee URL — makes URL clickable on YouTube.
 
-    # Already an affiliate link? keep it
+    gads_t_sig adds 200+ chars of encrypted tracking data.
+    Affiliate commission still tracked via utm_source=an_XXXXX.
+    """
+    if not url or 'gads_t_sig' not in url:
+        return url
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    parsed = urlparse(url)
+    params = {k: v[0] for k, v in parse_qs(parsed.query, keep_blank_values=True).items()
+              if k != 'gads_t_sig'}
+    return urlunparse(parsed._replace(query=urlencode(params)))
+
+
+def _to_affiliate_url(url):
+    """Convert any Shopee URL to clean affiliate link using AFFILIATE_ID_SHOPEE."""
+    aff_id = os.environ.get('AFFILIATE_ID_SHOPEE', '')
+    if not url:
+        return url
+
+    # Strip gads_t_sig first (300+ char tracking blob)
+    url = _clean_shopee_url(url)
+
+    if not aff_id:
+        return url
+
+    # Already an affiliate link? return cleaned version
     if 'utm_source=an_' in url or 'affiliate' in url:
         return url
 
