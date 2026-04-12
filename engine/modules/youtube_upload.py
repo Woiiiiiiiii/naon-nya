@@ -421,7 +421,7 @@ def upload_youtube(video_dir, metadata_path):
                                                    or 0x1F300 <= ord(c) <= 0x1F9FF))
                     product_name = product_name.strip()
                     for line in desc.split('\n'):
-                        if 'shopee.co.id' in line:
+                        if 'shopee.co.id' in line or 'tinyurl.com' in line:
                             # Extract URL: find https:// onwards
                             url_start = line.find('https://')
                             if url_start >= 0:
