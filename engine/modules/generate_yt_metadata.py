@@ -104,7 +104,7 @@ def generate_metadata(yt_queue, produk_csv, output_dir):
         prod_data = df_produk[df_produk['produk_id'] == produk_id].iloc[0]
         nama = prod_data['nama']
         desc = prod_data['deskripsi_singkat']
-        harga = prod_data.get('harga', '') if 'harga' in prod_data.index else ''
+        harga = prod_data.get('price', '') if 'price' in prod_data.index else ''
         shopee_url = prod_data['shopee_url'] if 'shopee_url' in prod_data.index else ''
         # Clean long gads_t_sig tracking param — makes URL clickable on YouTube
         if shopee_url and 'gads_t_sig' in str(shopee_url):
@@ -205,6 +205,9 @@ Harga: {harga}
             'hashtags': ' '.join(cat_hashtags[:8]),
             'video_type': video_type,
             'category': category,
+            'harga': str(harga),
+            'shopee_url': str(shopee_url),
+            'produk': nama,
         })
 
         # For Long slots, also create metadata for the auto-extracted Shorts

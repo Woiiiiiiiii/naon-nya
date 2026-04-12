@@ -166,12 +166,25 @@ def add_product_to_db(db_id, headers, product_name, shopee_url, price,
 
 
 def _parse_price(price_str):
-    """Parse price string to number. Returns 0 if unparseable."""
+    """Parse price string to number. Returns 0 if unparseable.
+    
+    Handles formats:
+      'Rp60.800'     → 60800
+      'Rp 1.250.000' → 1250000
+      'Rp25000'      → 25000
+      '60800'        → 60800
+      'Lihat di Shopee' → 0
+    """
     if not price_str:
         return 0
     try:
-        cleaned = str(price_str).replace('Rp', '').replace('Rp.', '')
+        cleaned = str(price_str)
+        # Remove Rp prefix and whitespace
+        cleaned = cleaned.replace('Rp.', '').replace('Rp', '').strip()
+        # Indonesian format uses dots as thousands separator
         cleaned = cleaned.replace('.', '').replace(',', '').strip()
+        if not cleaned or not cleaned.isdigit():
+            return 0
         return int(cleaned)
     except (ValueError, TypeError):
         return 0
@@ -213,9 +226,9 @@ def update_all_notion_pages(yt_metadata_path, tt_metadata_path=None, fb_metadata
 
             acct_id = entry.get('account_id', 'unknown')
             cat_label = get_label(acct_id)
-            product_name = _extract_product_name(entry.get('title', ''))
-            shopee_url = _extract_shopee_url(entry.get('description', ''))
-            price = _extract_price(entry.get('description', ''))
+            product_name = entry.get('produk', '') or _extract_product_name(entry.get('title', ''))
+            shopee_url = entry.get('shopee_url', '') or _extract_shopee_url(entry.get('description', ''))
+            price = entry.get('harga', '') or _extract_price(entry.get('description', ''))
 
             if add_product_to_db(db_id, headers, product_name, shopee_url,
                                   price, acct_id, cat_label, today, vtype):
@@ -292,10 +305,15 @@ def _extract_shopee_url(desc):
 
 
 def _extract_price(desc):
-    """Extract price from description."""
+    """Extract price from description (fallback if not in metadata)."""
     for line in desc.split('\n'):
-        if '💰' in line:
-            return line.replace('💰', '').replace('Harga:', '').strip()
+        line_clean = line.strip()
+        # Match: 💰 Harga: Rp60.800 | Harga: Rp60.800 | 💰 Rp60.800
+        if '💰' in line_clean or 'Harga:' in line_clean or 'harga:' in line_clean:
+            # Remove labels
+            price = line_clean.replace('💰', '').replace('Harga:', '').replace('harga:', '').strip()
+            if price:
+                return price
     return ''
 
 

@@ -60,7 +60,7 @@ def generate_ttfb_metadata(tt_queue, fb_queue, produk_csv, output_dir):
                 prod_data = df_produk[df_produk['produk_id'] == produk_id].iloc[0]
                 nama = prod_data['nama']
                 desc = prod_data['deskripsi_singkat']
-                harga = prod_data.get('harga', '') if 'harga' in prod_data.index else ''
+                harga = prod_data.get('price', '') if 'price' in prod_data.index else ''
                 shopee_url = prod_data['shopee_url'] if 'shopee_url' in prod_data.index else ''
                 # Clean long gads_t_sig tracking param
                 if shopee_url and 'gads_t_sig' in str(shopee_url):
@@ -148,7 +148,7 @@ def generate_ttfb_metadata(tt_queue, fb_queue, produk_csv, output_dir):
                 prod_data = df_produk[df_produk['produk_id'] == produk_id].iloc[0]
                 nama = prod_data['nama']
                 desc = prod_data['deskripsi_singkat']
-                harga = prod_data.get('harga', '') if 'harga' in prod_data.index else ''
+                harga = prod_data.get('price', '') if 'price' in prod_data.index else ''
                 shopee_url = prod_data['shopee_url'] if 'shopee_url' in prod_data.index else ''
                 # Clean long gads_t_sig tracking param
                 if shopee_url and 'gads_t_sig' in str(shopee_url):
