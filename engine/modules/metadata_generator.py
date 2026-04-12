@@ -89,6 +89,9 @@ def call_gemini(prompt, account_id=None, max_retries=3):
     Each channel has [primary, backup] keys.
     If primary fails, automatically tries backup before giving up.
 
+    Rate limiting: 5s delay between successful calls to stay under
+    Gemini free tier limit (15 req/min). Exponential backoff on 429.
+
     Args:
         prompt: Text prompt for Gemini
         account_id: Channel ID (yt_1..yt_5, tt_1, fb_1) or category name
@@ -119,11 +122,16 @@ def call_gemini(prompt, account_id=None, max_retries=3):
                 if resp.status_code == 200:
                     data = resp.json()
                     text = data['candidates'][0]['content']['parts'][0]['text']
+                    # Rate limit: 5s delay after each success (12 req/min < 15 limit)
+                    time.sleep(5)
                     return text.strip()
                 elif resp.status_code == 429:
+                    # Exponential backoff: 15s → 30s → 60s
+                    backoff = 15 * (2 ** attempt)
                     print(f"  [WARN] Gemini rate limited ({key_label}), "
-                          f"{'retrying...' if attempt < max_retries-1 else 'switching to backup...'}")
-                    time.sleep(2)
+                          f"waiting {backoff}s before "
+                          f"{'retry' if attempt < max_retries-1 else 'switching to backup'}...")
+                    time.sleep(backoff)
                     continue
                 else:
                     print(f"  [WARN] Gemini {resp.status_code} ({key_label}): {resp.text[:100]}")
