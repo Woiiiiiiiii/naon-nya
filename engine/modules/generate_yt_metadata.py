@@ -27,6 +27,20 @@ except ImportError:
     HAS_GEMINI = False
 
 
+def _smart_truncate(text, max_len, suffix='...'):
+    """Truncate text at word boundary, never mid-word.
+    'Neon Box Custom Indoor dan' at 25 → 'Neon Box Custom Indoor...' not 'Neon Box Custom Indoor da'
+    """
+    if len(text) <= max_len:
+        return text
+    truncated = text[:max_len - len(suffix)]
+    # Find last space to avoid cutting mid-word
+    last_space = truncated.rfind(' ')
+    if last_space > max_len // 3:  # Don't go too short
+        truncated = truncated[:last_space]
+    return truncated.rstrip() + suffix
+
+
 def _gemini_title(nama, category, harga, video_type, platform='youtube', account_id=None):
     """Generate title via Gemini API with fallback to templates."""
     if not HAS_GEMINI:
@@ -138,7 +152,7 @@ def generate_metadata(yt_queue, produk_csv, output_dir):
                 ]
                 title = title_templates[(acct_num + i) % len(title_templates)]
                 if len(title) > 100:
-                    title = title[:97] + '...'
+                    title = _smart_truncate(title, 100)
 
             # ── LONG-FORM DESCRIPTION (try Gemini first) ──
             rating = round(random.uniform(4.5, 4.9), 1)
@@ -171,7 +185,7 @@ Subscribe @{channel} untuk review produk {cat_label} lainnya!
 
         else:
             # -- SHORTS TITLE (try Gemini first, fallback) --
-            nama_short = nama[:25] if len(nama) > 25 else nama
+            nama_short = _smart_truncate(nama, 35, '') if len(nama) > 35 else nama
             gemini_short_title = _gemini_title(nama, category, harga, 'short', account_id=acct_id)
             if gemini_short_title and len(gemini_short_title) <= 50:
                 title = gemini_short_title
@@ -185,7 +199,7 @@ Subscribe @{channel} untuk review produk {cat_label} lainnya!
                 ]
                 title = title_templates[(acct_num + i) % len(title_templates)]
                 if len(title) > 50:
-                    title = title[:47] + '...'
+                    title = _smart_truncate(title, 50)
 
             # -- SHORTS DESCRIPTION --
             description = f"""Beli di Shopee: {shopee_url}
@@ -212,7 +226,7 @@ Harga: {harga}
 
         # For Long slots, also create metadata for the auto-extracted Shorts
         if video_type == 'long':
-            nama_short = nama[:25] if len(nama) > 25 else nama
+            nama_short = _smart_truncate(nama, 35, '') if len(nama) > 35 else nama
             short_title_templates = [
                 f"{nama_short} | Review Jujur",
                 f"{nama_short} Worth It?",
@@ -221,7 +235,7 @@ Harga: {harga}
             ]
             short_title = short_title_templates[(acct_num + i) % len(short_title_templates)]
             if len(short_title) > 50:
-                short_title = short_title[:47] + '...'
+                short_title = _smart_truncate(short_title, 50)
 
             short_desc = f"""Beli di Shopee: {shopee_url}
 

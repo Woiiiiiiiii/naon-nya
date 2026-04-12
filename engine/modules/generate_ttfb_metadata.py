@@ -23,6 +23,17 @@ from category_router import (
 # TikTok trending hashtags (always included)
 TT_TRENDING = ['#fyp', '#viral', '#foryoupage', '#tiktok']
 
+
+def _smart_truncate(text, max_len, suffix='...'):
+    """Truncate text at word boundary, never mid-word."""
+    if len(text) <= max_len:
+        return text
+    truncated = text[:max_len - len(suffix)]
+    last_space = truncated.rfind(' ')
+    if last_space > max_len // 3:
+        truncated = truncated[:last_space]
+    return truncated.rstrip() + suffix
+
 # TikTok caption templates (short, punchy, engaging)
 TT_TEMPLATES = [
     "🔥 {hook}\n\n{nama}\n💰 {harga}\n\n{desc}\n\n👉 Link di bio!\n\n{hashtags}",
@@ -105,7 +116,7 @@ def generate_ttfb_metadata(tt_queue, fb_queue, produk_csv, output_dir):
                 })
 
                 # Short version entry (auto-extracted from Long)
-                short_caption = f"🔥 {nama[:30]}\n\n💰 {harga}\n\n👉 Link di bio!\n\n{hashtag_str}"
+                short_caption = f"🔥 {_smart_truncate(nama, 35, '')}\n\n💰 {harga}\n\n👉 Link di bio!\n\n{hashtag_str}"
                 tt_results.append({
                     'file': f"{today}_{produk_id}_tt_short.mp4",
                     'account_id': acct_id,
