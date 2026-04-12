@@ -84,13 +84,22 @@ def _get_keys_for_account(account_id=None):
     return []
 
 
-def call_gemini(prompt, account_id=None, max_retries=3):
+# Per-key call timestamp tracker — prevents 429 across modules sharing same key
+_last_call_per_key = {}   # {api_key_hash: timestamp}
+_KEY_MIN_INTERVAL = 5.0   # Minimum seconds between calls to same API key
+
+
+def call_gemini(prompt, account_id=None, max_retries=2):
     """Call Gemini API with DEDICATED per-channel key + failover.
     Each channel has [primary, backup] keys.
     If primary fails, automatically tries backup before giving up.
 
-    Rate limiting: 5s delay between successful calls to stay under
-    Gemini free tier limit (15 req/min). Exponential backoff on 429.
+    Rate limiting:
+      - Per-key tracker: enforces 5s minimum gap between calls using the
+        SAME API key, even across different modules (metadata_generator,
+        generate_yt_metadata, yt_content_optimizer). This prevents 429s
+        caused by back-to-back calls sharing a key.
+      - Exponential backoff on 429: 10s → 20s (2 retries max).
 
     Args:
         prompt: Text prompt for Gemini
@@ -107,6 +116,14 @@ def call_gemini(prompt, account_id=None, max_retries=3):
     for key_num, api_key in enumerate(api_keys):
         key_label = f"key#{key_index}" if key_num == 0 else f"backup#{key_index}"
 
+        # Per-key rate limiter: wait if we recently called with this key
+        key_hash = api_key[:8]  # Use prefix as hash (safe, never logged)
+        now = time.time()
+        last_call = _last_call_per_key.get(key_hash, 0)
+        wait_needed = _KEY_MIN_INTERVAL - (now - last_call)
+        if wait_needed > 0:
+            time.sleep(wait_needed)
+
         for attempt in range(max_retries):
             try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
@@ -119,15 +136,16 @@ def call_gemini(prompt, account_id=None, max_retries=3):
                 }
                 resp = requests.post(url, json=payload, timeout=30)
 
+                # Update last-call timestamp for this key
+                _last_call_per_key[key_hash] = time.time()
+
                 if resp.status_code == 200:
                     data = resp.json()
                     text = data['candidates'][0]['content']['parts'][0]['text']
-                    # Rate limit: 5s delay after each success (12 req/min < 15 limit)
-                    time.sleep(5)
                     return text.strip()
                 elif resp.status_code == 429:
-                    # Exponential backoff: 15s → 30s → 60s
-                    backoff = 15 * (2 ** attempt)
+                    # Exponential backoff: 10s → 20s
+                    backoff = 10 * (2 ** attempt)
                     print(f"  [WARN] Gemini rate limited ({key_label}), "
                           f"waiting {backoff}s before "
                           f"{'retry' if attempt < max_retries-1 else 'switching to backup'}...")

@@ -103,7 +103,14 @@ def main():
         # Post-render QC (handles empty gracefully)
         "python engine/modules/qc_engine.py",
         # Metadata (Gemini-powered + legacy)
-        "python engine/modules/metadata_generator.py",
+        # NOTE: metadata_generator.py REMOVED from pipeline (2026-04-12)
+        # Reason: its output ({produk_id}_gemini_meta.json) is NOT consumed
+        # by any downstream module. generate_yt_metadata.py already calls
+        # call_gemini() directly for YT-specific metadata. Running both
+        # wastes ~14 Gemini API calls per run and triggers 429 rate limits
+        # because they share the same per-channel API keys.
+        # The call_gemini() function in metadata_generator.py is still
+        # available as an import for other modules.
         "python engine/modules/generate_yt_metadata.py",
         "python engine/modules/generate_fb_metadata.py",
         "python engine/modules/generate_ttfb_metadata.py",
