@@ -231,7 +231,7 @@ def _init_browser(cookie_str):
         print("      Browser: navigating to offer page...")
         try:
             page.goto('https://affiliate.shopee.co.id/offer/brand_offer',
-                      timeout=30000, wait_until='networkidle')
+                      timeout=30000, wait_until='domcontentloaded')
         except Exception as e:
             print(f"      Browser: nav issue: {str(e)[:80]}")
 
@@ -885,8 +885,19 @@ def collect(categories=None, target=None):
     skipped_used = 0
 
     total_new = 0
+    _start_time = time.time()
+    _GLOBAL_TIMEOUT = 25 * 60  # 25 minutes — leave 5min buffer for git push
+    _consecutive_403 = 0
+    _MAX_CONSECUTIVE_403 = 3  # stop after 3 keywords return zero offers
+    _ip_blocked = False
 
     for cat, keywords in categories.items():
+        if _ip_blocked:
+            print(f"\n  ⚠️ Skipping {cat} — IP blocked (consecutive 403)")
+            continue
+        if time.time() - _start_time > _GLOBAL_TIMEOUT:
+            print(f"\n  ⏱ Global timeout ({_GLOBAL_TIMEOUT//60}min) — stopping")
+            break
         print(f"\n{'─' * 40}")
         print(f"  KATEGORI: {cat.upper()}")
         print(f"{'─' * 40}")
@@ -895,6 +906,11 @@ def collect(categories=None, target=None):
         for kw in keywords:
             if collected >= target:
                 break
+            if _ip_blocked:
+                break
+            if time.time() - _start_time > _GLOBAL_TIMEOUT:
+                print(f"\n    ⏱ Global timeout — stopping mid-category")
+                break
 
             # STEP 2-5: Hit affiliate API with keyword + pagination
             print(f"\n    Keyword: '{kw}'")
@@ -902,6 +918,16 @@ def collect(categories=None, target=None):
                                              target=target - collected,
                                              use_browser=use_browser)
             print(f"    → {len(offers)} offers")
+
+            # Track consecutive failures to detect IP block
+            if len(offers) == 0:
+                _consecutive_403 += 1
+                if _consecutive_403 >= _MAX_CONSECUTIVE_403:
+                    print(f"\n    ❌ {_MAX_CONSECUTIVE_403} keywords with 0 offers — IP likely blocked, stopping")
+                    _ip_blocked = True
+                    break
+            else:
+                _consecutive_403 = 0  # reset on success
 
             for i, offer in enumerate(offers):
                 if collected >= target:
