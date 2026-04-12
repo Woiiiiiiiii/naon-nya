@@ -197,7 +197,7 @@ def run_qc(video_dir):
     # Per-platform duration rules (updated for slideshow format)
     # Slideshow = shorter than narrated video (no voiceover)
     DURATION_RULES = {
-        '_yt_long':  {'min': 45,  'max': 75,  'label': 'YT Long (50-70s)'},
+        '_yt_long':  {'min': 55,  'max': 85,  'label': 'YT Long (60-80s)'},
         '_yt':       {'min': 18,  'max': 35,  'label': 'YT Short (20-30s)'},
         '_tt_short': {'min': 10,  'max': 20,  'label': 'TT Short (15s)'},
         '_tt':       {'min': 18,  'max': 40,  'label': 'TT (20-35s)'},
@@ -248,9 +248,12 @@ def run_qc(video_dir):
             height = int(v_stream['height'])
             duration = float(info['format']['duration'])
 
-            # 9:16 Resolution Check
-            if width != 1080 or height != 1920:
-                print(f"  [FAIL] Wrong resolution: {width}x{height} (expected 1080x1920)")
+            # Resolution Check — portrait 9:16 for all, landscape 16:9 for yt_long
+            is_long = '_yt_long' in filename
+            expected_w = 1920 if is_long else 1080
+            expected_h = 1080 if is_long else 1920
+            if width != expected_w or height != expected_h:
+                print(f"  [FAIL] Wrong resolution: {width}x{height} (expected {expected_w}x{expected_h})")
                 failed.append(path)
                 continue
 
