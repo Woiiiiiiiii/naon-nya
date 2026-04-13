@@ -463,29 +463,18 @@ def _api_get_direct(url, params, headers, cookie_str):
     full_url = f"{url}?{urlencode(params)}"
     session = _get_session(headers)
 
-    # Direct with retry on 403
-    for attempt in range(3):
-        try:
-            resp = session.get(full_url, headers={'Cookie': cookie_str}, timeout=15)
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get('code') == 0:
-                    return data
-                print(f"      Direct: error {data.get('error', data.get('code'))}")
-                break  # Got response but wrong code, don't retry
-            elif resp.status_code == 403:
-                if attempt < 2:
-                    delay = 8 + attempt * 5  # 8s, 13s
-                    print(f"      Direct: HTTP 403 (retry {attempt+1}/3, wait {delay}s...)")
-                    time.sleep(delay)
-                else:
-                    print(f"      Direct: HTTP 403 (all 3 retries failed)")
-            else:
-                print(f"      Direct: HTTP {resp.status_code}")
-                break
-        except Exception as e:
-            print(f"      Direct: {e}")
-            break
+    # Direct — single try, fall through to proxy if 403
+    try:
+        resp = session.get(full_url, headers={'Cookie': cookie_str}, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get('code') == 0:
+                return data
+            print(f"      Direct: error {data.get('error', data.get('code'))}")
+        else:
+            print(f"      Direct: HTTP {resp.status_code}")
+    except Exception as e:
+        print(f"      Direct: {e}")
 
     # CF Proxy
     try:
