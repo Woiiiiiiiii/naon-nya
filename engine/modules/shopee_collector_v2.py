@@ -266,8 +266,17 @@ def _init_browser(cookie_str):
             _browser_page = None
             return False
 
+        # Wait for page to SETTLE (Shopee JS does redirects after DOM load)
+        # Short timeout — if it hangs, page is probably blocked
+        print("      Browser: waiting for page to settle...")
+        try:
+            page.wait_for_load_state('networkidle', timeout=20000)
+            print("      Browser: page settled (networkidle)")
+        except Exception:
+            print("      Browser: settle timeout (20s) — continuing anyway")
+
         # FIX 4: Random delay after load
-        time.sleep(random.uniform(3, 7))
+        time.sleep(random.uniform(2, 4))
 
         # FIX 3: Detect block via URL + page content
         current_url = page.url
