@@ -131,9 +131,10 @@ def build_headers():
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
                        '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8,id;q=0.7',
+        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
         'Referer': f'{AFFILIATE_BASE}/offer/brand_offer',
         'Origin': AFFILIATE_BASE,
+        'Connection': 'keep-alive',
         'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"Windows"',
@@ -435,22 +436,56 @@ def _browser_fetch(keyword, page_offset=0, page_limit=20):
         return None
 
 
-def _api_get_direct(url, params, headers, cookie_str):
-    """Fallback: Direct HTTP + CF Proxy."""
-    full_url = f"{url}?{urlencode(params)}"
+# Persistent session for more human-like flow
+_http_session = None
 
-    # Direct
-    try:
-        resp = requests.get(full_url, headers=headers, timeout=15)
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get('code') == 0:
-                return data
-            print(f"      Direct: error {data.get('error', data.get('code'))}")
-        else:
-            print(f"      Direct: HTTP {resp.status_code}")
-    except Exception as e:
-        print(f"      Direct: {e}")
+def _get_session(headers):
+    """Get or create a persistent requests.Session."""
+    global _http_session
+    if _http_session is None:
+        _http_session = requests.Session()
+        _http_session.headers.update({
+            k: v for k, v in headers.items() if k != 'Cookie'
+        })
+        # Warm-up: visit shopee.co.id first (get initial cookies)
+        print("  \U0001f310 HTTP warm-up: visiting shopee.co.id...")
+        try:
+            _http_session.get('https://shopee.co.id/', timeout=10)
+            time.sleep(random.uniform(1, 3))
+            print("  \u2705 HTTP warm-up done")
+        except Exception:
+            print("  \u26a0\ufe0f HTTP warm-up failed (continuing)")
+    return _http_session
+
+
+def _api_get_direct(url, params, headers, cookie_str):
+    """Fallback: Direct HTTP (with Session + retry) + CF Proxy."""
+    full_url = f"{url}?{urlencode(params)}"
+    session = _get_session(headers)
+
+    # Direct with retry on 403
+    for attempt in range(3):
+        try:
+            resp = session.get(full_url, headers={'Cookie': cookie_str}, timeout=15)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('code') == 0:
+                    return data
+                print(f"      Direct: error {data.get('error', data.get('code'))}")
+                break  # Got response but wrong code, don't retry
+            elif resp.status_code == 403:
+                if attempt < 2:
+                    delay = 8 + attempt * 5  # 8s, 13s
+                    print(f"      Direct: HTTP 403 (retry {attempt+1}/3, wait {delay}s...)")
+                    time.sleep(delay)
+                else:
+                    print(f"      Direct: HTTP 403 (all 3 retries failed)")
+            else:
+                print(f"      Direct: HTTP {resp.status_code}")
+                break
+        except Exception as e:
+            print(f"      Direct: {e}")
+            break
 
     # CF Proxy
     try:
@@ -474,7 +509,7 @@ def get_products_by_keyword(headers, cookie_str, keyword, target=25, use_browser
     """STEP 2-5: Hit affiliate API with keyword, paginate sampai target."""
     products = []
     page = 0
-    page_size = 20
+    page_size = 10  # Smaller batch = less suspicious
 
     while len(products) < target:
         data = None
@@ -508,7 +543,8 @@ def get_products_by_keyword(headers, cookie_str, keyword, target=25, use_browser
 
         products.extend(items)
         page += 1
-        time.sleep(random.uniform(0.5, 1.0))
+        # Longer delay between pages (human-like)
+        time.sleep(random.uniform(2, 4))
 
     return products[:target]
 
@@ -993,6 +1029,12 @@ def collect(categories=None, target=None):
                                              target=target - collected,
                                              use_browser=use_browser)
             print(f"    → {len(offers)} offers")
+
+            # Human-like delay between keywords
+            if len(offers) == 0:
+                time.sleep(random.uniform(2, 4))
+            else:
+                time.sleep(random.uniform(1, 2))
 
             for i, offer in enumerate(offers):
                 if collected >= target:
