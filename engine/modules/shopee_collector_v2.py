@@ -741,15 +741,14 @@ MIN_BLUR_SCORE = 30        # Minimum sharpness (Laplacian variance)
 def _score_image_quality(img):
     """Score image quality for product bank. Returns (score, reasons).
 
-    Checks:
+    Checks (video shows images directly — only technical quality matters):
       - Resolution: min 500×500
       - Aspect ratio: 0.3 - 3.0 (reject extremely elongated)
       - Blur detection: Laplacian variance (reject blurry review photos)
-      - Cleanliness: penalize text overlays, busy graphics, promo bands
 
     Returns: (total_score: float, reject_reasons: list[str])
       Score > 25 = acceptable for product bank
-      Score < 25 = rejected (review photo, screenshot, or low quality)
+      Score < 25 = rejected (blurry or too small)
     """
     import numpy as np
     w, h = img.size
@@ -786,45 +785,6 @@ def _score_image_quality(img):
             score -= 45  # Heavy penalty
         elif blur_var > 200:
             score += 10  # Very sharp = good
-    except Exception:
-        pass
-
-    # 4. Cleanliness score (adapted from download_images.py)
-    try:
-        data = np.array(img)
-
-        # 4a. Edge density — high = lots of text/graphics
-        brightness = data.mean(axis=2).astype(np.uint8)
-        edge_h = np.abs(brightness[1:, :].astype(int) - brightness[:-1, :].astype(int))
-        edge_v = np.abs(brightness[:, 1:].astype(int) - brightness[:, :-1].astype(int))
-        edge_ratio = ((edge_h > 40).sum() + (edge_v > 40).sum()) / (h * w)
-
-        if edge_ratio > 0.20:
-            score -= 40
-            reasons.append('text_heavy')
-        elif edge_ratio > 0.12:
-            score -= 25
-            reasons.append('text_likely')
-        elif edge_ratio < 0.04:
-            score += 15  # Very clean
-
-        # 4b. White/light background percentage
-        white_pct = (brightness > 230).sum() / (h * w)
-        score += white_pct * 30  # Clean white bg = good
-
-        # 4c. Promo band detection — top/bottom 20%
-        for band in [data[:h // 5, :, :], data[-h // 5:, :, :]]:
-            band_edge = np.abs(band[1:, :, :].astype(int) - band[:-1, :, :].astype(int))
-            if band_edge.mean() > 18:
-                score -= 15
-                reasons.append('promo_band')
-                break
-
-        # 4d. Border uniformity — uniform = clean product photo
-        border = min(15, h // 20, w // 20)
-        for strip in [data[:border], data[-border:], data[:, :border], data[:, -border:]]:
-            if strip.std() < 15:
-                score += 8  # Uniform border = clean bg
     except Exception:
         pass
 
@@ -892,17 +852,15 @@ def _try_download_image(img_hash):
 
 
 def _download_best_image(image_hashes, path):
-    """Download product image — fast strategy.
+    """Download product image — strict QC.
 
     Try max 3 images, take FIRST that passes QC.
-    If none pass QC, save the first downloadable image anyway.
+    If none pass QC, reject the product entirely.
 
     Returns: (success: bool, score: float)
     """
     if not image_hashes:
         return False, 0
-
-    first_img = None  # Fallback: first downloadable image
 
     for img_hash in image_hashes[:3]:  # Max 3 images only
         if not img_hash:
@@ -911,20 +869,11 @@ def _download_best_image(image_hashes, path):
         if img is None:
             continue
 
-        # Save first downloadable as fallback
-        if first_img is None:
-            first_img = img
-
-        # QC check — take first that passes
+        # Strict QC — only save if passes
         score, reasons = _score_image_quality(img)
         if score >= MIN_CLEAN_SCORE:
             img.save(path, 'JPEG', quality=95)
             return True, score
-
-    # No image passed QC → save first downloadable anyway
-    if first_img is not None:
-        first_img.save(path, 'JPEG', quality=95)
-        return True, 0
 
     return False, 0
 
@@ -1080,8 +1029,19 @@ def collect(categories=None, target=None):
                 os.makedirs(product_dir, exist_ok=True)
                 img_path = os.path.join(product_dir, 'image.jpg')
 
-                # Try all image hashes (prefer clean studio shots over promo graphics)
+                # Min 4 images required for video slideshow
                 all_hashes = detail.get('all_image_hashes', [])
+                valid_hashes = [h for h in all_hashes if h]
+                if len(valid_hashes) < 4:
+                    try:
+                        import shutil
+                        shutil.rmtree(product_dir, ignore_errors=True)
+                    except Exception:
+                        pass
+                    if collected == 0 and i < 5:
+                        print(f"    [QC-REJECT] {detail['name'][:40]} — only {len(valid_hashes)} images (need 4+)")
+                    continue
+
                 img_ok = False
                 img_score = 0
 
