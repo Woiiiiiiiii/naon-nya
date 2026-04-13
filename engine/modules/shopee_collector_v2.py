@@ -807,7 +807,8 @@ def _download_image(url, path):
     """Download image and validate quality before saving."""
     try:
         resp = requests.get(url, timeout=15, headers={
-            'User-Agent': 'Mozilla/5.0 Chrome/146.0.0.0',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                          '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': 'https://shopee.co.id/',
         })
         if resp.status_code != 200 or len(resp.content) < 5000:
@@ -827,6 +828,19 @@ def _download_image(url, path):
     except Exception:
         pass
     return False
+
+
+# Multiple CDN fallback — cf.shopee.co.id may be blocked from GitHub Actions
+_CDN_URLS = [
+    'https://down-id.img.susercontent.com/file',
+    'https://cf.shopee.co.id/file',
+    'https://down-id.img.susercontent.com/file/id-11134207-7rasd-',
+]
+_IMG_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                  '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://shopee.co.id/',
+}
 
 
 def _download_best_image(image_hashes, path):
@@ -851,26 +865,41 @@ def _download_best_image(image_hashes, path):
     for idx, img_hash in enumerate(image_hashes[:6]):  # Max 6 images
         if not img_hash:
             continue
-        cdn_url = f'https://cf.shopee.co.id/file/{img_hash}'
-        try:
-            resp = requests.get(cdn_url, timeout=10, headers={
-                'User-Agent': 'Mozilla/5.0 Chrome/146.0.0.0',
-                'Referer': 'https://shopee.co.id/',
-            })
-            if resp.status_code != 200 or len(resp.content) < 5000:
+        # Try multiple CDNs (fallback if one is blocked)
+        for cdn in _CDN_URLS:
+            cdn_url = f'{cdn}/{img_hash}'
+            try:
+                resp = requests.get(cdn_url, timeout=10, headers=_IMG_HEADERS)
+                if resp.status_code != 200 or len(resp.content) < 5000:
+                    continue
+                img = PILImage.open(BytesIO(resp.content)).convert('RGB')
+                score, reasons = _score_image_quality(img)
+                if score >= MIN_CLEAN_SCORE and score > best_score:
+                    best_score = score
+                    best_img = img
+                    best_idx = idx
+                break  # Got image from this CDN, no need to try others
+            except Exception:
                 continue
-            img = PILImage.open(BytesIO(resp.content)).convert('RGB')
-            score, reasons = _score_image_quality(img)
-            if score >= MIN_CLEAN_SCORE and score > best_score:
-                best_score = score
-                best_img = img
-                best_idx = idx
-        except Exception:
-            continue
 
     if best_img is not None:
         best_img.save(path, 'JPEG', quality=95)
         return True, best_score
+
+    # Last resort: try downloading without QC (any image is better than none)
+    for img_hash in image_hashes[:3]:
+        if not img_hash:
+            continue
+        for cdn in _CDN_URLS:
+            cdn_url = f'{cdn}/{img_hash}'
+            try:
+                resp = requests.get(cdn_url, timeout=10, headers=_IMG_HEADERS)
+                if resp.status_code == 200 and len(resp.content) >= 3000:
+                    img = PILImage.open(BytesIO(resp.content)).convert('RGB')
+                    img.save(path, 'JPEG', quality=95)
+                    return True, 0  # Score 0 = no QC but image saved
+            except Exception:
+                continue
 
     return False, 0
 
@@ -1090,8 +1119,7 @@ def collect(categories=None, target=None):
                         if os.path.exists(extra_path):
                             extra_saved += 1
                             continue
-                        for cdn in ['https://cf.shopee.co.id/file',
-                                    'https://down-id.img.susercontent.com/file']:
+                        for cdn in _CDN_URLS:
                             if _download_image(f"{cdn}/{h}", extra_path):
                                 extra_saved += 1
                                 break
