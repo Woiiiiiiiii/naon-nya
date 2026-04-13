@@ -205,7 +205,8 @@ Link Affiliate: {affiliate_link}
 Deskripsi harus:
 - Engaging dan informatif
 - Include CTA yang kuat
-- Include link affiliate di posisi strategis
+- Link affiliate HARUS di baris sendiri (bukan digabung teks) agar clickable
+- Format link: tulis label di satu baris, URL di baris berikutnya
 - Optimized untuk {platform}
 
 Berikan HANYA deskripsi, tanpa penjelasan."""

@@ -71,7 +71,8 @@ def _gemini_description(nama, category, harga, desc, shopee_url, video_type, acc
             f"Nama: {nama}\nKategori: {category}\nHarga: {harga}\n"
             f"Link: {shopee_url}\nDeskripsi produk: {desc}\n"
             f"Tipe: {'Long-form review' if video_type == 'long' else 'Shorts'}\n"
-            f"Format: Link produk di baris pertama, lalu deskripsi engaging.\n"
+            f"PENTING: Link shopee HARUS di baris sendiri (bukan digabung teks) agar clickable.\n"
+            f"Format baris pertama:\n🛒 Beli di Shopee:\n{shopee_url}\n"
             f"Bahasa Indonesia natural, tidak repetitif. Output deskripsi saja."
         )
         result = call_gemini(prompt, account_id=account_id)
@@ -161,11 +162,12 @@ def generate_metadata(yt_queue, produk_csv, output_dir):
             if gemini_desc:
                 description = gemini_desc
                 if shopee_url not in description:
-                    description = f"Beli di Shopee: {shopee_url}\n\n{description}"
+                    description = f"🛒 Beli di Shopee:\n{shopee_url}\n\n{description}"
                 if not any(h in description for h in cat_hashtags[:3]):
                     description += f"\n\n{' '.join(cat_hashtags[:8])}"
             else:
-                description = f"""Beli di Shopee: {shopee_url}
+                description = f"""🛒 Beli di Shopee:
+{shopee_url}
 
 {nama}
 Harga: {harga}
@@ -202,7 +204,8 @@ Subscribe @{channel} untuk review produk {cat_label} lainnya!
                     title = _smart_truncate(title, 50)
 
             # -- SHORTS DESCRIPTION --
-            description = f"""Beli di Shopee: {shopee_url}
+            description = f"""🛒 Beli di Shopee:
+{shopee_url}
 
 {nama}
 Harga: {harga}
@@ -237,7 +240,8 @@ Harga: {harga}
             if len(short_title) > 50:
                 short_title = _smart_truncate(short_title, 50)
 
-            short_desc = f"""Beli di Shopee: {shopee_url}
+            short_desc = f"""🛒 Beli di Shopee:
+{shopee_url}
 
 {nama}
 Harga: {harga}
