@@ -543,8 +543,11 @@ def get_products_by_keyword(headers, cookie_str, keyword, target=25, use_browser
 
         products.extend(items)
         page += 1
-        # Longer delay between pages (human-like)
-        time.sleep(random.uniform(2, 4))
+        # Shorter delay when browser works, longer for direct HTTP
+        if use_browser and _browser_page:
+            time.sleep(random.uniform(0.5, 1.5))
+        else:
+            time.sleep(random.uniform(2, 4))
 
     return products[:target]
 
@@ -1030,8 +1033,10 @@ def collect(categories=None, target=None):
                                              use_browser=use_browser)
             print(f"    → {len(offers)} offers")
 
-            # Human-like delay between keywords
-            if len(offers) == 0:
+            # Shorter delay for browser, longer for HTTP fallback
+            if use_browser and _browser_page:
+                time.sleep(random.uniform(0.5, 1.5))
+            elif len(offers) == 0:
                 time.sleep(random.uniform(2, 4))
             else:
                 time.sleep(random.uniform(1, 2))
