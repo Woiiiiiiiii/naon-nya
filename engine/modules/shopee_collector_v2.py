@@ -1032,14 +1032,14 @@ def collect(categories=None, target=None):
                 # Min 4 images required for video slideshow
                 all_hashes = detail.get('all_image_hashes', [])
                 valid_hashes = [h for h in all_hashes if h]
-                if len(valid_hashes) < 4:
+                if len(valid_hashes) < 5:
                     try:
                         import shutil
                         shutil.rmtree(product_dir, ignore_errors=True)
                     except Exception:
                         pass
                     if collected == 0 and i < 5:
-                        print(f"    [QC-REJECT] {detail['name'][:40]} — only {len(valid_hashes)} images (need 4+)")
+                        print(f"    [QC-REJECT] {detail['name'][:40]} — only {len(valid_hashes)} images (need 5+)")
                     continue
 
                 img_ok = False
@@ -1101,11 +1101,11 @@ def collect(categories=None, target=None):
                 total_new += 1
                 print(f"    ✓ {detail['name'][:45]} | {price_str} | {commission}")
 
-                # Download extra images (max 2) for slideshow — fast
+                # Download extra images (max 4) for video slideshow variety
                 all_hashes = detail.get('all_image_hashes', [])
                 if len(all_hashes) >= 2:
                     extra_saved = 0
-                    for idx, h in enumerate(all_hashes[1:3], 2):  # Only 2 extras
+                    for idx, h in enumerate(all_hashes[1:5], 2):  # 4 extras (image_2..5)
                         if not h:
                             continue
                         extra_path = os.path.join(product_dir, f'image_{idx}.jpg')
