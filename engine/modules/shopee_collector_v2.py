@@ -645,7 +645,7 @@ def get_product_detail(item_id, shop_id, offer=None):
     params = {'itemid': item_id, 'shopid': shop_id}
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                       '(KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+                       '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json',
         'Referer': f'{SHOPEE_BASE}/product/{shop_id}/{item_id}',
         'X-Shopee-Language': 'id',
