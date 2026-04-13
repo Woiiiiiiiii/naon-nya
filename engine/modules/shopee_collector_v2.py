@@ -39,53 +39,134 @@ TARGET_PER_CATEGORY = 25
 
 CATEGORIES = {
     'fashion': [
-        'tas selempang', 'sepatu sneakers', 'jam tangan pria', 'dompet kulit',
-        'topi bucket hat', 'kacamata hitam', 'gelang titanium', 'ikat pinggang',
-        'jaket hoodie', 'kaos polos premium', 'celana cargo', 'sandal slide',
-        'backpack ransel', 'sling bag wanita', 'tote bag kanvas',
-        'kemeja flannel', 'cardigan rajut', 'cincin couple', 'anting mutiara',
-        'scarf satin', 'dress casual', 'rok plisket', 'celana kulot',
-        'sepatu boots', 'tas pinggang',
+        # Tas
+        'tas selempang pria', 'sling bag wanita', 'tote bag kanvas', 'clutch pesta',
+        'backpack ransel laptop', 'tas pinggang outdoor', 'tas laptop 14 inch',
+        'tas ransel anti maling', 'handbag kulit', 'pouch bag pria',
+        # Sepatu
+        'sepatu sneakers pria', 'sepatu boots kulit', 'sepatu loafers', 'sandal slide',
+        'sepatu running', 'sepatu formal pria', 'high heels wanita', 'flatshoes wanita',
+        'sepatu hiking outdoor', 'slip on pria',
+        # Aksesoris
+        'jam tangan digital', 'jam tangan analog klasik', 'smartwatch fashion',
+        'kacamata polarized', 'kacamata frame vintage', 'gelang titanium pria',
+        'kalung liontin wanita', 'cincin couple titanium', 'anting mutiara asli',
+        'topi baseball cap', 'bucket hat', 'beanie rajut',
+        # Pakaian
+        'jaket hoodie oversize', 'jaket bomber pria', 'jaket kulit sintetis',
+        'kemeja flannel kotak', 'kemeja linen premium', 'blazer casual wanita',
+        'cardigan rajut tebal', 'sweater crewneck', 'kaos polo premium',
+        'celana cargo panjang', 'celana chino slim', 'jogger pants',
+        'dress midi wanita', 'rok plisket panjang', 'celana kulot premium',
+        # Leather goods
+        'dompet kulit asli pria', 'dompet lipat wanita', 'card holder kulit',
+        'ikat pinggang kulit', 'belt automatic buckle',
+        'scarf satin premium', 'sarung tangan kulit',
     ],
     'gadget': [
-        'earphone bluetooth', 'powerbank fast charging', 'smartwatch murah',
-        'TWS wireless', 'mouse wireless', 'keyboard mechanical', 'USB hub',
-        'ring light selfie', 'phone holder', 'speaker bluetooth mini',
-        'charger fast charging', 'kabel data type C', 'tripod hp',
-        'webcam HD', 'flash drive 64GB', 'cooling pad laptop',
-        'headset gaming', 'smart plug wifi', 'card reader', 'gimbal hp',
-        'screen protector', 'tablet stand', 'LED strip', 'MiFi portable',
-        'action camera mini',
+        # Audio
+        'TWS earbuds noise cancelling', 'headset gaming RGB', 'speaker bluetooth portable',
+        'earphone bass', 'soundbar TV', 'microphone kondenser',
+        'headphone wireless ANC', 'clip on mic wireless',
+        # Power
+        'powerbank 20000mAh fast charging', 'powerbank mini 10000mAh',
+        'charger GaN 65W', 'charger fast charging 33W', 'kabel USB C to C',
+        'wireless charger pad', 'adaptor multi port',
+        # Komputer
+        'mouse wireless silent', 'keyboard mechanical gaming', 'webcam 1080p',
+        'USB hub type C', 'SSD external portable', 'cooling pad laptop',
+        'monitor arm stand', 'mousepad gaming besar', 'docking station laptop',
+        # HP & Foto
+        'phone holder motor', 'phone holder mobil magnet', 'ring light 10 inch',
+        'gimbal stabilizer HP', 'tripod HP flexible', 'lensa kamera HP',
+        'selfie stick bluetooth', 'screen protector tempered glass',
+        # Smart device
+        'smartwatch sport fitness', 'smart plug WiFi', 'tracker GPS mini',
+        'smart lamp LED WiFi', 'smart door lock', 'MiFi portable 4G',
+        'action camera 4K', 'dash cam mobil', 'LED strip RGB remote',
+        'tablet stand adjustable', 'flash drive 128GB', 'card reader OTG',
     ],
     'beauty': [
-        'skincare korea', 'serum vitamin C', 'sunscreen SPF 50', 'moisturizer',
-        'toner wajah', 'lip tint', 'mascara waterproof', 'foundation cushion',
-        'bedak tabur', 'micellar water', 'eye cream', 'sheet mask',
-        'body lotion', 'parfum wanita', 'sabun muka', 'blush on',
-        'concealer', 'setting spray', 'lip balm', 'hair serum',
-        'vitamin rambut', 'beauty blender', 'brush makeup set',
-        'nail art set', 'eyeliner pen',
+        # Skincare
+        'serum vitamin C brightening', 'serum niacinamide', 'serum retinol anti aging',
+        'moisturizer gel', 'moisturizer cream malam', 'sunscreen SPF 50 PA',
+        'toner exfoliating AHA BHA', 'toner hydrating', 'facial wash gentle',
+        'eye cream anti wrinkle', 'sheet mask korea', 'clay mask',
+        'lip sleeping mask', 'acne patch',
+        # Makeup
+        'lipstick matte tahan lama', 'lip tint korea', 'lip gloss plumping',
+        'foundation cushion', 'BB cream SPF', 'concealer stick',
+        'bedak tabur translucent', 'setting spray matte', 'primer pore minimizer',
+        'blush on cream', 'contour palette', 'highlighter stick',
+        'mascara waterproof volume', 'eyeliner pen felt tip', 'eyeshadow palette shimmer',
+        'eyebrow pencil', 'alis pomade',
+        # Rambut
+        'shampoo anti rontok', 'conditioner keratin', 'hair mask argan oil',
+        'hair dryer ionic', 'catokan rambut 2in1', 'hair serum anti frizz',
+        'vitamin rambut kapsul', 'sisir kayu anti statik',
+        # Body & Parfum
+        'body lotion whitening', 'body scrub coffee', 'deodorant roll on',
+        'parfum wanita tahan lama', 'parfum pria EDT', 'body mist',
+        # Tools
+        'brush makeup set lengkap', 'beauty blender sponge', 'eyelash curler',
+        'nail art set gel', 'makeup organizer acrylic', 'cermin makeup LED',
     ],
     'home': [
-        'lampu tidur LED', 'organizer laci', 'vacuum cleaner mini',
-        'rak buku kayu', 'dispenser sabun', 'gantungan baju', 'kotak penyimpanan',
-        'jam dinding minimalis', 'bantal sofa', 'karpet bulu', 'teko listrik',
-        'tempat tissue', 'pot tanaman hias', 'cermin rias', 'selimut fleece',
-        'sarung bantal', 'tirai kamar', 'humidifier', 'air purifier',
-        'set alat makan', 'panci set', 'wajan anti lengket', 'talenan kayu',
-        'pisau dapur set', 'blender mini portable',
+        # Dapur
+        'blender mini portable', 'rice cooker digital', 'air fryer tanpa minyak',
+        'panci set stainless', 'wajan anti lengket marble', 'pisau dapur set',
+        'talenan kayu jati', 'set alat makan stainless', 'toaster roti',
+        'coffee maker mesin kopi', 'tumbler thermos', 'kontainer makanan kaca',
+        'dispenser air minum', 'oven listrik mini',
+        # Ruang tamu
+        'lampu LED smart', 'lampu tidur proyektor', 'rak buku minimalis',
+        'karpet bulu korea', 'bantal sofa dekoratif', 'selimut fleece tebal',
+        'jam dinding minimalis', 'vas bunga keramik', 'lilin aromaterapi',
+        'poster wall art aesthetic', 'cermin dinding dekoratif',
+        # Kamar mandi
+        'shower head rain', 'rak kamar mandi stainless', 'handuk microfiber premium',
+        'dispenser sabun otomatis', 'toilet seat cover',
+        # Organisasi
+        'kotak penyimpanan lipat', 'organizer laci bambu', 'vacuum bag storage',
+        'gantungan baju kayu', 'rak sepatu susun', 'hook tempelan dinding',
+        # Elektronik rumah
+        'vacuum cleaner cordless', 'air purifier HEPA', 'humidifier ultrasonic',
+        'kipas angin USB', 'setrika uap portable', 'robot vacuum',
+        'timbangan dapur digital', 'timer masak digital',
+        # Taman
+        'pot tanaman self watering', 'alat berkebun set', 'selang air expandable',
+        'lampu taman solar', 'sprayer tanaman',
     ],
     'wellness': [
-        'vitamin C 1000mg', 'botol minum tumbler', 'alat olahraga rumah',
-        'matras yoga', 'resistance band', 'skipping rope adjustable',
-        'dumbbell set', 'hand grip', 'shaker protein', 'masker KN95',
-        'termometer digital', 'tensimeter digital', 'essential oil',
-        'diffuser aromaterapi', 'alat pijat elektrik', 'posture corrector',
-        'knee support', 'foam roller', 'sarung tangan gym', 'kaos olahraga',
-        'celana training', 'timbangan badan digital', 'suplemen fitness',
-        'koyo pereda nyeri', 'kacamata anti blue light',
+        # Fitness equipment
+        'dumbbell set adjustable', 'resistance band set', 'matras yoga TPE',
+        'skipping rope speed', 'pull up bar pintu', 'push up board',
+        'kettlebell vinyl', 'ab roller wheel', 'TRX suspension trainer',
+        'bench press lipat', 'hand grip strengthener', 'battle rope',
+        # Olahraga wearable
+        'kaos olahraga dri-fit', 'celana training pria', 'legging olahraga wanita',
+        'sports bra high impact', 'jaket running windbreaker', 'sarung tangan gym',
+        'sepatu futsal', 'kaos kaki olahraga', 'headband olahraga',
+        # Kesehatan
+        'vitamin C 1000mg tablet', 'omega 3 fish oil', 'multivitamin dewasa',
+        'suplemen kolagen', 'suplemen protein whey',
+        'tensimeter digital lengan', 'oximeter jari', 'termometer infrared',
+        'alat cek gula darah', 'masker KF94 medis',
+        # Recovery
+        'alat pijat elektrik gun', 'foam roller EVA', 'knee support brace',
+        'ankle support elastic', 'posture corrector back', 'bantal terapi leher',
+        'kompres panas dingin', 'kinesiology tape',
+        # Nutrisi
+        'shaker protein lock', 'meal prep container set', 'food scale digital',
+        'tumbler infused water', 'botol minum gallon 2L',
+        # Outdoor
+        'tenda camping ultralight', 'sleeping bag', 'headlamp LED rechargeable',
+        'kompas outdoor', 'emergency kit P3K',
     ],
 }
+
+# Min price filter — skip produk receh
+MIN_PRICE = 30000  # Rp 30.000 minimum
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -957,7 +1038,11 @@ def collect(categories=None, target=None):
         print(f"{'─' * 40}")
         collected = 0
 
-        for kw in keywords:
+        # Shuffle keywords — different order each run = different products!
+        kw_list = list(keywords)
+        random.shuffle(kw_list)
+
+        for kw in kw_list:
             if collected >= target:
                 break
 
@@ -1023,6 +1108,14 @@ def collect(categories=None, target=None):
                     continue
                 product_dir = os.path.join(BANK_DIR, cat, pid)
                 if os.path.exists(os.path.join(product_dir, 'image.jpg')):
+                    continue
+
+                # Price filter — skip produk receh
+                price = detail.get('price', 0)
+                if price > 0 and price < MIN_PRICE:
+                    if collected == 0 and i < 3:
+                        price_str = f"Rp{price:,}".replace(',', '.')
+                        print(f"    [SKIP] {detail['name'][:40]} — {price_str} (min Rp{MIN_PRICE:,}".replace(',', '.') + ")")
                     continue
 
                 # Download image — try ALL hashes, pick BEST quality
