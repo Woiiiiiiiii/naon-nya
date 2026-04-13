@@ -250,21 +250,27 @@ def _init_browser(cookie_str):
         # Auto-export refreshed cookies
         _export_browser_cookies()
 
-        # Test API
+        # Test API (15s timeout to prevent hang on blocked pages)
         print("      Browser: testing API...")
-        test = page.evaluate("""
-            async () => {
-                try {
-                    const r = await fetch(
-                        "/api/v3/offer/product/list?list_type=5&sort_type=5&page_offset=0&page_limit=1&client_type=1",
-                        {headers: {"Accept": "application/json"}}
-                    );
-                    const data = await r.json();
-                    return {status: r.status, code: data.code, error: data.error,
-                            count: (data.data && data.data.list) ? data.data.list.length : 0};
-                } catch(e) { return {error: e.message}; }
-            }
-        """)
+        try:
+            test = page.evaluate("""
+                async () => {
+                    const ctrl = new AbortController();
+                    setTimeout(() => ctrl.abort(), 10000);
+                    try {
+                        const r = await fetch(
+                            "/api/v3/offer/product/list?list_type=5&sort_type=5&page_offset=0&page_limit=1&client_type=1",
+                            {headers: {"Accept": "application/json"}, signal: ctrl.signal}
+                        );
+                        const data = await r.json();
+                        return {status: r.status, code: data.code, error: data.error,
+                                count: (data.data && data.data.list) ? data.data.list.length : 0};
+                    } catch(e) { return {error: e.message}; }
+                }
+            """)
+        except Exception as e:
+            print(f"      Browser: API test timeout: {str(e)[:60]}")
+            test = {'error': 'timeout'}
         print(f"      Browser: test = {test}")
 
         _browser_page = page
@@ -357,10 +363,12 @@ def _browser_fetch(keyword, page_offset=0, page_limit=20):
         })
         result = _browser_page.evaluate("""
             async (queryString) => {
+                const ctrl = new AbortController();
+                setTimeout(() => ctrl.abort(), 10000);
                 try {
                     const resp = await fetch(
                         "/api/v3/offer/product/list?" + queryString,
-                        {headers: {"Accept": "application/json"}}
+                        {headers: {"Accept": "application/json"}, signal: ctrl.signal}
                     );
                     if (!resp.ok) return {error: resp.status};
                     return await resp.json();

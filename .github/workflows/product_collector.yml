@@ -109,18 +109,28 @@ jobs:
           done
 
       - name: Collect Products
+        timeout-minutes: 8
         env:
           SHOPEE_AFFILIATE_COOKIES: ${{ env.SHOPEE_AFFILIATE_COOKIES || secrets.SHOPEE_AFFILIATE_COOKIES }}
           CF_PROXY_URL: ${{ secrets.CF_PROXY_URL }}
           CF_PROXY_KEY: ${{ secrets.CF_PROXY_KEY_API }}
           AFFILIATE_ID_SHOPEE: ${{ secrets.AFFILIATE_ID_SHOPEE }}
+          PYTHONUNBUFFERED: '1'
         run: |
           cd engine/modules
-          if [ -n "${{ github.event.inputs.category }}" ]; then
-            python shopee_collector_v2.py --category "${{ github.event.inputs.category }}" --target ${{ github.event.inputs.target || '25' }}
-          else
-            python shopee_collector_v2.py --target ${{ github.event.inputs.target || '25' }}
-          fi
+          # Try up to 3 times (GitHub may assign different IP)
+          for attempt in 1 2 3; do
+            echo "=== Attempt $attempt/3 ==="
+            if [ -n "${{ github.event.inputs.category }}" ]; then
+              python shopee_collector_v2.py --category "${{ github.event.inputs.category }}" --target ${{ github.event.inputs.target || '25' }} && exit 0
+            else
+              python shopee_collector_v2.py --target ${{ github.event.inputs.target || '25' }} && exit 0
+            fi
+            echo "Attempt $attempt failed, waiting 30s before retry..."
+            sleep 30
+          done
+          echo "All 3 attempts failed"
+          exit 1
 
       - name: Show Bank Status
         if: always()
