@@ -197,7 +197,7 @@ def generate_ttfb_metadata(tt_queue, fb_queue, produk_csv, output_dir):
                 })
 
                 # Short version entry
-                short_post = f"🔥 {nama}\n💰 {harga}\n🛒 {shopee_url}\n#shopee #affiliate"
+                short_post = f"🔥 {nama}\n💰 {harga}\n🛒 Beli di Shopee:\n{shopee_url}\n#shopee #affiliate"
                 fb_results.append({
                     'file': f"{today}_{produk_id}_fb_short.mp4",
                     'account_id': acct_id,

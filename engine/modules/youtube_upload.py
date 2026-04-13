@@ -262,7 +262,8 @@ def pin_affiliate_comment(youtube, video_id, product_name, shopee_url, harga='')
         harga_text = f"\n💰 {harga}" if harga else ""
         comment_text = (
             f"🛒 Beli {product_name} di Shopee:{harga_text}\n"
-            f"👉 {shopee_url}\n\n"
+            f"👇 Link produk:\n"
+            f"{shopee_url}\n\n"
             f"Link affiliate — komisi kecil tanpa biaya tambahan untukmu ❤️"
         )
 
