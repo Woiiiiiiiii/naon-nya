@@ -869,76 +869,73 @@ def _download_image(url, path):
     return False
 
 
-# Multiple CDN fallback — cf.shopee.co.id may be blocked from GitHub Actions
+# CDN fallback — cf.shopee.co.id may be blocked from GitHub Actions
 _CDN_URLS = [
     'https://down-id.img.susercontent.com/file',
     'https://cf.shopee.co.id/file',
-    'https://down-id.img.susercontent.com/file/id-11134207-7rasd-',
 ]
 _IMG_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
                   '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Referer': 'https://shopee.co.id/',
 }
+_working_cdn = None  # Cache: once a CDN works, stick with it
+
+
+def _try_download_image(img_hash):
+    """Try downloading a single image hash from CDNs. Returns PIL Image or None."""
+    global _working_cdn
+    from PIL import Image as PILImage
+    from io import BytesIO
+
+    # If we already know which CDN works, try it first
+    cdns = [_working_cdn] + [c for c in _CDN_URLS if c != _working_cdn] if _working_cdn else _CDN_URLS
+
+    for cdn in cdns:
+        try:
+            resp = requests.get(f'{cdn}/{img_hash}', timeout=5, headers=_IMG_HEADERS)
+            if resp.status_code == 200 and len(resp.content) >= 3000:
+                _working_cdn = cdn  # Remember this CDN works!
+                return PILImage.open(BytesIO(resp.content)).convert('RGB')
+        except Exception:
+            continue
+    return None
 
 
 def _download_best_image(image_hashes, path):
-    """Try ALL image hashes from product listing, pick the BEST that passes QC.
+    """Download product image — fast strategy.
 
-    Shopee products have 5-9 images. Image #1 is often the marketing image
-    (full of text, promo graphics). Later images are usually cleaner studio shots.
-    We score all, pick the highest-scoring one that passes the minimum threshold.
+    Try max 3 images, take FIRST that passes QC.
+    If none pass QC, save the first downloadable image anyway.
 
     Returns: (success: bool, score: float)
     """
     if not image_hashes:
         return False, 0
 
-    from PIL import Image as PILImage
-    from io import BytesIO
+    first_img = None  # Fallback: first downloadable image
 
-    best_img = None
-    best_score = -1
-    best_idx = -1
-
-    for idx, img_hash in enumerate(image_hashes[:6]):  # Max 6 images
+    for img_hash in image_hashes[:3]:  # Max 3 images only
         if not img_hash:
             continue
-        # Try multiple CDNs (fallback if one is blocked)
-        for cdn in _CDN_URLS:
-            cdn_url = f'{cdn}/{img_hash}'
-            try:
-                resp = requests.get(cdn_url, timeout=10, headers=_IMG_HEADERS)
-                if resp.status_code != 200 or len(resp.content) < 5000:
-                    continue
-                img = PILImage.open(BytesIO(resp.content)).convert('RGB')
-                score, reasons = _score_image_quality(img)
-                if score >= MIN_CLEAN_SCORE and score > best_score:
-                    best_score = score
-                    best_img = img
-                    best_idx = idx
-                break  # Got image from this CDN, no need to try others
-            except Exception:
-                continue
-
-    if best_img is not None:
-        best_img.save(path, 'JPEG', quality=95)
-        return True, best_score
-
-    # Last resort: try downloading without QC (any image is better than none)
-    for img_hash in image_hashes[:3]:
-        if not img_hash:
+        img = _try_download_image(img_hash)
+        if img is None:
             continue
-        for cdn in _CDN_URLS:
-            cdn_url = f'{cdn}/{img_hash}'
-            try:
-                resp = requests.get(cdn_url, timeout=10, headers=_IMG_HEADERS)
-                if resp.status_code == 200 and len(resp.content) >= 3000:
-                    img = PILImage.open(BytesIO(resp.content)).convert('RGB')
-                    img.save(path, 'JPEG', quality=95)
-                    return True, 0  # Score 0 = no QC but image saved
-            except Exception:
-                continue
+
+        # Save first downloadable as fallback
+        if first_img is None:
+            first_img = img
+
+        # QC check — take first that passes
+        score, reasons = _score_image_quality(img)
+        if score >= MIN_CLEAN_SCORE:
+            img.save(path, 'JPEG', quality=95)
+            return True, score
+
+    # No image passed QC → save first downloadable anyway
+    if first_img is not None:
+        first_img.save(path, 'JPEG', quality=95)
+        return True, 0
 
     return False, 0
 
@@ -1155,21 +1152,21 @@ def collect(categories=None, target=None):
                 total_new += 1
                 print(f"    ✓ {detail['name'][:45]} | {price_str} | {commission}")
 
-                # Download extra images (2-5) for slideshow
+                # Download extra images (max 2) for slideshow — fast
                 all_hashes = detail.get('all_image_hashes', [])
                 if len(all_hashes) >= 2:
                     extra_saved = 0
-                    for idx, h in enumerate(all_hashes[1:5], 2):
+                    for idx, h in enumerate(all_hashes[1:3], 2):  # Only 2 extras
                         if not h:
                             continue
                         extra_path = os.path.join(product_dir, f'image_{idx}.jpg')
                         if os.path.exists(extra_path):
                             extra_saved += 1
                             continue
-                        for cdn in _CDN_URLS:
-                            if _download_image(f"{cdn}/{h}", extra_path):
-                                extra_saved += 1
-                                break
+                        img = _try_download_image(h)
+                        if img:
+                            img.save(extra_path, 'JPEG', quality=95)
+                            extra_saved += 1
                     if extra_saved > 0:
                         print(f"      +{extra_saved} extra images")
 
