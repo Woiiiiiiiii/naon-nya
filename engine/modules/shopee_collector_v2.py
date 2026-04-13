@@ -129,12 +129,12 @@ def build_headers():
     # Exact browser headers (copy dari Network tab)
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                       '(KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+                       '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8,id;q=0.7',
         'Referer': f'{AFFILIATE_BASE}/offer/brand_offer',
         'Origin': AFFILIATE_BASE,
-        'sec-ch-ua': '"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"',
+        'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"Windows"',
         'Sec-Fetch-Dest': 'empty',
@@ -177,7 +177,15 @@ Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8});
 
 
 def _init_browser(cookie_str):
-    """Buka browser stealth + inject cookies + auto-export fresh cookies."""
+    """Buka browser stealth + inject cookies + auto-export fresh cookies.
+    
+    Implements anti-block strategy:
+    - domcontentloaded (no networkidle hang)
+    - Block heavy resources (faster + less suspicious)
+    - Warm-up via shopee.co.id first (more human-like)
+    - Content-based block detection
+    - Random delays
+    """
     global _browser_ctx, _browser_page, _pw_instance
     if _browser_page:
         return True
@@ -199,13 +207,13 @@ def _init_browser(cookie_str):
         )
         _browser_ctx = browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                       '(KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+                       '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             viewport={'width': 1366, 'height': 768},
             locale='id-ID',
             timezone_id='Asia/Jakarta',
             extra_http_headers={
                 'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
-                'sec-ch-ua': '"Chromium";v="146", "Google Chrome";v="146"',
+                'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
                 'sec-ch-ua-mobile': '?0',
                 'sec-ch-ua-platform': '"Windows"',
             }
@@ -227,30 +235,67 @@ def _init_browser(cookie_str):
 
         page = _browser_ctx.new_page()
 
-        # Navigate to offer page
-        print("      Browser: navigating to offer page...")
+        # FIX 6: Block heavy resources (faster + less bot-like)
+        def _block_heavy(route):
+            if route.request.resource_type in ['image', 'media', 'font', 'stylesheet']:
+                route.abort()
+            else:
+                route.continue_()
+        page.route('**/*', _block_heavy)
+
+        # FIX 8: Warm-up — visit shopee.co.id first (more human-like flow)
+        print("      Browser: warm-up via shopee.co.id...")
+        try:
+            page.goto('https://shopee.co.id', timeout=15000, wait_until='domcontentloaded')
+        except Exception:
+            print("      Browser: warm-up timeout (OK, continuing)")
+
+        # FIX 4: Random delay (human-like)
+        time.sleep(random.uniform(3, 5))
+
+        # FIX 1+2: Navigate with domcontentloaded + fail fast
+        print("      Browser: navigating to affiliate page...")
         try:
             page.goto('https://affiliate.shopee.co.id/offer/brand_offer',
-                      timeout=30000, wait_until='networkidle')
+                      timeout=30000, wait_until='domcontentloaded')
         except Exception as e:
-            print(f"      Browser: nav issue: {str(e)[:80]}")
-
-        time.sleep(5)
-
-        current_url = page.url
-        print(f"      Browser: on {current_url[:80]}")
-
-        if 'captcha' in current_url or 'verify' in current_url:
-            print("      Browser: CAPTCHA — IP blocked")
+            print(f"      Browser: nav failed: {str(e)[:60]}")
+            print("      Browser: ❌ Kemungkinan IP diblock")
             browser.close()
             _pw_instance.stop()
             _browser_page = None
             return False
 
+        # FIX 4: Random delay after load
+        time.sleep(random.uniform(3, 7))
+
+        # FIX 3: Detect block via URL + page content
+        current_url = page.url
+        print(f"      Browser: on {current_url[:80]}")
+
+        if 'captcha' in current_url or 'verify' in current_url:
+            print("      Browser: ❌ CAPTCHA — IP blocked")
+            browser.close()
+            _pw_instance.stop()
+            _browser_page = None
+            return False
+
+        # FIX 3: Content-based block detection
+        try:
+            content = page.content().lower()
+            if 'captcha' in content or 'access denied' in content or 'forbidden' in content:
+                print("      Browser: ❌ Block detected in page content")
+                browser.close()
+                _pw_instance.stop()
+                _browser_page = None
+                return False
+        except Exception:
+            pass
+
         # Auto-export refreshed cookies
         _export_browser_cookies()
 
-        # Test API (15s timeout to prevent hang on blocked pages)
+        # Test API (with AbortController timeout to prevent hang)
         print("      Browser: testing API...")
         try:
             test = page.evaluate("""
@@ -277,7 +322,7 @@ def _init_browser(cookie_str):
         if test and test.get('code') == 0:
             print("      Browser: ✅ API works!")
         else:
-            print("      Browser: ⚠️ API test failed, will try anyway")
+            print("      Browser: ⚠️ API test failed, will try direct HTTP")
         return True
 
     except Exception as e:
