@@ -1,7 +1,9 @@
 name: Product Collector
 
 on:
-  # Manual trigger only — user updates cookies + triggers together
+  schedule:
+    - cron: '0 1 * * *'   # 08:00 WIB — morning refill
+    - cron: '0 13 * * *'  # 20:00 WIB — evening refill
   workflow_dispatch:
     inputs:
       category:
